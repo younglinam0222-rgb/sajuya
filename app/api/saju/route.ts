@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
               controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: chunks[i] })}\n\n`))
               i++; setTimeout(send, 15)
             } else {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, shareId, fromCache: true })}\n\n`))
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, shareId, fromCache: true, sajuData: saju })}\n\n`))
               controller.close()
             }
           }
@@ -111,7 +111,7 @@ JSON 형식으로만 반환:
 
     const stream = await client.messages.create({
       model: 'claude-sonnet-4-5',
-      max_tokens: 1400,
+      max_tokens: 4000,
       system: fullSystemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
       stream: true,
