@@ -128,6 +128,26 @@ function SajuPageContent() {
     }
   }
 
+  const handlePayment = async () => {
+    if (!shareId) { alert('먼저 사주 풀이를 완료해주세요'); return }
+    try {
+      const { loadTossPayments } = await import('@tosspayments/tosspayments-sdk')
+      const tossPayments = await loadTossPayments(process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY!)
+      const payment = tossPayments.payment({ customerKey: `user-${shareId}` })
+      await payment.requestPayment({
+        method: 'CARD',
+        amount: { currency: 'KRW', value: 990 },
+        orderId: `saju_${shareId}_${Date.now()}`,
+        orderName: '사주야 전체 풀이 열람권',
+        successUrl: `${window.location.origin}/pay/confirm?shareId=${shareId}`,
+        failUrl: `${window.location.origin}/saju?error=payment_failed`,
+      })
+    } catch (e) {
+      console.error('Payment error:', e)
+      alert('결제 중 오류가 발생했습니다')
+    }
+  }
+
   const toggleSection = (idx:number) => {
     setOpenIdx(prev => prev.includes(idx) ? prev.filter(i=>i!==idx) : [...prev,idx])
   }
@@ -411,7 +431,7 @@ function SajuPageContent() {
           )}
           <div className="text-lg font-black text-white mb-2 mt-3">나머지 풀이가 궁금하죠? 🔮</div>
           <div className="text-sm text-[#888] mb-4">990원에 전체 열람 · 한번 결제하면 평생 다시 볼 수 있어요</div>
-          <button onClick={()=>setIsPaid(true)}
+          <button onClick={handlePayment}
             className="w-full py-4 rounded-2xl font-black text-base text-white"
             style={{background:'linear-gradient(135deg,#f59e0b,#f97316)',boxShadow:'0 4px 16px rgba(245,158,11,.4)'}}>
             💳 🪙 1엽전으로 전부 보기 (990원)
