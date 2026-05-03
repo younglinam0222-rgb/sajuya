@@ -122,7 +122,7 @@ export default function HomePage() {
         <div className="flex gap-3 overflow-x-auto pb-1" style={{scrollbarWidth:'none'}}>
           {CHARACTERS.map(c => (
             <Link href={`/saju?character=${c.id}`} key={c.id} className="flex-shrink-0 w-20 text-center">
-              <div className="w-14 h-14 rounded-full mx-auto mb-1.5 overflow-hidden relative" style={{background:c.bg,border:'2px solid #2a2a2a'}}>   <img src={`/characters/${c.id}.png`} alt={c.name} className="w-full h-full object-cover" onError={(e)=>{(e.target as HTMLImageElement).style.display='none'}} /> </div>
+              <div className="w-14 h-14 rounded-full mx-auto mb-1.5 overflow-hidden relative" style={{background:c.bg,border:'2px solid #2a2a2a'}}>   <img src={`/characters/${c.id.toLowerCase()}.png`} alt={c.name} className="w-full h-full object-cover" onError={(e)=>{(e.target as HTMLImageElement).style.display='none'}} /> </div>
               <div className="text-[11px] font-bold text-white truncate">{c.name.slice(0,5)}</div>
               <div className="text-[9px] mt-0.5" style={{color:'#555'}}>🪙 1엽전</div>
             </Link>
