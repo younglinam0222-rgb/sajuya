@@ -19,10 +19,10 @@ const MENU_CARDS = [
 ]
 
 const CHARACTERS = [
-  { id: 'baekhalma', name: '건물주 백할매', emoji: '👵', bg: '#1a1000' },
-  { id: 'doRyeong', name: '근본도령', emoji: '🧙', bg: '#0a0020' },
-  { id: 'gumiho', name: '구미호 선생', emoji: '🦊', bg: '#1a0010' },
-  { id: 'sinRyeong', name: '무등신령', emoji: '⛰️', bg: '#001a08' },
+ { id: 'baekhalma', name: '건물주 백할매', emoji: '👵', bg: '#1a1000' },
+{ id: 'doryeong', name: '근본도령', emoji: '🧙', bg: '#0a0020' },
+{ id: 'gumiho', name: '구미호 선생', emoji: '🦊', bg: '#1a0010' },
+{ id: 'sinryeong', name: '무등신령', emoji: '⛰️', bg: '#001a08' },
 ]
 
 export default function HomePage() {
