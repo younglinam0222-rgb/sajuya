@@ -2,7 +2,13 @@
 import NextAuth from 'next-auth'
 import KakaoProvider from 'next-auth/providers/kakao'
 import GoogleProvider from 'next-auth/providers/google'
-import { createServerSupabase } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
+
+// service role key 사용 (RLS 우회)
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 const handler = NextAuth({
   providers: [
@@ -14,7 +20,6 @@ const handler = NextAuth({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
-    // 네이버 커스텀 프로바이더
     {
       id: 'naver',
       name: '네이버',
@@ -39,31 +44,37 @@ const handler = NextAuth({
   ],
   callbacks: {
     async signIn({ user }) {
-      // 첫 로그인 시 Supabase users 테이블에 저장
-      const supabase = createServerSupabase()
-      const { data: existing } = await supabase
-        .from('users')
-        .select('id')
-        .eq('id', user.id)
-        .single()
+      try {
+        const { data: existing } = await supabaseAdmin
+          .from('users')
+          .select('id')
+          .eq('id', user.id)
+          .single()
 
-      if (!existing) {
-        await supabase.from('users').insert({
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          image: user.image,
-          yeobjeun_balance: 1,  // 가입 보너스 1엽전
-          streak_days: 0,
-          last_visit: null,
-        })
+        if (!existing) {
+          const { error } = await supabaseAdmin.from('users').insert({
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            image: user.image,
+            yeobjeun_balance: 1,
+            streak_days: 0,
+            last_visit: null,
+          })
+          if (error) {
+            console.error('signIn DB insert error:', error)
+            return false  // 저장 실패 시 로그인 차단
+          }
+        }
+        return true
+      } catch (e) {
+        console.error('signIn error:', e)
+        return false
       }
-      return true
     },
     async session({ session, token }) {
       if (session.user) {
-        // @ts-ignore
-              (session.user as any).id = token.sub as string
+        (session.user as any).id = token.sub as string
       }
       return session
     },
