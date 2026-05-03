@@ -146,7 +146,7 @@ function SajuPageContent() {
                 <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 border border-[#2a2a2a] relative" style={{background:c.bgColor}}>
                   <Image src={c.image} alt={c.name} fill className="object-cover"
                     onError={(e)=>{(e.target as HTMLImageElement).style.display='none'}} />
-                  <div className="absolute inset-0 flex items-center justify-center text-xl">{c.emoji}</div>
+                  <div className="absolute inset-0 flex items-center justify-center text-xl" style={{display:'none'}}>{c.emoji}</div>
                 </div>
                 <div>
                   <div className={`text-xs font-bold ${characterId===c.id?'text-purple-300':'text-white'}`}>{c.name}</div>
