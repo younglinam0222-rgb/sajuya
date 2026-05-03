@@ -328,80 +328,161 @@ function SajuPageContent() {
         </div>
       </div>
 
-      {/* 만세력 테이블 */}
+      {/* 만세력 테이블 - 풀버전 */}
       {sajuData && (
-        <div className="mx-4 mt-4 rounded-2xl overflow-hidden" style={{border:'1px solid #1a1a1a'}}>
+        <div className="mx-4 mt-4 rounded-2xl overflow-hidden" style={{border:'1px solid #222'}}>
+          {/* 헤더 */}
           <div className="py-2.5 text-center text-xs font-black text-yellow-400 tracking-widest"
-            style={{background:'#111',borderBottom:'1px solid #1a1a1a'}}>
+            style={{background:'#111',borderBottom:'1px solid #222'}}>
             만세력 (四柱八字)
           </div>
+
           {/* 주 레이블 */}
-          <div className="grid grid-cols-4 text-center" style={{borderBottom:'1px solid #1a1a1a'}}>
+          <div className="grid grid-cols-4 text-center" style={{borderBottom:'1px solid #222'}}>
             {manjuPillars.map(({label})=>(
-              <div key={label} className="py-1.5 text-[10px] font-bold text-[#555]"
-                style={{background:'#0d0d0d',borderRight:'1px solid #1a1a1a'}}>
+              <div key={label} className="py-1.5 text-[10px] font-bold"
+                style={{background:'#0d0d0d',borderRight:'1px solid #222',color:'#666'}}>
                 {label}
               </div>
             ))}
           </div>
-          {/* 천간 */}
-          <div className="grid grid-cols-4 text-center" style={{borderBottom:'1px solid #1a1a1a'}}>
+
+          {/* 천간 + 십신 */}
+          <div className="grid grid-cols-4 text-center" style={{borderBottom:'1px solid #222'}}>
             {manjuPillars.map(({label, pillar})=>(
-              <div key={label} className="py-3" style={{
+              <div key={label} className="py-2.5" style={{
                 background: elementBg(pillar?.stemElement),
-                borderRight:'1px solid #1a1a1a'
+                borderRight:'1px solid #222'
               }}>
-                <div className="text-3xl font-black" style={{color: elementColor(pillar?.stemElement)}}>
+                <div className="text-3xl font-black leading-none" style={{color: elementColor(pillar?.stemElement)}}>
                   {pillar?.stem ?? '?'}
                 </div>
-                <div className="text-[9px] mt-0.5 font-bold" style={{color:'#555'}}>
+                <div className="text-[9px] mt-1" style={{color:'rgba(255,255,255,0.4)'}}>
                   {pillar?.stemElement}
                 </div>
+                <div className="text-[9px] font-bold mt-0.5" style={{color:'rgba(255,255,255,0.6)'}}>
+                  {pillar?.sipsinStem}
+                </div>
               </div>
             ))}
           </div>
-          {/* 지지 */}
-          <div className="grid grid-cols-4 text-center" style={{borderBottom:'1px solid #1a1a1a'}}>
+
+          {/* 지지 + 십신 */}
+          <div className="grid grid-cols-4 text-center" style={{borderBottom:'1px solid #222'}}>
             {manjuPillars.map(({label, pillar})=>(
-              <div key={label} className="py-3" style={{
+              <div key={label} className="py-2.5" style={{
                 background: elementBg(pillar?.branchElement),
-                borderRight:'1px solid #1a1a1a'
+                borderRight:'1px solid #222'
               }}>
-                <div className="text-3xl font-black" style={{color: elementColor(pillar?.branchElement)}}>
+                <div className="text-3xl font-black leading-none" style={{color: elementColor(pillar?.branchElement)}}>
                   {pillar?.branch ?? '?'}
                 </div>
-                <div className="text-[9px] mt-0.5 font-bold" style={{color:'#555'}}>
+                <div className="text-[9px] mt-1" style={{color:'rgba(255,255,255,0.4)'}}>
                   {pillar?.branchElement}
+                </div>
+                <div className="text-[9px] font-bold mt-0.5" style={{color:'rgba(255,255,255,0.6)'}}>
+                  {pillar?.sipsinBranch}
                 </div>
               </div>
             ))}
           </div>
+
+          {/* 12운성 */}
+          <div className="grid grid-cols-4 text-center" style={{borderBottom:'1px solid #222',background:'#0f0f0f'}}>
+            {manjuPillars.map(({label, pillar})=>(
+              <div key={label} className="py-2" style={{borderRight:'1px solid #222'}}>
+                <div className="text-[9px] text-[#555]">운성</div>
+                <div className="text-[10px] font-bold text-purple-400 mt-0.5">{pillar?.sipsung || '-'}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* 지장간 */}
+          <div className="grid grid-cols-4 text-center" style={{borderBottom:'1px solid #222',background:'#0a0a0a'}}>
+            {manjuPillars.map(({label, pillar})=>(
+              <div key={label} className="py-2" style={{borderRight:'1px solid #222'}}>
+                <div className="text-[9px] text-[#555] mb-1">지장간</div>
+                <div className="flex flex-col gap-0.5 items-center">
+                  {(pillar?.jijanggan || []).map((s,i)=>(
+                    <span key={i} className="text-[9px] font-bold"
+                      style={{color: elementColor(pillar?.stemElement)}}>
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* 신살 */}
+          <div className="grid grid-cols-4 text-center" style={{borderBottom:'1px solid #222',background:'#0d0d0d'}}>
+            {manjuPillars.map(({label, pillar})=>(
+              <div key={label} className="py-2 px-1" style={{borderRight:'1px solid #222'}}>
+                <div className="text-[9px] text-[#555] mb-1">신살</div>
+                <div className="flex flex-col gap-0.5 items-center">
+                  {(pillar?.sinsal || []).length > 0
+                    ? (pillar?.sinsal || []).map((s,i)=>(
+                        <span key={i} className="text-[8px] font-bold"
+                          style={{color: s.includes('귀인') ? '#fbbf24' : s === '공망' ? '#f87171' : '#a78bfa'}}>
+                          {s}
+                        </span>
+                      ))
+                    : <span className="text-[9px] text-[#333]">-</span>
+                  }
+                </div>
+              </div>
+            ))}
+          </div>
+
           {/* 오행 카운트 */}
           {sajuData.elementCount && (
-            <div className="grid grid-cols-5 text-center" style={{background:'#0d0d0d'}}>
+            <div className="grid grid-cols-5 text-center" style={{background:'#0d0d0d',borderBottom:'1px solid #222'}}>
               {(['木','火','土','金','水'] as const).map(el=>(
-                <div key={el} className="py-2" style={{borderRight:'1px solid #1a1a1a'}}>
+                <div key={el} className="py-2" style={{borderRight:'1px solid #222'}}>
                   <div className="text-xs font-black" style={{color: elementColor(el)}}>{el}</div>
                   <div className="text-[10px] text-[#555] mt-0.5">{sajuData.elementCount[el] ?? 0}개</div>
                 </div>
               ))}
             </div>
           )}
-          {/* 띠 + 대운 */}
-          {(sajuData.animal || sajuData.currentDaeun) && (
-            <div className="flex items-center gap-3 px-4 py-2.5" style={{background:'#111',borderTop:'1px solid #1a1a1a'}}>
-              {sajuData.animal && (
-                <span className="text-xs font-bold text-yellow-400">{sajuData.animal}띠</span>
-              )}
-              {sajuData.currentDaeun && (
-                <span className="text-[10px] text-[#555]">
-                  현재 대운: <span className="text-purple-400 font-bold">
-                    {sajuData.currentDaeun.stem}{sajuData.currentDaeun.branch}
-                  </span> ({sajuData.currentDaeun.startAge}~{sajuData.currentDaeun.endAge}세)
-                </span>
-              )}
+
+          {/* 합충 */}
+          {sajuData.hapchung && sajuData.hapchung.length > 0 && (
+            <div className="px-3 py-2.5" style={{background:'#0a0a0a',borderBottom:'1px solid #222'}}>
+              <div className="text-[9px] text-[#555] mb-1.5">합충</div>
+              <div className="flex flex-wrap gap-1.5">
+                {sajuData.hapchung.map((hc:any, i:number)=>(
+                  <span key={i} className="text-[9px] font-bold px-1.5 py-0.5 rounded"
+                    style={{
+                      background: hc.type === 'chung' ? 'rgba(239,68,68,.15)' : 'rgba(34,197,94,.12)',
+                      color: hc.type === 'chung' ? '#f87171' : '#4ade80',
+                      border: `1px solid ${hc.type==='chung'?'rgba(239,68,68,.3)':'rgba(34,197,94,.2)'}`
+                    }}>
+                    {hc.name} ({hc.pillars.join('·')})
+                  </span>
+                ))}
+              </div>
             </div>
           )}
+
+          {/* 공망 + 띠 + 대운 */}
+          <div className="flex items-center gap-3 px-4 py-2.5 flex-wrap" style={{background:'#111'}}>
+            {sajuData.animal && (
+              <span className="text-xs font-bold text-yellow-400">{sajuData.animal}띠</span>
+            )}
+            {sajuData.gongmang && sajuData.gongmang.length > 0 && (
+              <span className="text-[10px] text-red-400 font-bold">
+                공망: {sajuData.gongmang.join('·')}
+              </span>
+            )}
+            {sajuData.currentDaeun && (
+              <span className="text-[10px] text-[#555]">
+                현재 대운: <span className="text-purple-400 font-bold">
+                  {sajuData.currentDaeun.stem}{sajuData.currentDaeun.branch}
+                </span> ({sajuData.currentDaeun.startAge}~{sajuData.currentDaeun.endAge}세)
+              </span>
+            )}
+          </div>
         </div>
       )}
 
@@ -420,10 +501,12 @@ function SajuPageContent() {
       {!isPaid && paidSections.length>0 && (
         <div className="mx-4 my-4 rounded-2xl p-5 text-center" style={{background:'linear-gradient(135deg,#1a1a1a,#2a2a2a)'}}>
           {paidSections.slice(0,4).map(s=>(
-            <div key={s.id} className="flex items-center gap-3 mb-2.5 p-3 rounded-xl text-left" style={{background:'rgba(255,255,255,.05)'}}>
-              <span className="text-xl">{s.emoji}</span>
-              <span className="text-sm font-bold flex-1" style={{color:'rgba(255,255,255,.5)'}}>{s.title}</span>
-              <span>🔒</span>
+            <div key={s.id} className="flex items-center gap-3 mb-2.5 p-3 rounded-xl text-left" style={{background:'rgba(255,255,255,.04)'}}>
+              <SectionIcon id={s.id} />
+              <span className="text-sm font-bold flex-1" style={{color:'rgba(255,255,255,.4)'}}>{s.title}</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#444" strokeWidth="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+              </svg>
             </div>
           ))}
           {paidSections.length > 4 && (
@@ -482,22 +565,71 @@ function SajuPageContent() {
   )
 }
 
+// 섹션별 SVG 아이콘 맵
+const SECTION_ICONS: Record<string, { svg: string; color: string; bg: string }> = {
+  energy:        { svg:'M13 10V3L4 14h7v7l9-11h-7z', color:'#fbbf24', bg:'rgba(251,191,36,.15)' },
+  money:         { svg:'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z', color:'#fbbf24', bg:'rgba(251,191,36,.15)' },
+  career:        { svg:'M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z', color:'#a78bfa', bg:'rgba(167,139,250,.15)' },
+  love:          { svg:'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z', color:'#f472b6', bg:'rgba(244,114,182,.15)' },
+  marriage:      { svg:'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z', color:'#f472b6', bg:'rgba(244,114,182,.15)' },
+  health:        { svg:'M4.5 12.75l6 6 9-13.5', color:'#4ade80', bg:'rgba(74,222,128,.15)' },
+  warning:       { svg:'M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z', color:'#f87171', bg:'rgba(248,113,113,.15)' },
+  lucky:         { svg:'M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z', color:'#fbbf24', bg:'rgba(251,191,36,.15)' },
+  relation:      { svg:'M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z', color:'#60a5fa', bg:'rgba(96,165,250,.15)' },
+  money2:        { svg:'M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9', color:'#34d399', bg:'rgba(52,211,153,.15)' },
+  thisyear:      { svg:'M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z', color:'#fbbf24', bg:'rgba(251,191,36,.15)' },
+  nextyear:      { svg:'M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-3.758-3.848 5.25 5.25 0 00-10.233 2.33A4.502 4.502 0 002.25 15z', color:'#818cf8', bg:'rgba(129,140,248,.15)' },
+  daymaster:     { svg:'M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418', color:'#a78bfa', bg:'rgba(167,139,250,.15)' },
+  personality:   { svg:'M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z', color:'#c084fc', bg:'rgba(192,132,252,.15)' },
+  fortune:       { svg:'M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z', color:'#60a5fa', bg:'rgba(96,165,250,.15)' },
+  loveStyle:     { svg:'M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z', color:'#f472b6', bg:'rgba(244,114,182,.15)' },
+  idealType:     { svg:'M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z', color:'#fb923c', bg:'rgba(251,146,60,.15)' },
+  compatibility: { svg:'M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244', color:'#f472b6', bg:'rgba(244,114,182,.15)' },
+  exlove:        { svg:'M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z', color:'#9ca3af', bg:'rgba(156,163,175,.12)' },
+  bigPicture:    { svg:'M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z', color:'#4ade80', bg:'rgba(74,222,128,.15)' },
+  daeun:         { svg:'M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6', color:'#60a5fa', bg:'rgba(96,165,250,.15)' },
+  spiritual:     { svg:'M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z', color:'#4ade80', bg:'rgba(74,222,128,.15)' },
+}
+
+function SectionIcon({ id }: { id: string }) {
+  const icon = SECTION_ICONS[id] || SECTION_ICONS['energy']
+  return (
+    <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+      style={{ background: icon.bg }}>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+        stroke={icon.color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d={icon.svg} />
+      </svg>
+    </div>
+  )
+}
+
 function SectionCard({section,idx,isOpen,onToggle,isFree=false}:{section:Section,idx:number,isOpen:boolean,onToggle:()=>void,isFree?:boolean}) {
   const isWarning = section.id === 'warning'
   return (
     <div className="rounded-2xl mb-3 overflow-hidden" style={{
       background: isWarning ? '#1a0808' : '#111',
-      border: `1px solid ${isWarning ? 'rgba(239,68,68,.25)' : '#1a1a1a'}`
+      border: `1px solid ${isWarning ? 'rgba(239,68,68,.2)' : '#1e1e1e'}`
     }}>
-      <button className="w-full px-4 py-4 flex items-center gap-3 text-left" onClick={onToggle}>
-        <span className="text-xl flex-shrink-0">{section.emoji}</span>
-        <span className={`flex-1 text-sm font-bold ${isWarning?'text-red-300':'text-white'} leading-snug`}>{section.title}</span>
-        {isFree && <span className="text-[10px] font-bold px-2 py-0.5 rounded-md" style={{background:'rgba(34,197,94,.15)',color:'#4ade80'}}>무료</span>}
-        <span className="text-sm transition-transform" style={{transform:isOpen?'rotate(180deg)':'',color:'#555'}}>▼</span>
+      <button className="w-full px-4 py-3.5 flex items-center gap-3 text-left" onClick={onToggle}>
+        <SectionIcon id={section.id} />
+        <span className={`flex-1 text-sm font-bold ${isWarning?'text-red-300':'text-white'} leading-snug`}>
+          {section.title}
+        </span>
+        {isFree && (
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md"
+            style={{background:'rgba(34,197,94,.15)',color:'#4ade80'}}>무료</span>
+        )}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+          stroke="#555" strokeWidth="2" strokeLinecap="round"
+          style={{transform:isOpen?'rotate(180deg)':'',transition:'transform .2s',flexShrink:0}}>
+          <path d="M19 9l-7 7-7-7"/>
+        </svg>
       </button>
       {isOpen && (
-        <div className="px-4 pb-4 border-t" style={{borderColor:isWarning?'rgba(239,68,68,.15)':'#1a1a1a'}}>
-          <p className="text-sm leading-[1.9] pt-3 whitespace-pre-line" style={{color:isWarning?'#fca5a5':'#ccc'}}>{section.body}</p>
+        <div className="px-4 pb-5 border-t" style={{borderColor:isWarning?'rgba(239,68,68,.12)':'#1e1e1e'}}>
+          <p className="text-sm leading-[1.95] pt-4 whitespace-pre-line"
+            style={{color:isWarning?'#fca5a5':'#bbb'}}>{section.body}</p>
         </div>
       )}
     </div>
