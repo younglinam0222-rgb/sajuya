@@ -141,7 +141,7 @@ JSON 형식으로만 반환:
             }),
             setCachedReading(cacheHash, fullText, occupationId, characterId),
           ])
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, shareId })}\n\n`))
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, shareId, sajuData: saju })}\n\n`))
         } catch (err) {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: '풀이 생성 중 오류' })}\n\n`))
         } finally {
