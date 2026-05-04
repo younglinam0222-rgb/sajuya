@@ -1,8 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 // ─── Types ───────────────────────────────────────
@@ -58,19 +57,15 @@ const OCCUPATIONS = ['직장인', '사업가', '학생', '주부', '프리랜서
 const QUESTION_INTENTS = ['인생 전반', '돈/재물', '연애/결혼', '직업/진로', '건강']
 
 const CHARACTERS = [
-  { id: 'baekhalma', name: '건물주 백할매', emoji: '👵', desc: '팩폭 재물 전문', color: '#8B5CF6' },
-  { id: 'doRyeong', name: '근본도령', emoji: '🧑', desc: '다정한 종합 분석', color: '#3B82F6' },
-  { id: 'gumiho', name: '구미호 선생', emoji: '🦊', desc: '연애 궁합 전문', color: '#EC4899' },
-  { id: 'sinRyeong', name: '무등산 신령님', emoji: '🧙', desc: '대운 인생 전문', color: '#10B981' },
+  { id: 'baekhalma', name: '건물주 백할매', img: '/characters/baekhalma.png', desc: '팩폭 재물 전문', color: '#8B5CF6' },
+  { id: 'doRyeong', name: '근본도령', img: '/characters/doryeong.png', desc: '다정한 종합 분석', color: '#3B82F6' },
+  { id: 'gumiho', name: '구미호 선생', img: '/characters/gumiho.png', desc: '연애 궁합 전문', color: '#EC4899' },
+  { id: 'sinRyeong', name: '무등산 신령님', img: '/characters/sinryeong.png', desc: '대운 인생 전문', color: '#10B981' },
 ]
 
 const SEASON_COLORS: Record<string, string> = {
-  '봄': '#10B981',
-  '여름': '#F59E0B',
-  '가을': '#F97316',
-  '겨울': '#3B82F6',
+  '봄': '#10B981', '여름': '#F59E0B', '가을': '#F97316', '겨울': '#3B82F6',
 }
-
 const SEASON_ICONS: Record<string, string> = {
   '봄': '🌱', '여름': '☀️', '가을': '🍂', '겨울': '❄️',
 }
@@ -81,7 +76,7 @@ type Stage = 'input' | 'loading' | 'result'
 const LOADING_TIPS = [
   '일간(日干)을 분석하는 중...',
   '오행의 생극제화를 계산하는 중...',
-  '12개 콘텐츠 제목을 생성하는 중...',
+  '12개 판결문을 작성하는 중...',
   '인생 흐름 점수를 계산하는 중...',
   '전성기 활용 전략을 수립하는 중...',
 ]
@@ -98,7 +93,11 @@ function LoadingScreen({ name, character }: { name: string; character: typeof CH
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center text-white px-4">
-      <div className="text-6xl mb-6 animate-bounce">{character.emoji}</div>
+      <div className="w-24 h-24 rounded-full overflow-hidden mb-6 border-2"
+        style={{ borderColor: character.color }}>
+        <img src={character.img} alt={character.name}
+          className="w-full h-full object-cover object-top" />
+      </div>
       <h2 className="text-xl font-bold mb-1">{name}님의 사주 분석 중</h2>
       <p className="text-gray-500 text-sm mb-8">{character.name}이(가) 보고 있어요</p>
       <div className="w-72 h-1.5 bg-gray-800 rounded-full overflow-hidden mb-4">
@@ -113,7 +112,6 @@ function LoadingScreen({ name, character }: { name: string; character: typeof CH
 // ─── Lifecycle Chart ──────────────────────────────
 function LifecycleChart({ data }: { data: LifecycleItem[] }) {
   if (!data?.length) return null
-  const max = Math.max(...data.map(d => d.score))
 
   return (
     <div className="rounded-2xl p-4 bg-[#111118] border border-gray-800">
@@ -163,7 +161,7 @@ function TitleCard({ item, charColor, idx }: {
   charColor: string
   idx: number
 }) {
-  const [open, setOpen] = useState(item.is_free)
+  const [open, setOpen] = useState(false)
 
   if (item.is_free) {
     return (
@@ -178,7 +176,7 @@ function TitleCard({ item, charColor, idx }: {
             <p className="font-bold text-base leading-snug text-white">{item.title}</p>
           </div>
           {item.content && (
-            <p className="text-gray-300 text-sm leading-relaxed mt-3">{item.content}</p>
+            <p className="text-gray-300 text-sm leading-relaxed mt-3 whitespace-pre-line">{item.content}</p>
           )}
         </div>
       </div>
@@ -201,10 +199,10 @@ function TitleCard({ item, charColor, idx }: {
       {open && (
         <div className="px-4 pb-4 border-t border-gray-800">
           <div className="mt-3 p-3 rounded-xl bg-gray-900 text-center">
-            <p className="text-sm text-gray-300 mb-3">이 항목을 보려면 결제가 필요해요</p>
+            <p className="text-sm text-gray-300 mb-3">이 판결문을 보려면 결제가 필요해요</p>
             <button className="px-4 py-2 rounded-xl text-sm font-bold text-white"
               style={{ background: charColor }}>
-              590원으로 전체 보기 →
+              990원으로 전체 보기 →
             </button>
           </div>
         </div>
@@ -216,15 +214,23 @@ function TitleCard({ item, charColor, idx }: {
 // ─── Main Page ────────────────────────────────────
 export default function SajuPage() {
   const { data: session } = useSession()
-  const router = useRouter()
 
   const [stage, setStage] = useState<Stage>('input')
   const [result, setResult] = useState<Partial<SajuResult>>({})
   const [selectedChar, setSelectedChar] = useState(CHARACTERS[0])
+  const [calType, setCalType] = useState<'solar' | 'lunar'>('solar') // 양력/음력
+
   const [form, setForm] = useState({
     name: '', year: '1990', month: '1', day: '1', hour: '', gender: 'female',
     occupation: '직장인', questionIntent: '인생 전반',
   })
+
+  // 상대방 정보 (연애/결혼 선택 시)
+  const [partnerForm, setPartnerForm] = useState({
+    name: '', year: '1990', month: '1', day: '1', hour: '', gender: 'male',
+  })
+
+  const isRomance = form.questionIntent === '연애/결혼'
 
   const handleSubmit = async () => {
     if (!form.name) return
@@ -235,7 +241,12 @@ export default function SajuPage() {
       const res = await fetch('/api/saju', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, characterId: selectedChar.id }),
+        body: JSON.stringify({
+          ...form,
+          calType,
+          characterId: selectedChar.id,
+          partnerInfo: isRomance ? partnerForm : undefined,
+        }),
       })
       if (!res.body) return
 
@@ -289,8 +300,6 @@ export default function SajuPage() {
     return (
       <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
         <div className="max-w-md mx-auto px-4 pt-6">
-
-          {/* Header */}
           <div className="flex items-center gap-3 mb-6">
             <button onClick={() => setStage('input')} className="text-gray-400 text-xl">←</button>
             <div>
@@ -299,9 +308,8 @@ export default function SajuPage() {
             </div>
           </div>
 
-          {/* Free titles */}
           <div className="mb-2">
-            <p className="text-xs text-gray-500 mb-2 font-medium">✨ 무료로 보는 3가지</p>
+            <p className="text-xs text-gray-500 mb-2 font-medium">✨ 무료 판결 3가지</p>
             <div className="space-y-3">
               {freeTitles.map((t, i) => (
                 <TitleCard key={t.id} item={t} charColor={selectedChar.color} idx={i} />
@@ -309,14 +317,13 @@ export default function SajuPage() {
             </div>
           </div>
 
-          {/* Paid titles */}
           {paidTitles.length > 0 && (
             <div className="mt-4">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-xs text-gray-500 font-medium">🔒 잠긴 항목 {paidTitles.length}개</p>
+                <p className="text-xs text-gray-500 font-medium">🔒 잠긴 판결 {paidTitles.length}개</p>
                 <button className="text-xs px-3 py-1.5 rounded-full font-bold text-white"
                   style={{ background: selectedChar.color }}>
-                  590원으로 전체 열기
+                  990원으로 전체 열기
                 </button>
               </div>
               <div className="space-y-2">
@@ -327,7 +334,6 @@ export default function SajuPage() {
             </div>
           )}
 
-          {/* Strategy Section */}
           {result.strategy && (
             <div className="mt-6 space-y-3">
               <div className="flex items-center gap-2 mb-1">
@@ -336,7 +342,6 @@ export default function SajuPage() {
                 <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">책사 모드</span>
               </div>
 
-              {/* Overview */}
               {result.strategy.overview && (
                 <div className="rounded-2xl p-4 bg-[#111118] border border-gray-800">
                   <div className="flex items-center gap-2 mb-2">
@@ -347,12 +352,10 @@ export default function SajuPage() {
                 </div>
               )}
 
-              {/* Lifecycle Chart */}
               {result.strategy.lifecycle?.length > 0 && (
                 <LifecycleChart data={result.strategy.lifecycle} />
               )}
 
-              {/* Golden Period */}
               {result.strategy.golden_period && (
                 <div className="rounded-2xl p-4 bg-[#111118] border border-yellow-900/30">
                   <div className="flex items-center gap-2 mb-2">
@@ -363,7 +366,6 @@ export default function SajuPage() {
                 </div>
               )}
 
-              {/* Peak Guide */}
               {result.strategy.peak_guide && (
                 <div className="rounded-2xl p-4 bg-[#111118] border border-gray-800">
                   <div className="flex items-center gap-2 mb-2">
@@ -374,7 +376,6 @@ export default function SajuPage() {
                 </div>
               )}
 
-              {/* Warning */}
               {result.strategy.warning && (
                 <div className="rounded-2xl p-4 bg-[#111118] border border-red-900/30">
                   <div className="flex items-center gap-2 mb-2">
@@ -387,7 +388,6 @@ export default function SajuPage() {
             </div>
           )}
 
-          {/* Disclaimer */}
           {result.disclaimer && (
             <p className="text-gray-600 text-xs text-center mt-6 px-4">{result.disclaimer}</p>
           )}
@@ -410,25 +410,29 @@ export default function SajuPage() {
           <Link href="/" className="text-gray-400 text-xl">←</Link>
           <div>
             <h1 className="text-xl font-bold">사주 풀이</h1>
-            <p className="text-gray-500 text-xs mt-0.5">AI 명리 상담 · 590원</p>
+            <p className="text-gray-500 text-xs mt-0.5">3개 무료 · 전체 열기 990원</p>
           </div>
         </div>
 
-        {/* 캐릭터 선택 */}
+        {/* 캐릭터 선택 — 실제 이미지 */}
         <div className="mb-4">
           <label className="text-xs text-gray-400 mb-2 block">신령 선택</label>
           <div className="grid grid-cols-2 gap-2">
             {CHARACTERS.map(c => (
               <button key={c.id}
                 onClick={() => setSelectedChar(c)}
-                className={`p-3 rounded-2xl text-left transition-all border ${
-                  selectedChar.id === c.id ? 'border-opacity-100' : 'border-gray-800 bg-[#111118]'
-                }`}
+                className="p-3 rounded-2xl text-left transition-all border overflow-hidden"
                 style={selectedChar.id === c.id
                   ? { borderColor: c.color, background: `${c.color}15` }
-                  : {}}>
+                  : { borderColor: '#1f2937', background: '#111118' }}>
                 <div className="flex items-center gap-2">
-                  <span className="text-2xl">{c.emoji}</span>
+                  {/* 실제 이미지 */}
+                  <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 border"
+                    style={{ borderColor: selectedChar.id === c.id ? c.color : '#374151' }}>
+                    <img src={c.img} alt={c.name}
+                      className="w-full h-full object-cover object-top"
+                      onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                  </div>
                   <div>
                     <p className="text-sm font-bold">{c.name}</p>
                     <p className="text-xs text-gray-500">{c.desc}</p>
@@ -446,30 +450,44 @@ export default function SajuPage() {
             {QUESTION_INTENTS.map(q => (
               <button key={q}
                 onClick={() => setForm(f => ({ ...f, questionIntent: q }))}
-                className={`px-3 py-2 rounded-xl text-sm font-medium transition-all ${
-                  form.questionIntent === q
-                    ? 'text-white'
-                    : 'bg-gray-900 text-gray-400 border border-gray-700'
-                }`}
-                style={form.questionIntent === q ? { background: selectedChar.color } : {}}>
+                className="px-3 py-2 rounded-xl text-sm font-medium transition-all"
+                style={form.questionIntent === q
+                  ? { background: selectedChar.color, color: 'white' }
+                  : { background: '#111827', color: '#9CA3AF', border: '1px solid #374151' }}>
                 {q}
               </button>
             ))}
           </div>
         </div>
 
-        {/* 입력 폼 */}
-        <div className="bg-[#111118] rounded-2xl p-4 mb-4 border border-gray-800 space-y-3">
+        {/* 내 정보 입력 */}
+        <div className="bg-[#111118] rounded-2xl p-4 mb-3 border border-gray-800 space-y-3">
+          <p className="text-xs font-bold text-gray-400">
+            {isRomance ? '👤 내 정보' : '👤 기본 정보'}
+          </p>
+
           <div>
             <label className="text-xs text-gray-400 mb-1.5 block">이름</label>
             <input type="text" placeholder="이름을 입력하세요" value={form.name}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none"
-              style={{ ['--tw-ring-color' as string]: selectedChar.color }} />
+              className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none" />
           </div>
 
+          {/* 양력/음력 선택 */}
           <div>
             <label className="text-xs text-gray-400 mb-1.5 block">생년월일</label>
+            <div className="flex gap-2 mb-2">
+              {(['solar', 'lunar'] as const).map(t => (
+                <button key={t}
+                  onClick={() => setCalType(t)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                  style={calType === t
+                    ? { background: selectedChar.color, color: 'white' }
+                    : { background: '#1F2937', color: '#9CA3AF', border: '1px solid #374151' }}>
+                  {t === 'solar' ? '양력' : '음력'}
+                </button>
+              ))}
+            </div>
             <div className="grid grid-cols-3 gap-2">
               <select value={form.year} onChange={e => setForm(f => ({ ...f, year: e.target.value }))}
                 className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none">
@@ -525,13 +543,71 @@ export default function SajuPage() {
           </div>
         </div>
 
+        {/* 상대방 정보 — 연애/결혼 선택 시만 표시 */}
+        {isRomance && (
+          <div className="bg-[#111118] rounded-2xl p-4 mb-3 border space-y-3"
+            style={{ borderColor: `${selectedChar.color}40` }}>
+            <p className="text-xs font-bold" style={{ color: selectedChar.color }}>
+              💕 상대방 정보
+            </p>
+
+            <div>
+              <label className="text-xs text-gray-400 mb-1.5 block">상대방 이름 <span className="text-gray-600">(선택)</span></label>
+              <input type="text" placeholder="몰라도 괜찮아요" value={partnerForm.name}
+                onChange={e => setPartnerForm(f => ({ ...f, name: e.target.value }))}
+                className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none" />
+            </div>
+
+            <div>
+              <label className="text-xs text-gray-400 mb-1.5 block">상대방 생년월일</label>
+              <div className="grid grid-cols-3 gap-2">
+                <select value={partnerForm.year} onChange={e => setPartnerForm(f => ({ ...f, year: e.target.value }))}
+                  className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none">
+                  {YEARS.map(y => <option key={y} value={y}>{y}년</option>)}
+                </select>
+                <select value={partnerForm.month} onChange={e => setPartnerForm(f => ({ ...f, month: e.target.value }))}
+                  className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none">
+                  {MONTHS.map(m => <option key={m} value={m}>{m}월</option>)}
+                </select>
+                <select value={partnerForm.day} onChange={e => setPartnerForm(f => ({ ...f, day: e.target.value }))}
+                  className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none">
+                  {DAYS.map(d => <option key={d} value={d}>{d}일</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs text-gray-400 mb-1.5 block">상대방 태어난 시간 <span className="text-gray-600">(선택)</span></label>
+              <select value={partnerForm.hour} onChange={e => setPartnerForm(f => ({ ...f, hour: e.target.value }))}
+                className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none">
+                {HOURS.map(h => <option key={h.value} value={h.value}>{h.label}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs text-gray-400 mb-1.5 block">상대방 성별</label>
+              <div className="grid grid-cols-2 gap-2">
+                {['male', 'female'].map(g => (
+                  <button key={g} onClick={() => setPartnerForm(f => ({ ...f, gender: g }))}
+                    className="py-2.5 rounded-xl text-sm font-medium transition-all"
+                    style={partnerForm.gender === g
+                      ? { background: selectedChar.color, color: 'white' }
+                      : { background: '#111827', color: '#9CA3AF', border: '1px solid #374151' }}>
+                    {g === 'male' ? '남성' : '여성'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         <button onClick={handleSubmit} disabled={!form.name}
           className="w-full py-4 rounded-2xl font-bold text-lg text-white disabled:opacity-40 disabled:cursor-not-allowed"
           style={{ background: `linear-gradient(135deg, ${selectedChar.color}, ${selectedChar.color}bb)` }}>
-          {selectedChar.name}에게 물어보기 {selectedChar.emoji}
+          {selectedChar.name}에게 물어보기 →
         </button>
 
-        <p className="text-center text-gray-600 text-xs mt-3">3개 무료 · 전체 열기 590원</p>
+        <p className="text-center text-gray-600 text-xs mt-3">3개 무료 · 전체 열기 990원</p>
       </div>
     </div>
   )
