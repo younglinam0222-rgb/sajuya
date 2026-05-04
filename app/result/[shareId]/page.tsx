@@ -264,22 +264,35 @@ export default function ResultPage() {
 
           {paidTitles.length > 0 && (
             <>
-              <div className="flex items-center justify-between mb-2">
-                <div className="text-xs font-bold text-[#555]">🔒 잠긴 판결 {paidTitles.length}개</div>
-                <Link href="/saju" className="text-xs px-3 py-1.5 rounded-full font-bold text-white" style={{ background: charColor }}>
-                  990원으로 전체 열기
-                </Link>
-              </div>
+              <div className="text-xs font-bold text-[#555] mb-2 mt-4">🔒 잠긴 판결 {paidTitles.length}개</div>
               <div className="space-y-2 mb-4">
                 {paidTitles.map(t => (
-                  <div key={t.id} className="rounded-2xl p-4 border border-gray-800 bg-[#111]">
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center bg-gray-800 flex-shrink-0">🔒</div>
-                      <div>
-                        <p className="font-bold text-sm text-white">{t.title}</p>
-                        <p className="text-gray-500 text-xs mt-1">{t.teaser}</p>
+                  <div key={t.id} className="rounded-2xl border border-gray-800 bg-[#111] overflow-hidden">
+                    <button className="w-full p-4 text-left" onClick={() => setOpenIdx(prev => prev.includes(parseInt(t.id)) ? prev.filter(i => i !== parseInt(t.id)) : [...prev, parseInt(t.id)])}>
+                      <div className="flex items-start gap-3">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center bg-gray-800 flex-shrink-0 text-sm">🔒</div>
+                        <div className="flex-1">
+                          <p className="font-bold text-sm text-white">{t.title}</p>
+                          <p className="text-gray-500 text-xs mt-1">{t.teaser}</p>
+                        </div>
                       </div>
-                    </div>
+                    </button>
+                    {openIdx.includes(parseInt(t.id)) && (
+                      <div className="px-4 pb-4 border-t border-gray-800">
+                        <div className="mt-3 p-3 rounded-xl bg-gray-900">
+                          <p className="text-xs text-gray-400 mb-1 leading-relaxed">{t.teaser}</p>
+                          <button className="w-full mt-2 py-2.5 rounded-xl text-sm font-black text-white"
+                            style={{ background: `linear-gradient(135deg, ${charColor}, ${charColor}bb)` }}>
+                            🔓 이 판결만 열기 · 990원
+                          </button>
+                          <p className="text-center text-xs text-gray-600 mt-2">또는</p>
+                          <Link href="/saju" className="block w-full mt-1 py-2 rounded-xl text-xs font-bold text-center"
+                            style={{ background: '#1a1025', border: `1px solid ${charColor}40`, color: charColor }}>
+                            전체 9개 한번에 열기 · 990원
+                          </Link>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
