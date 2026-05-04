@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useSession } from 'next-auth/react'
+import { useSession, signOut } from 'next-auth/react'
 import Link from 'next/link'
 
 interface Reading {
@@ -36,6 +36,7 @@ export default function StoragePage() {
   const { data: session } = useSession()
   const [readings, setReadings] = useState<Reading[]>([])
   const [loading, setLoading] = useState(true)
+  const [showLogout, setShowLogout] = useState(false)
 
   useEffect(() => {
     if (session?.user) fetchReadings()
@@ -58,25 +59,51 @@ export default function StoragePage() {
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr)
-    return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`
+    return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`
   }
 
   const getFormInfo = (sajuData: string) => {
-    try {
-      const parsed = JSON.parse(sajuData)
-      return parsed.form
-    } catch { return null }
+    try { return JSON.parse(sajuData).form } catch { return null }
   }
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
       <div className="max-w-md mx-auto px-4 pt-6">
-        <div className="flex items-center gap-3 mb-6">
-          <Link href="/" className="text-gray-400 text-xl">←</Link>
-          <div>
-            <h1 className="text-xl font-bold">📦 보관함</h1>
-            <p className="text-gray-500 text-xs mt-0.5">내 사주 풀이 저장 목록</p>
+
+        {/* 헤더 */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <Link href="/" className="text-gray-400 text-xl">←</Link>
+            <div>
+              <h1 className="text-xl font-bold">📦 보관함</h1>
+              <p className="text-gray-500 text-xs mt-0.5">내 사주 풀이 저장 목록</p>
+            </div>
           </div>
+
+          {/* 프로필 + 로그아웃 */}
+          {session && (
+            <div className="relative">
+              <button
+                onClick={() => setShowLogout(!showLogout)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-800 text-xs text-gray-300">
+                {session.user?.image
+                  ? <img src={session.user.image} className="w-5 h-5 rounded-full" alt="" />
+                  : <span>👤</span>}
+                <span className="max-w-[60px] truncate">{session.user?.name}</span>
+                <span className="text-gray-600">▼</span>
+              </button>
+
+              {showLogout && (
+                <div className="absolute right-0 top-10 bg-[#1a1a2e] border border-gray-700 rounded-2xl p-2 z-50 min-w-[120px]">
+                  <button
+                    onClick={() => signOut({ callbackUrl: '/' })}
+                    className="w-full px-3 py-2 text-sm text-red-400 hover:bg-gray-800 rounded-xl text-left">
+                    🚪 로그아웃
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {!session ? (
@@ -118,10 +145,9 @@ export default function StoragePage() {
                 return (
                   <Link key={r.id} href={`/result/${r.share_id}`}>
                     <div className="rounded-2xl overflow-hidden bg-[#111118] border border-gray-800 hover:border-gray-600 transition-all flex">
-                      {/* 캐릭터 이미지 */}
                       <div className="w-20 flex-shrink-0 overflow-hidden relative">
                         {img && <img src={img} alt={name} className="w-full h-full object-cover object-top opacity-80" />}
-                        <div className="absolute inset-0" style={{ background: `linear-gradient(to right, transparent, #111118)` }} />
+                        <div className="absolute inset-0" style={{ background: 'linear-gradient(to right, transparent, #111118)' }} />
                       </div>
                       <div className="flex-1 p-3">
                         <div className="flex items-center gap-2 mb-1">
@@ -130,9 +156,7 @@ export default function StoragePage() {
                             <span className="text-xs px-1.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">유료</span>
                           )}
                         </div>
-                        {form && (
-                          <p className="text-white font-bold text-sm mb-0.5">{form.name}님의 사주</p>
-                        )}
+                        {form && <p className="text-white font-bold text-sm mb-0.5">{form.name}님의 사주</p>}
                         <p className="text-gray-500 text-xs">{formatDate(r.created_at)}</p>
                         <p className="text-xs mt-1.5 font-medium" style={{ color }}>다시 보기 →</p>
                       </div>
@@ -144,7 +168,6 @@ export default function StoragePage() {
           </>
         )}
 
-        {/* 새 풀이 받기 CTA */}
         {session && readings.length > 0 && (
           <Link href="/saju"
             className="block w-full mt-6 py-4 rounded-2xl text-center font-bold text-white"
@@ -154,7 +177,11 @@ export default function StoragePage() {
         )}
       </div>
 
-      {/* 하단 네비 */}
+      {/* 드롭다운 닫기 오버레이 */}
+      {showLogout && (
+        <div className="fixed inset-0 z-40" onClick={() => setShowLogout(false)} />
+      )}
+
       <nav className="fixed bottom-0 left-0 right-0 bg-[#0a0a0f] border-t border-gray-800 z-50">
         <div className="max-w-md mx-auto flex items-center justify-around py-1 px-2">
           <Link href="/" className="flex flex-col items-center gap-0.5 py-2 px-3">
