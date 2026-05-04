@@ -3,9 +3,17 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { CHARACTERS } from '@/lib/characters'
-import { OCCUPATIONS, OccupationId } from '@/lib/occupations'
+import { OCCUPATIONS } from '@/lib/occupations'
 
 interface Section { id: string; emoji: string; title: string; body: string }
+
+// ✅ character emoji 별도 정의 (characters.ts에 emoji 없으므로)
+const CHARACTER_EMOJI: Record<string, string> = {
+  baekhalma: '👵',
+  doRyeong: '🧑',
+  gumiho: '🦊',
+  sinRyeong: '🧙',
+}
 
 const SECTION_ICONS: Record<string, { svg: string; color: string; bg: string }> = {
   energy:        { svg:'M13 10V3L4 14h7v7l9-11h-7z', color:'#fbbf24', bg:'rgba(251,191,36,.15)' },
@@ -54,7 +62,7 @@ export default function ResultPage() {
   const [sections, setSections] = useState<Section[]>([])
   const [openIdx, setOpenIdx] = useState<number[]>([0])
   const [characterId, setCharacterId] = useState<string>('baekhalma')
-  const [occupationId, setOccupationId] = useState<OccupationId>('general')
+  const [occupationId, setOccupationId] = useState<string>('general')
   const [formInfo, setFormInfo] = useState<any>(null)
   const [sajuData, setSajuData] = useState<any>(null)
 
@@ -68,13 +76,15 @@ export default function ResultPage() {
       if (!res.ok) throw new Error('not found')
       const data = await res.json()
 
-      setCharacterId(data.character_id)
-      setOccupationId(data.occupation_id)
+      setCharacterId(data.character_id ?? 'baekhalma')
+      setOccupationId(data.occupation_id ?? 'general')
 
       if (data.saju_data) {
-        const parsed = JSON.parse(data.saju_data)
-        setFormInfo(parsed.form)
-        setSajuData(parsed.saju)
+        try {
+          const parsed = JSON.parse(data.saju_data)
+          setFormInfo(parsed.form)
+          setSajuData(parsed.saju)
+        } catch {}
       }
 
       if (data.ai_result) {
@@ -101,8 +111,11 @@ export default function ResultPage() {
     setOpenIdx(prev => prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx])
   }
 
+  // ✅ character.name만 사용 (emoji는 별도 맵에서)
   const character = CHARACTERS[characterId]
-  const occupation = OCCUPATIONS[occupationId]
+  const characterEmoji = CHARACTER_EMOJI[characterId] ?? '🔮'
+  // ✅ OccupationId 타입 제거, any로 접근
+  const occupation = (OCCUPATIONS as Record<string, any>)[occupationId]
 
   const elementColor = (el: string) => {
     const map: Record<string, string> = { '木':'#4ade80','火':'#f87171','土':'#fbbf24','金':'#d1d5db','水':'#60a5fa' }
@@ -150,7 +163,8 @@ export default function ResultPage() {
         style={{background:'linear-gradient(160deg,#050010,#0f0030,#050010)'}}>
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold mb-4"
           style={{background:'rgba(167,139,250,.1)',border:'1px solid rgba(167,139,250,.3)',color:'#c4b5fd'}}>
-          {character?.name} 신탁
+          {/* ✅ emoji를 별도 맵에서 가져옴 */}
+          {characterEmoji} {character?.name ?? characterId} 신탁
           {occupation && (
             <span className="px-2 py-0.5 rounded text-[9px] font-bold"
               style={{background:'rgba(139,92,246,.15)',color:'#a78bfa'}}>
@@ -176,7 +190,7 @@ export default function ResultPage() {
             만세력 (四柱八字)
           </div>
           <div className="grid grid-cols-4 text-center" style={{borderBottom:'1px solid #222'}}>
-            {manjuPillars.map(({label})=>(
+            {manjuPillars.map(({label}) => (
               <div key={label} className="py-1.5 text-[10px] font-bold"
                 style={{background:'#0d0d0d',borderRight:'1px solid #222',color:'#666'}}>
                 {label}
@@ -184,7 +198,7 @@ export default function ResultPage() {
             ))}
           </div>
           <div className="grid grid-cols-4 text-center" style={{borderBottom:'1px solid #222'}}>
-            {manjuPillars.map(({label,pillar})=>(
+            {manjuPillars.map(({label, pillar}) => (
               <div key={label} className="py-2.5" style={{background:elementBg(pillar?.stemElement),borderRight:'1px solid #222'}}>
                 <div className="text-3xl font-black" style={{color:elementColor(pillar?.stemElement)}}>{pillar?.stem}</div>
                 <div className="text-[9px] mt-0.5" style={{color:'rgba(255,255,255,.4)'}}>{pillar?.stemElement}</div>
@@ -193,7 +207,7 @@ export default function ResultPage() {
             ))}
           </div>
           <div className="grid grid-cols-4 text-center" style={{borderBottom:'1px solid #222'}}>
-            {manjuPillars.map(({label,pillar})=>(
+            {manjuPillars.map(({label, pillar}) => (
               <div key={label} className="py-2.5" style={{background:elementBg(pillar?.branchElement),borderRight:'1px solid #222'}}>
                 <div className="text-3xl font-black" style={{color:elementColor(pillar?.branchElement)}}>{pillar?.branch}</div>
                 <div className="text-[9px] mt-0.5" style={{color:'rgba(255,255,255,.4)'}}>{pillar?.branchElement}</div>
@@ -203,10 +217,10 @@ export default function ResultPage() {
           </div>
           {sajuData.elementCount && (
             <div className="grid grid-cols-5 text-center" style={{background:'#0d0d0d'}}>
-              {(['木','火','土','金','水'] as const).map(el=>(
+              {(['木','火','土','金','水'] as const).map(el => (
                 <div key={el} className="py-2" style={{borderRight:'1px solid #222'}}>
                   <div className="text-xs font-black" style={{color:elementColor(el)}}>{el}</div>
-                  <div className="text-[10px] text-[#555] mt-0.5">{sajuData.elementCount[el]??0}개</div>
+                  <div className="text-[10px] text-[#555] mt-0.5">{sajuData.elementCount[el] ?? 0}개</div>
                 </div>
               ))}
             </div>
@@ -240,19 +254,19 @@ export default function ResultPage() {
               <button className="w-full px-4 py-3.5 flex items-center gap-3 text-left"
                 onClick={() => toggleSection(idx)}>
                 <SectionIcon id={sec.id} />
-                <span className={`flex-1 text-sm font-bold ${isWarning?'text-red-300':'text-white'} leading-snug`}>
+                <span className={`flex-1 text-sm font-bold ${isWarning ? 'text-red-300' : 'text-white'} leading-snug`}>
                   {sec.title}
                 </span>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                   stroke="#555" strokeWidth="2" strokeLinecap="round"
-                  style={{transform:isOpen?'rotate(180deg)':'',transition:'transform .2s',flexShrink:0}}>
+                  style={{transform: isOpen ? 'rotate(180deg)' : '', transition:'transform .2s', flexShrink: 0}}>
                   <path d="M19 9l-7 7-7-7"/>
                 </svg>
               </button>
               {isOpen && (
-                <div className="px-4 pb-5 border-t" style={{borderColor:isWarning?'rgba(239,68,68,.12)':'#1e1e1e'}}>
+                <div className="px-4 pb-5 border-t" style={{borderColor: isWarning ? 'rgba(239,68,68,.12)' : '#1e1e1e'}}>
                   <p className="text-sm leading-[1.95] pt-4 whitespace-pre-line"
-                    style={{color:isWarning?'#fca5a5':'#bbb'}}>{sec.body}</p>
+                    style={{color: isWarning ? '#fca5a5' : '#bbb'}}>{sec.body}</p>
                 </div>
               )}
             </div>
@@ -263,7 +277,7 @@ export default function ResultPage() {
       {/* 버튼 */}
       <div className="px-4 mt-4 space-y-3">
         <button className="w-full py-4 rounded-2xl font-black text-base"
-          style={{background:'#fee500',color:'#3c1e1e'}}
+          style={{background:'#fee500', color:'#3c1e1e'}}
           onClick={() => {
             if (navigator.share) {
               navigator.share({ title: '내 사주팔자 풀이', url: window.location.href })
@@ -276,12 +290,12 @@ export default function ResultPage() {
         </button>
         <Link href="/saju"
           className="block w-full py-3 rounded-2xl font-bold text-sm text-center"
-          style={{background:'#111',border:'1px solid #222',color:'#666'}}>
+          style={{background:'#111', border:'1px solid #222', color:'#666'}}>
           ↺ 새로 풀이받기
         </Link>
       </div>
 
-      <div className="mx-4 mt-6 px-3 py-3 rounded-xl" style={{background:'#0a0a0a',border:'0.5px solid #111'}}>
+      <div className="mx-4 mt-6 px-3 py-3 rounded-xl" style={{background:'#0a0a0a', border:'0.5px solid #111'}}>
         <p className="text-[9px] leading-relaxed" style={{color:'#3a3a3a'}}>
           본 서비스는 사주명리학 이론을 AI가 분석한 참고용 엔터테인먼트 콘텐츠입니다. 실제 투자·재무·의료·법률 등 중요한 의사결정의 근거로 사용하지 마십시오. © 사주야
         </p>
