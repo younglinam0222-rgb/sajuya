@@ -17,23 +17,24 @@ export async function POST(req: NextRequest) {
     const prompt = `오늘은 ${todayStr}이다.
 상담자: ${name} (${year}년 ${month}월 ${day}일생, ${animal}띠, ${genderStr}, 현재 ${age}세)
 
-오늘 하루 이 사람의 일일운세를 생생하게 분석해줘.
+오늘 하루 이 사람의 일일운세를 직설적이고 구체적으로 분석해줘.
+정보 나열 말고, 판결하듯이 써줘. 읽으면 "맞다" 싶게.
 
 반드시 아래 JSON 형식으로만 반환. 마크다운 코드블록 절대 금지.
 
 {
-  "overall": "오늘의 총운 (3~4문장, 구체적인 에너지와 흐름 설명)",
-  "money": "재물운 (2~3문장, 오늘 돈과 관련한 운세)",
-  "love": "연애운 (2~3문장, 오늘 인연/관계 운세)",
+  "overall": "오늘의 총운 (3~4문장, 오늘 에너지와 흐름을 직설적으로)",
+  "money": "재물운 (2~3문장, 오늘 돈과 관련한 판결)",
+  "love": "연애운 (2~3문장, 오늘 인연/관계 판결)",
   "health": "건강운 (2~3문장, 오늘 몸과 마음 상태)",
-  "lucky": "행운 포인트 (행운의 방향: OO, 행운의 색: OO, 행운의 숫자: OO, 오늘의 조언: 한문장)",
+  "lucky": "행운 포인트 (행운의 방향: OO, 행운의 색: OO, 행운의 숫자: OO, 오늘의 한마디: 한문장)",
   "warning": "오늘 조심할 것 (2문장, 구체적으로)"
 }`
 
     const stream = client.messages.stream({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1000,
-      system: '너는 한국 전통 운세 전문가야. 일일운세를 재미있고 구체적으로 분석한다. 반드시 JSON만 출력.',
+      system: '너는 직설적인 운세 판결자야. 일일운세를 구체적이고 임팩트 있게 분석한다. 반드시 JSON만 출력.',
       messages: [{ role: 'user', content: prompt }],
     })
 
