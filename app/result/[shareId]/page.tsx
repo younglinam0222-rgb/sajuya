@@ -150,7 +150,7 @@ export default function ResultPage() {
         style={{background:'linear-gradient(160deg,#050010,#0f0030,#050010)'}}>
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold mb-4"
           style={{background:'rgba(167,139,250,.1)',border:'1px solid rgba(167,139,250,.3)',color:'#c4b5fd'}}>
-          {character?.emoji} {character?.name} 신탁
+          {character?.name} 신탁
           {occupation && (
             <span className="px-2 py-0.5 rounded text-[9px] font-bold"
               style={{background:'rgba(139,92,246,.15)',color:'#a78bfa'}}>
