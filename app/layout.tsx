@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import { getServerSession } from 'next-auth'
+import SessionProviderWrapper from '@/components/SessionProviderWrapper'
 
 export const metadata: Metadata = {
   title: '사주야 — 당신의 운명을 읽다',
@@ -37,7 +39,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ko">
       <body style={{ margin: 0, padding: 0, background: '#0a0a0a' }}>
-        {children}
+        <SessionProviderWrapper>
+          {children}
+        </SessionProviderWrapper>
       </body>
     </html>
   )
