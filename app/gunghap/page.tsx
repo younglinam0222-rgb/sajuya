@@ -47,16 +47,17 @@ const SECTIONS = [
 ]
 
 function PersonForm({
-  label, prefix, form, onChange,
+  label, prefix, form, onChange, calType, onCalTypeChange,
 }: {
   label: string
   prefix: string
   form: Record<string, string>
   onChange: (key: string, val: string) => void
+  calType: 'solar' | 'lunar'
+  onCalTypeChange: (t: 'solar' | 'lunar') => void
 }) {
   const isPerson1 = label === '나'
-  const activeColor = isPerson1 ? 'bg-pink-500' : 'bg-violet-500'
-  const focusBorder = isPerson1 ? 'focus:border-pink-500' : 'focus:border-violet-500'
+  const activeColor = isPerson1 ? '#EC4899' : '#8B5CF6'
   const labelColor = isPerson1 ? '#EC4899' : '#8B5CF6'
 
   return (
@@ -65,13 +66,24 @@ function PersonForm({
         {isPerson1 ? '💗' : '💙'} {label}
       </p>
       <div className="space-y-2">
-        <input
-          type="text"
-          placeholder="이름"
+        <input type="text" placeholder="이름"
           value={form[`name${prefix}`] || ''}
           onChange={e => onChange(`name${prefix}`, e.target.value)}
-          className={`w-full bg-[#0a0a0f] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none ${focusBorder}`}
-        />
+          className="w-full bg-[#0a0a0f] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none" />
+
+        {/* 양력/음력 토글 */}
+        <div className="flex gap-2">
+          {(['solar', 'lunar'] as const).map(t => (
+            <button key={t} onClick={() => onCalTypeChange(t)}
+              className="px-3 py-1 rounded-lg text-xs font-medium transition-all"
+              style={calType === t
+                ? { background: activeColor, color: 'white' }
+                : { background: '#1F2937', color: '#9CA3AF', border: '1px solid #374151' }}>
+              {t === 'solar' ? '양력' : '음력'}
+            </button>
+          ))}
+        </div>
+
         <div className="grid grid-cols-3 gap-1.5">
           <select value={form[`year${prefix}`] || '1990'} onChange={e => onChange(`year${prefix}`, e.target.value)}
             className="bg-[#0a0a0f] border border-gray-700 rounded-lg px-1 py-2 text-xs text-white focus:outline-none">
@@ -93,9 +105,10 @@ function PersonForm({
         <div className="grid grid-cols-2 gap-1.5">
           {['male', 'female'].map(g => (
             <button key={g} onClick={() => onChange(`gender${prefix}`, g)}
-              className={`py-2 rounded-lg text-xs font-medium transition-all ${
-                form[`gender${prefix}`] === g ? `${activeColor} text-white` : 'bg-[#0a0a0f] text-gray-400 border border-gray-700'
-              }`}>
+              className="py-2 rounded-lg text-xs font-medium transition-all"
+              style={form[`gender${prefix}`] === g
+                ? { background: activeColor, color: 'white' }
+                : { background: '#0a0a0f', color: '#9CA3AF', border: '1px solid #374151' }}>
               {g === 'male' ? '남성' : '여성'}
             </button>
           ))}
@@ -108,6 +121,8 @@ function PersonForm({
 export default function GunghapPage() {
   const [stage, setStage] = useState<Stage>('input')
   const [result, setResult] = useState<Partial<GunghapResult>>({})
+  const [calType1, setCalType1] = useState<'solar' | 'lunar'>('solar')
+  const [calType2, setCalType2] = useState<'solar' | 'lunar'>('solar')
   const [form, setForm] = useState<Record<string, string>>({
     name1: '', year1: '1990', month1: '1', day1: '1', hour1: '', gender1: 'female',
     name2: '', year2: '1990', month2: '1', day2: '1', hour2: '', gender2: 'male',
@@ -125,7 +140,7 @@ export default function GunghapPage() {
       const res = await fetch('/api/gunghap', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, calType1, calType2 }),
       })
       if (!res.body) return
 
@@ -166,7 +181,9 @@ export default function GunghapPage() {
   if (stage === 'loading') {
     return (
       <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center text-white px-4">
-        <div className="text-5xl mb-4 animate-pulse">🦊</div>
+        <div className="w-20 h-20 rounded-full overflow-hidden mb-4 border-2 border-pink-500">
+          <img src="/characters/gumiho.png" alt="구미호" className="w-full h-full object-cover object-top" />
+        </div>
         <p className="text-lg font-bold mb-2">{form.name1}님과 {form.name2}님의 궁합 분석 중...</p>
         <p className="text-gray-400 text-sm mb-8">구미호 선생이 두 사람의 인연을 살펴보고 있어요</p>
         <div className="w-64 h-1.5 bg-gray-800 rounded-full overflow-hidden">
@@ -234,25 +251,23 @@ export default function GunghapPage() {
         <div className="flex items-center gap-3 mb-6">
           <Link href="/" className="text-gray-400 text-xl">←</Link>
           <div>
-            <h1 className="text-xl font-bold">🦊 궁합 해설</h1>
-            <p className="text-gray-500 text-xs mt-0.5">구미호 선생의 궁합 분석 · 590원</p>
+            <h1 className="text-xl font-bold">💞 궁합 해설</h1>
+            <p className="text-gray-500 text-xs mt-0.5">구미호 선생의 궁합 분석 · 990원</p>
           </div>
         </div>
 
         <div className="bg-[#111118] rounded-2xl p-4 mb-4 border border-gray-800">
           <p className="text-xs text-pink-400 mb-3 font-medium">💕 두 사람의 정보를 입력하세요</p>
 
-          {/* 관계 선택 */}
           <div className="mb-3">
             <label className="text-xs text-gray-400 mb-1.5 block">관계</label>
             <div className="flex flex-wrap gap-1.5">
               {RELATIONSHIPS.map(r => (
                 <button key={r} onClick={() => handleChange('relationship', r)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                    form.relationship === r
-                      ? 'bg-pink-500 text-white'
-                      : 'bg-gray-900 text-gray-400 border border-gray-700'
-                  }`}>
+                  className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
+                  style={form.relationship === r
+                    ? { background: '#EC4899', color: 'white' }
+                    : { background: '#111827', color: '#9CA3AF', border: '1px solid #374151' }}>
                   {r}
                 </button>
               ))}
@@ -260,20 +275,20 @@ export default function GunghapPage() {
           </div>
 
           <div className="space-y-3">
-            <PersonForm label="나" prefix="1" form={form} onChange={handleChange} />
+            <PersonForm label="나" prefix="1" form={form} onChange={handleChange}
+              calType={calType1} onCalTypeChange={setCalType1} />
             <div className="flex items-center justify-center py-1">
               <span className="text-2xl">💗</span>
             </div>
-            <PersonForm label="상대방" prefix="2" form={form} onChange={handleChange} />
+            <PersonForm label="상대방" prefix="2" form={form} onChange={handleChange}
+              calType={calType2} onCalTypeChange={setCalType2} />
           </div>
         </div>
 
-        <button
-          onClick={handleSubmit}
-          disabled={!form.name1 || !form.name2}
+        <button onClick={handleSubmit} disabled={!form.name1 || !form.name2}
           className="w-full py-4 rounded-2xl font-bold text-base disabled:opacity-40 disabled:cursor-not-allowed text-white"
           style={{ background: 'linear-gradient(135deg, #EC4899, #8B5CF6)' }}>
-          궁합 보기 🦊
+          궁합 보기 →
         </button>
       </div>
     </div>
