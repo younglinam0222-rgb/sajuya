@@ -75,8 +75,8 @@ export default function HomePage() {
             style={{ background: 'linear-gradient(135deg, #1a0a2e 0%, #0f0a1a 50%, #0a1a0f 100%)', border: '1px solid #ffffff10' }}>
             <div className="flex items-center gap-2 mb-4">
               <div className="flex -space-x-1">
-                {['👵','🧑','🦊','🧙'].map((e, i) => (
-                  <span key={i} className="w-6 h-6 rounded-full bg-gray-800 flex items-center justify-center text-xs border border-gray-700">{e}</span>
+                {['baekhalma','doryeong','gumiho','sinryeong'].map((id, i) => (
+                  <img key={i} src={`/characters/${id}.png`} alt="" className="w-6 h-6 rounded-full object-cover border border-gray-700" />
                 ))}
               </div>
               <span className="text-xs text-gray-400"><AnimatedCount target={32184} />명 분석 완료</span>
@@ -133,7 +133,7 @@ export default function HomePage() {
                 <div className="rounded-2xl p-3 cursor-pointer transition-transform hover:scale-[1.02]"
                   style={{ background: c.bg, border: `1px solid ${c.color}30` }}>
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-2xl">{c.emoji}</span>
+                    <img src={`/characters/${c.id === "doRyeong" ? "doryeong" : c.id === "sinRyeong" ? "sinryeong" : c.id}.png`} alt={c.name} className="w-10 h-10 rounded-xl object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display="none" }} />
                     <div>
                       <p className="text-xs font-bold">{c.name}</p>
                       <p className="text-xs" style={{ color: c.color }}>{c.tag}</p>
