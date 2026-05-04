@@ -421,7 +421,7 @@ function SajuPageContent() {
                 <div className="text-[9px] text-[#555] mb-1">신살</div>
                 <div className="flex flex-col gap-0.5 items-center">
                   {(pillar?.sinsal || []).length > 0
-                    ? (pillar?.sinsal || []).map((s,i)=>(
+                    ? (pillar?.sinsal || []).map((s:string,i:number)=>(
                         <span key={i} className="text-[8px] font-bold"
                           style={{color: s.includes('귀인') ? '#fbbf24' : s === '공망' ? '#f87171' : '#a78bfa'}}>
                           {s}
