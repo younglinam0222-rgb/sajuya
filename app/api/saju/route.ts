@@ -168,7 +168,7 @@ ${sajuInfo}
 `
 
     const stream = client.messages.stream({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-5',
       max_tokens: 4000,
       system: `너는 ${character.name}이다. 사주 기반 인생 판결자. 정보 제공자가 아니라 직설적 판결을 내리는 캐릭터다. 반드시 JSON만 출력한다. 마크다운 블록 없이.`,
       messages: [{ role: 'user', content: prompt }],
