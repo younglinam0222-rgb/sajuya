@@ -20,13 +20,8 @@ const CHARACTERS = [
 ]
 
 interface MenuItem {
-  href: string
-  label: string
-  desc: string
-  emoji: string
-  badge: string
-  badgeColor: string
-  paid: boolean
+  href: string; label: string; desc: string; emoji: string
+  badge: string; badgeColor: string; paid: boolean
 }
 
 const MENUS: MenuItem[] = [
@@ -98,7 +93,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* 캐릭터 — 심플 버전 (문구 없음) */}
+        {/* 캐릭터 */}
         <div className="px-4 mb-6">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-base font-bold">👁 운명을 보는 자들</h2>
@@ -109,17 +104,11 @@ export default function HomePage() {
               <Link key={c.id} href={`/characters/${c.id}`}>
                 <div className="rounded-2xl overflow-hidden cursor-pointer transition-transform hover:scale-[1.02] relative"
                   style={{ background: c.bg, border: `1px solid ${c.color}30` }}>
-                  {/* 이미지 꽉 채우기 */}
                   <div className="h-52 overflow-hidden relative">
-                    <img
-                      src={CHAR_IMG[c.id]}
-                      alt={c.name}
+                    <img src={CHAR_IMG[c.id]} alt={c.name}
                       className="w-full h-full object-cover object-top"
-                      onError={e => { (e.target as HTMLImageElement).style.opacity = '0' }}
-                    />
-                    {/* 하단 그라데이션 오버레이 */}
+                      onError={e => { (e.target as HTMLImageElement).style.opacity = '0' }} />
                     <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, transparent 50%, rgba(0,0,0,0.85) 100%)' }} />
-                    {/* 이름/태그 오버레이 */}
                     <div className="absolute bottom-0 left-0 right-0 p-3">
                       <p className="text-sm font-black text-white">{c.name}</p>
                       <p className="text-xs font-medium mt-0.5" style={{ color: c.color }}>{c.tag}</p>
@@ -142,7 +131,6 @@ export default function HomePage() {
               🪙 엽전 충전
             </button>
           </div>
-
           <p className="text-xs text-gray-600 mb-2 font-medium">⭐ 프리미엄</p>
           <div className="grid grid-cols-2 gap-2 mb-4">
             {MENUS.filter(m => m.paid).map(m => (
@@ -163,7 +151,6 @@ export default function HomePage() {
               </Link>
             ))}
           </div>
-
           <p className="text-xs text-gray-600 mb-2 font-medium">🆓 무료 / 일부무료</p>
           <div className="grid grid-cols-2 gap-2">
             {MENUS.filter(m => !m.paid).map(m => (
@@ -191,48 +178,22 @@ export default function HomePage() {
           <div className="rounded-2xl p-4 bg-[#111118] border border-gray-800">
             <p className="text-sm font-bold mb-3">🔮 사주야에서 할 수 있는 것들</p>
             <div className="space-y-2.5">
-              <div className="flex items-start gap-2.5">
-                <span className="text-base flex-shrink-0">🪙</span>
-                <div>
-                  <p className="text-xs font-bold text-white">990원 사주 풀이</p>
-                  <p className="text-xs text-gray-500">타고난 성격, 재물운, 직업운까지 직설로 분석</p>
+              {[
+                { icon: '🪙', title: '990원 사주 풀이', desc: '타고난 성격, 재물운, 직업운까지 직설로 분석' },
+                { icon: '💞', title: '궁합', desc: '꼭 커플만 궁합 보란 법 있나요?' },
+                { icon: '🌊', title: '대운 풀이', desc: '10년 단위 인생의 큰 흐름 해설' },
+                { icon: '📆', title: '연도별 운세', desc: '올해 총운, 월별 운세를 한눈에' },
+                { icon: '⭐', title: '오늘의 운세 — 무료', desc: '매일 무료로 확인하는 일일운세' },
+                { icon: '📅', title: '택일', desc: '이사, 결혼, 개업 등 좋은 날짜 추천' },
+              ].map(item => (
+                <div key={item.title} className="flex items-start gap-2.5">
+                  <span className="text-base flex-shrink-0">{item.icon}</span>
+                  <div>
+                    <p className="text-xs font-bold text-white">{item.title}</p>
+                    <p className="text-xs text-gray-500">{item.desc}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <span className="text-base flex-shrink-0">💞</span>
-                <div>
-                  <p className="text-xs font-bold text-white">궁합</p>
-                  <p className="text-xs text-gray-500">꼭 커플만 궁합 보란 법 있나요? 자유롭게 조합해보세요</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <span className="text-base flex-shrink-0">🌊</span>
-                <div>
-                  <p className="text-xs font-bold text-white">대운 풀이</p>
-                  <p className="text-xs text-gray-500">10년 단위 인생의 큰 흐름 해설</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <span className="text-base flex-shrink-0">📆</span>
-                <div>
-                  <p className="text-xs font-bold text-white">연도별 운세</p>
-                  <p className="text-xs text-gray-500">올해 총운, 월별 운세를 한눈에</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <span className="text-base flex-shrink-0">⭐</span>
-                <div>
-                  <p className="text-xs font-bold text-white">오늘의 운세 — 무료</p>
-                  <p className="text-xs text-gray-500">매일 무료로 확인하는 일일운세</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <span className="text-base flex-shrink-0">📅</span>
-                <div>
-                  <p className="text-xs font-bold text-white">택일</p>
-                  <p className="text-xs text-gray-500">이사, 결혼, 개업 등 좋은 날짜 추천</p>
-                </div>
-              </div>
+              ))}
             </div>
             <div className="mt-3 pt-3 border-t border-gray-800">
               <p className="text-xs text-gray-600">※ 사주야는 오락 및 참고 목적의 서비스입니다</p>
@@ -272,12 +233,28 @@ export default function HomePage() {
               <p className="text-sm font-bold text-gray-300">☕ 커피 한 잔값</p>
               <p className="text-xs text-gray-500">으로 사주 풀이</p>
             </div>
-            <button
-              onClick={() => session ? setShowShop(true) : setShowLoginModal(true)}
+            <button onClick={() => session ? setShowShop(true) : setShowLoginModal(true)}
               className="px-3 py-2 rounded-xl text-xs font-bold text-black"
               style={{ background: '#F59E0B' }}>
               충전하기
             </button>
+          </div>
+        </div>
+
+        {/* 법적 푸터 */}
+        <div className="px-4 mb-6">
+          <div className="border-t border-gray-900 pt-4">
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5 justify-center mb-3">
+              <Link href="/terms" className="text-xs text-gray-600 hover:text-gray-400">이용약관</Link>
+              <Link href="/privacy" className="text-xs text-gray-600 hover:text-gray-400">개인정보처리방침</Link>
+              <Link href="/refund" className="text-xs text-gray-600 hover:text-gray-400">환불정책</Link>
+              <a href="mailto:sajuya.help@gmail.com" className="text-xs text-gray-600 hover:text-gray-400">고객센터</a>
+            </div>
+            <p className="text-center text-[10px] text-gray-700 leading-relaxed">
+              본 서비스는 사주명리학 기반 엔터테인먼트 콘텐츠입니다.<br />
+              의료·법률·재정 판단을 대체하지 않으며, 만 14세 이상 이용 가능합니다.
+            </p>
+            <p className="text-center text-[10px] text-gray-800 mt-1">© 2025 사주야 · sajuya.help@gmail.com</p>
           </div>
         </div>
 
@@ -327,17 +304,33 @@ export default function HomePage() {
               <p className="text-gray-400 text-sm">오늘의 일일운세도 무료로 바로 확인</p>
             </div>
             <div className="space-y-2">
-              <button onClick={() => signIn('kakao')} className="w-full py-3.5 rounded-2xl font-bold text-black text-sm flex items-center justify-center gap-2" style={{ background: '#FEE500' }}>
+              <button onClick={() => signIn('kakao')}
+                className="w-full py-3.5 rounded-2xl font-bold text-black text-sm flex items-center justify-center gap-2"
+                style={{ background: '#FEE500' }}>
                 💬 카카오로 계속하기
               </button>
-              <button onClick={() => signIn('google')} className="w-full py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 bg-white text-gray-900">
+              <button onClick={() => signIn('google')}
+                className="w-full py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 bg-white text-gray-900">
                 🔵 구글로 계속하기
               </button>
-              <button onClick={() => signIn('naver')} className="w-full py-3.5 rounded-2xl font-bold text-white text-sm flex items-center justify-center gap-2" style={{ background: '#03C75A' }}>
+              <button onClick={() => signIn('naver')}
+                className="w-full py-3.5 rounded-2xl font-bold text-white text-sm flex items-center justify-center gap-2"
+                style={{ background: '#03C75A' }}>
                 N 네이버로 계속하기
               </button>
             </div>
-            <p className="text-center text-gray-600 text-xs mt-4">가입 시 이용약관 및 개인정보처리방침에 동의합니다</p>
+            {/* 이용약관 링크 */}
+            <p className="text-center text-gray-600 text-xs mt-4">
+              가입 시{' '}
+              <Link href="/terms" className="underline text-gray-500 hover:text-gray-300" onClick={() => setShowLoginModal(false)}>
+                이용약관
+              </Link>
+              {' '}및{' '}
+              <Link href="/privacy" className="underline text-gray-500 hover:text-gray-300" onClick={() => setShowLoginModal(false)}>
+                개인정보처리방침
+              </Link>
+              에 동의합니다
+            </p>
           </div>
         </div>
       )}
