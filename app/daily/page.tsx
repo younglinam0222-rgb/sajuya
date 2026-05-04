@@ -14,12 +14,17 @@ interface DailyResult {
   warning: string
 }
 
-const YEARS = Array.from({ length: 80 }, (_, i) => 2005 - i)
+// ✅ KST 타임존 고정 (UTC+9)
+function getTodayKST() {
+  return new Date().toLocaleDateString('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric', month: 'long', day: 'numeric',
+  })
+}
+
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1)
 const DAYS = Array.from({ length: 31 }, (_, i) => i + 1)
-
-const today = new Date()
-const todayStr = `${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일`
+const todayStr = getTodayKST()
 
 const SECTIONS = [
   { key: 'overall', icon: '⭐', title: '오늘의 총운', color: '#F59E0B' },
@@ -33,14 +38,25 @@ const SECTIONS = [
 export default function DailyPage() {
   const [stage, setStage] = useState<Stage>('input')
   const [result, setResult] = useState<Partial<DailyResult>>({})
-  const [rawText, setRawText] = useState('')
-  const [form, setForm] = useState({ name: '', year: '1990', month: '1', day: '1', gender: 'female' })
+  const [form, setForm] = useState({
+    name: '', year: '1990', month: '1', day: '1', gender: 'female',
+  })
+  const [yearError, setYearError] = useState('')
+
+  const handleYearChange = (val: string) => {
+    const num = parseInt(val)
+    setForm(f => ({ ...f, year: val }))
+    if (val && (num < 1920 || num > 2010)) {
+      setYearError('1920~2010 사이로 입력해 주세요')
+    } else {
+      setYearError('')
+    }
+  }
 
   const handleSubmit = async () => {
-    if (!form.name || !form.year) return
+    if (!form.name || !form.year || yearError) return
     setStage('loading')
     setResult({})
-    setRawText('')
 
     try {
       const res = await fetch('/api/daily', {
@@ -48,7 +64,6 @@ export default function DailyPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       })
-
       if (!res.body) return
 
       const reader = res.body.getReader()
@@ -59,8 +74,7 @@ export default function DailyPage() {
         const { done, value } = await reader.read()
         if (done) break
         const chunk = decoder.decode(value)
-        const lines = chunk.split('\n')
-        for (const line of lines) {
+        for (const line of chunk.split('\n')) {
           if (line.startsWith('data: ')) {
             const data = line.slice(6)
             if (data === '[DONE]') continue
@@ -68,16 +82,11 @@ export default function DailyPage() {
               const parsed = JSON.parse(data)
               if (parsed.text) {
                 accumulated += parsed.text
-                setRawText(accumulated)
-                // Try to parse JSON progressively
                 try {
                   const clean = accumulated.replace(/```json/g, '').replace(/```/g, '').trim()
-                  const start = clean.indexOf('{')
-                  const end = clean.lastIndexOf('}')
-                  if (start !== -1 && end !== -1) {
-                    const partial = JSON.parse(clean.slice(start, end + 1))
-                    setResult(partial)
-                  }
+                  const s = clean.indexOf('{')
+                  const e = clean.lastIndexOf('}')
+                  if (s !== -1 && e !== -1) setResult(JSON.parse(clean.slice(s, e + 1)))
                 } catch {}
               }
             } catch {}
@@ -115,7 +124,6 @@ export default function DailyPage() {
               <p className="text-gray-500 text-xs">{todayStr}</p>
             </div>
           </div>
-
           <div className="space-y-3">
             {SECTIONS.map(s => {
               const content = result[s.key as keyof DailyResult]
@@ -131,9 +139,7 @@ export default function DailyPage() {
               )
             })}
           </div>
-
-          <button
-            onClick={() => setStage('input')}
+          <button onClick={() => setStage('input')}
             className="w-full mt-6 py-3 rounded-2xl text-sm text-gray-400 border border-gray-800">
             다시 보기
           </button>
@@ -154,61 +160,59 @@ export default function DailyPage() {
           </div>
         </div>
 
-        <div className="bg-[#111118] rounded-2xl p-4 mb-4 border border-gray-800">
-          <p className="text-xs text-yellow-400 mb-3 font-medium">✨ 오늘 하루의 운세를 확인하세요</p>
+        <div className="bg-[#111118] rounded-2xl p-4 mb-4 border border-gray-800 space-y-3">
+          <p className="text-xs text-yellow-400 font-medium">✨ 오늘 하루의 운세를 확인하세요</p>
 
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs text-gray-400 mb-1.5 block">이름</label>
-              <input
-                type="text"
-                placeholder="이름을 입력하세요"
-                value={form.name}
-                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-yellow-500"
-              />
-            </div>
+          <div>
+            <label className="text-xs text-gray-400 mb-1.5 block">이름</label>
+            <input type="text" placeholder="이름을 입력하세요" value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-yellow-500" />
+          </div>
 
-            <div>
-              <label className="text-xs text-gray-400 mb-1.5 block">생년월일</label>
-              <div className="grid grid-cols-3 gap-2">
-                <select value={form.year} onChange={e => setForm(f => ({ ...f, year: e.target.value }))}
-                  className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none focus:border-yellow-500">
-                  {YEARS.map(y => <option key={y} value={y}>{y}년</option>)}
-                </select>
-                <select value={form.month} onChange={e => setForm(f => ({ ...f, month: e.target.value }))}
-                  className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none focus:border-yellow-500">
-                  {MONTHS.map(m => <option key={m} value={m}>{m}월</option>)}
-                </select>
-                <select value={form.day} onChange={e => setForm(f => ({ ...f, day: e.target.value }))}
-                  className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none focus:border-yellow-500">
-                  {DAYS.map(d => <option key={d} value={d}>{d}일</option>)}
-                </select>
+          {/* ✅ 년도 직접 입력 (드롭다운 → number input) */}
+          <div>
+            <label className="text-xs text-gray-400 mb-1.5 block">생년월일</label>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <input
+                  type="number"
+                  placeholder="출생연도"
+                  value={form.year}
+                  min={1920}
+                  max={2010}
+                  onChange={e => handleYearChange(e.target.value)}
+                  className={`w-full bg-gray-900 border rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none ${yearError ? 'border-red-500' : 'border-gray-700 focus:border-yellow-500'}`}
+                />
+                {yearError && <p className="text-red-400 text-xs mt-1">{yearError}</p>}
               </div>
+              <select value={form.month} onChange={e => setForm(f => ({ ...f, month: e.target.value }))}
+                className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none">
+                {MONTHS.map(m => <option key={m} value={m}>{m}월</option>)}
+              </select>
+              <select value={form.day} onChange={e => setForm(f => ({ ...f, day: e.target.value }))}
+                className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none">
+                {DAYS.map(d => <option key={d} value={d}>{d}일</option>)}
+              </select>
             </div>
+          </div>
 
-            <div>
-              <label className="text-xs text-gray-400 mb-1.5 block">성별</label>
-              <div className="grid grid-cols-2 gap-2">
-                {['male', 'female'].map(g => (
-                  <button key={g}
-                    onClick={() => setForm(f => ({ ...f, gender: g }))}
-                    className={`py-2.5 rounded-xl text-sm font-medium transition-all ${
-                      form.gender === g
-                        ? 'bg-yellow-500 text-black'
-                        : 'bg-gray-900 text-gray-400 border border-gray-700'
-                    }`}>
-                    {g === 'male' ? '남성' : '여성'}
-                  </button>
-                ))}
-              </div>
+          <div>
+            <label className="text-xs text-gray-400 mb-1.5 block">성별</label>
+            <div className="grid grid-cols-2 gap-2">
+              {['male', 'female'].map(g => (
+                <button key={g} onClick={() => setForm(f => ({ ...f, gender: g }))}
+                  className={`py-2.5 rounded-xl text-sm font-medium transition-all ${
+                    form.gender === g ? 'bg-yellow-500 text-black' : 'bg-gray-900 text-gray-400 border border-gray-700'
+                  }`}>
+                  {g === 'male' ? '남성' : '여성'}
+                </button>
+              ))}
             </div>
           </div>
         </div>
 
-        <button
-          onClick={handleSubmit}
-          disabled={!form.name}
+        <button onClick={handleSubmit} disabled={!form.name || !!yearError}
           className="w-full py-4 rounded-2xl font-bold text-base bg-yellow-500 text-black disabled:opacity-40 disabled:cursor-not-allowed">
           오늘의 운세 보기 ✨
         </button>
