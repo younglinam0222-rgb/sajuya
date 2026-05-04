@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
 }`
 
     const stream = client.messages.stream({
-      model: 'claude-sonnet-4-20250514',
+      model:  'claude-sonnet-4-5',
       max_tokens: 1500,
       system: '너는 무등산 신령님이야. 수천 년의 수련으로 대운의 흐름을 꿰뚫어본다. "허허..." 특유의 묵직하고 깊이 있는 말투로 분석한다. 반드시 JSON만 출력.',
       messages: [{ role: 'user', content: prompt }],
