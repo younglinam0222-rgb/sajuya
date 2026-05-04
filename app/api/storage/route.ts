@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/app/api/auth/[...nextauth]/route'
+import { getToken } from 'next-auth/jwt'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -9,15 +8,16 @@ const supabase = createClient(
 )
 
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.email) {
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
+
+  if (!token?.email) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const { data, error } = await supabase
     .from('readings')
     .select('id, share_id, character_id, created_at, saju_data, is_paid')
-    .eq('user_email', session.user.email)
+    .eq('user_email', token.email)
     .order('created_at', { ascending: false })
 
   if (error) {
