@@ -186,10 +186,16 @@ function TitleCard({ item, charColor, idx }: { item: SajuTitle; charColor: strin
       </button>
       {open && (
         <div className="px-4 pb-4 border-t border-gray-800">
-          <div className="mt-3 p-3 rounded-xl bg-gray-900 text-center">
-            <p className="text-sm text-gray-300 mb-3">이 판결문을 보려면 결제가 필요해요</p>
-            <button className="px-4 py-2 rounded-xl text-sm font-bold text-white" style={{ background: charColor }}>
-              990원으로 전체 보기 →
+          <div className="mt-3 p-3 rounded-xl bg-gray-900">
+            <p className="text-xs text-gray-400 mb-1 leading-relaxed">{item.teaser}</p>
+            <button className="w-full mt-2 py-2.5 rounded-xl text-sm font-black text-white"
+              style={{ background: `linear-gradient(135deg, ${charColor}, ${charColor}bb)` }}>
+              🔓 이 판결만 열기 · 990원
+            </button>
+            <p className="text-center text-xs text-gray-600 mt-2">또는</p>
+            <button className="w-full mt-1 py-2 rounded-xl text-xs font-bold text-white"
+              style={{ background: '#1a1025', border: `1px solid ${charColor}40`, color: charColor }}>
+              전체 9개 한번에 열기 · 990원
             </button>
           </div>
         </div>
@@ -331,14 +337,9 @@ export default function SajuPage() {
             </div>
           </div>
 
-          {paidTitles.length > 0 && (
+              {paidTitles.length > 0 && (
             <div className="mt-4">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs text-gray-500 font-medium">🔒 잠긴 판결 {paidTitles.length}개</p>
-                <button className="text-xs px-3 py-1.5 rounded-full font-bold text-white" style={{ background: selectedChar.color }}>
-                  990원으로 전체 열기
-                </button>
-              </div>
+              <p className="text-xs text-gray-500 font-medium mb-2">🔒 잠긴 판결 {paidTitles.length}개</p>
               <div className="space-y-2">
                 {paidTitles.map((t, i) => <TitleCard key={t.id} item={t} charColor={selectedChar.color} idx={i+3} />)}
               </div>
