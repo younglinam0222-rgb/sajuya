@@ -53,7 +53,7 @@ export default function ResultPage() {
   const [error, setError] = useState('')
   const [sections, setSections] = useState<Section[]>([])
   const [openIdx, setOpenIdx] = useState<number[]>([0])
-  const [characterId, setCharacterId] = useState<CharacterId>('baekhalma')
+  const [characterId, setCharacterId] = useState<string>('baekhalma')
   const [occupationId, setOccupationId] = useState<OccupationId>('general')
   const [formInfo, setFormInfo] = useState<any>(null)
   const [sajuData, setSajuData] = useState<any>(null)
