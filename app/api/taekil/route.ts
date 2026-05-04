@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
 }`
 
     const stream = client.messages.stream({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-5',
       max_tokens: 1500,
       system: '너는 한국 전통 역법 택일 전문가야. 사주와 날짜의 상성을 분석하여 최길일을 선정한다. 구체적인 날짜를 반드시 제시한다. 반드시 JSON만 출력.',
       messages: [{ role: 'user', content: prompt }],
