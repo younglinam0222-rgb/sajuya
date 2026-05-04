@@ -8,13 +8,15 @@ const supabaseAdmin = createClient(
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { shareId: string } }
+  { params }: { params: Promise<{ shareId: string }> }  // ← Promise 추가
 ) {
   try {
+    const { shareId } = await params  // ← await 추가
+
     const { data, error } = await supabaseAdmin
       .from('readings')
       .select('*')
-      .eq('share_id', params.shareId)
+      .eq('share_id', shareId)
       .single()
 
     if (error || !data) {
