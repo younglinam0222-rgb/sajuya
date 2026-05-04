@@ -1,10 +1,8 @@
-// app/api/auth/[...nextauth]/route.ts
 import NextAuth from 'next-auth'
 import KakaoProvider from 'next-auth/providers/kakao'
 import GoogleProvider from 'next-auth/providers/google'
 import { createClient } from '@supabase/supabase-js'
 
-// service role key 사용 (RLS 우회)
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -52,7 +50,7 @@ const handler = NextAuth({
           .single()
 
         if (!existing) {
-          const { error } = await supabaseAdmin.from('users').insert({
+          await supabaseAdmin.from('users').insert({
             id: user.id,
             name: user.name,
             email: user.email,
@@ -61,16 +59,12 @@ const handler = NextAuth({
             streak_days: 0,
             last_visit: null,
           })
-          if (error) {
-            console.error('signIn DB insert error:', error)
-            return false  // 저장 실패 시 로그인 차단
-          }
         }
-        return true
       } catch (e) {
-        console.error('signIn error:', e)
-        return false
+        console.error('signIn DB error (ignored):', e)
       }
+      // DB 실패해도 무조건 로그인 허용
+      return true
     },
     async session({ session, token }) {
       if (session.user) {
