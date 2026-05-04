@@ -8,7 +8,7 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-const handler = NextAuth({
+export const authOptions = {
   providers: [
     KakaoProvider({
       clientId: process.env.KAKAO_CLIENT_ID!,
@@ -41,7 +41,7 @@ const handler = NextAuth({
     },
   ],
   callbacks: {
-    async signIn({ user }) {
+    async signIn({ user }: { user: any }) {
       try {
         const { data: existing } = await supabaseAdmin
           .from('users')
@@ -50,6 +50,7 @@ const handler = NextAuth({
           .single()
 
         if (!existing) {
+          // 신규 가입 → 1냥 자동 지급
           await supabaseAdmin.from('users').insert({
             id: user.id,
             name: user.name,
@@ -63,16 +64,25 @@ const handler = NextAuth({
       } catch (e) {
         console.error('signIn DB error (ignored):', e)
       }
-      // DB 실패해도 무조건 로그인 허용
       return true
     },
-    async session({ session, token }) {
+    async session({ session, token }: { session: any; token: any }) {
       if (session.user) {
-        (session.user as any).id = token.sub as string
+        session.user.id = token.sub as string
+
+        // 세션에 잔액 포함
+        try {
+          const { data } = await supabaseAdmin
+            .from('users')
+            .select('yeobjeun_balance')
+            .eq('id', token.sub)
+            .single()
+          if (data) session.user.yeobjeun_balance = data.yeobjeun_balance
+        } catch {}
       }
       return session
     },
-    async jwt({ token }) {
+    async jwt({ token }: { token: any }) {
       return token
     },
   },
@@ -80,6 +90,7 @@ const handler = NextAuth({
     signIn: '/login',
   },
   secret: process.env.NEXTAUTH_SECRET,
-})
+}
 
+const handler = NextAuth(authOptions)
 export { handler as GET, handler as POST }
