@@ -8,35 +8,39 @@ function AnimatedCount({ target }: { target: number }) {
   const [count, setCount] = useState(Math.floor(target * 0.85))
   useEffect(() => {
     const timer = setInterval(() => {
-      setCount(c => {
-        if (c >= target) { clearInterval(timer); return target }
-        return c + Math.ceil((target - c) / 20)
-      })
+      setCount(c => { if (c >= target) { clearInterval(timer); return target } return c + Math.ceil((target - c) / 20) })
     }, 50)
     return () => clearInterval(timer)
   }, [])
   return <span>{count.toLocaleString()}</span>
 }
 
+const CHAR_IMG: Record<string, string> = {
+  baekhalma: '/characters/baekhalma.png',
+  doRyeong: '/characters/doryeong.png',
+  gumiho: '/characters/gumiho.png',
+  sinRyeong: '/characters/sinryeong.png',
+}
+
 const CHARACTERS = [
-  { id: 'baekhalma', name: '건물주 백할매', emoji: '👵', hook: '"너 올해 돈 못 모아.\n이유 내가 딱 말해준다."', tag: '재물·직업', color: '#8B5CF6', bg: 'linear-gradient(135deg, #1a1025, #2d1b69)' },
-  { id: 'doRyeong', name: '근본도령', emoji: '🧑', hook: '"지금 인생 방향 자체가\n틀렸을 수 있다."', tag: '종합 사주', color: '#3B82F6', bg: 'linear-gradient(135deg, #0f1525, #1e3a8a)' },
-  { id: 'gumiho', name: '구미호 선생', emoji: '🦊', hook: '"왜 연애가 안 되는지\n사주에 다 나와있다."', tag: '연애·궁합', color: '#EC4899', bg: 'linear-gradient(135deg, #1a0f18, #831843)' },
-  { id: 'sinRyeong', name: '무등산 신령님', emoji: '🧙', hook: '"허허... 이 사람\n전성기 아직 안 왔소."', tag: '대운·인생', color: '#10B981', bg: 'linear-gradient(135deg, #0a1a14, #065f46)' },
+  { id: 'baekhalma', name: '건물주 백할매', hook: '"너 올해 돈 못 모아.\n이유 내가 딱 말해준다."', tag: '재물·직업', color: '#8B5CF6', bg: 'linear-gradient(135deg, #1a1025, #2d1b69)' },
+  { id: 'doRyeong', name: '근본도령', hook: '"지금 인생 방향 자체가\n틀렸을 수 있다."', tag: '종합 사주', color: '#3B82F6', bg: 'linear-gradient(135deg, #0f1525, #1e3a8a)' },
+  { id: 'gumiho', name: '구미호 선생', hook: '"왜 연애가 안 되는지\n사주에 다 나와있다."', tag: '연애·궁합', color: '#EC4899', bg: 'linear-gradient(135deg, #1a0f18, #831843)' },
+  { id: 'sinRyeong', name: '무등산 신령님', hook: '"허허... 이 사람\n전성기 아직 안 왔소."', tag: '대운·인생', color: '#10B981', bg: 'linear-gradient(135deg, #0a1a14, #065f46)' },
 ]
 
 const MENUS = [
-  { href: '/saju', label: '사주 풀이', desc: '백할매 팩폭으로 알려줌', emoji: '🔮', badge: '590원', badgeColor: '#F59E0B', paid: true },
-  { href: '/gunghap', label: '궁합 해설', desc: '우리 사이 되는지 봐줌', emoji: '💕', badge: '590원', badgeColor: '#F59E0B', paid: true },
-  { href: '/daeun', label: '대운 해설', desc: '10년 주기 큰 흐름', emoji: '🌊', badge: '일부무료', badgeColor: '#10B981', paid: false },
-  { href: '/taekil', label: '택 · 일', desc: '좋은 날짜 골라줌', emoji: '📅', badge: '일부무료', badgeColor: '#10B981', paid: false },
-  { href: '/yearly', label: '연도별 운세', desc: '특정 연도 운세 분석', emoji: '📆', badge: '일부무료', badgeColor: '#10B981', paid: false },
-  { href: '/daily', label: '일일 운세', desc: '오늘 하루 기운', emoji: '⭐', badge: '무료', badgeColor: '#3B82F6', paid: false },
+  { href: '/saju', label: '사주 풀이', desc: '백할매 팩폭으로 알려줌', img: '/characters/baekhalma.png', badge: '590원', badgeColor: '#F59E0B', paid: true },
+  { href: '/gunghap', label: '궁합 해설', desc: '우리 사이 되는지 봐줌', img: '/characters/gumiho.png', badge: '590원', badgeColor: '#F59E0B', paid: true },
+  { href: '/daeun', label: '대운 해설', desc: '10년 주기 큰 흐름', img: '/characters/sinryeong.png', badge: '일부무료', badgeColor: '#10B981', paid: false },
+  { href: '/taekil', label: '택 · 일', desc: '좋은 날짜 골라줌', img: '/characters/baekhalma.png', badge: '일부무료', badgeColor: '#10B981', paid: false },
+  { href: '/yearly', label: '연도별 운세', desc: '특정 연도 운세 분석', img: '/characters/doryeong.png', badge: '일부무료', badgeColor: '#10B981', paid: false },
+  { href: '/daily', label: '일일 운세', desc: '오늘 하루 기운', img: '/characters/gumiho.png', badge: '무료', badgeColor: '#3B82F6', paid: false },
 ]
 
 const REVIEWS = [
-  { name: '김**', text: '진짜 내 상황이랑 딱 맞아서 소름돋음 ㄷㄷ', star: 5 },
-  { name: '이**', text: '백할매 팩폭 들을때 좀 심한가 싶었는데 다 맞음', star: 5 },
+  { name: '김**', text: '20만원 사주관 갔다가 여기 알게 됐는데 진짜 더 정확함', star: 5 },
+  { name: '이**', text: '백할매 팩폭 처음엔 당황했는데 다 맞아서 소름', star: 5 },
   { name: '박**', text: '이걸 왜 이제 알았지... 작년에 알았으면', star: 5 },
 ]
 
@@ -57,9 +61,9 @@ export default function HomePage() {
           <div className="flex items-center gap-2">
             <Link href="/daily" className="text-xs px-3 py-1.5 rounded-full bg-yellow-500/20 text-yellow-400 font-medium">⭐ 무료운세</Link>
             {session ? (
-              <div className="text-xs px-3 py-1.5 rounded-full bg-gray-800 text-gray-300">
+              <Link href="/storage" className="text-xs px-3 py-1.5 rounded-full bg-gray-800 text-gray-300">
                 🪙 {(session.user as { yeobjeun_balance?: number })?.yeobjeun_balance ?? 0}냥
-              </div>
+              </Link>
             ) : (
               <button onClick={() => setShowLoginModal(true)}
                 className="text-xs px-3 py-1.5 rounded-full bg-purple-600 text-white font-medium">
@@ -73,22 +77,28 @@ export default function HomePage() {
         <div className="px-4 pt-4 pb-4">
           <div className="rounded-3xl overflow-hidden relative p-6"
             style={{ background: 'linear-gradient(135deg, #1a0a2e 0%, #0f0a1a 50%, #0a1a0f 100%)', border: '1px solid #ffffff10' }}>
+            {/* 소셜 증거 */}
             <div className="flex items-center gap-2 mb-4">
               <div className="flex -space-x-1">
-                {['baekhalma','doryeong','gumiho','sinryeong'].map((id, i) => (
-                  <img key={i} src={`/characters/${id}.png`} alt="" className="w-6 h-6 rounded-full object-cover border border-gray-700" />
+                {Object.values(CHAR_IMG).map((src, i) => (
+                  <img key={i} src={src} alt="" className="w-6 h-6 rounded-full object-cover border border-gray-700"
+                    onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
                 ))}
               </div>
               <span className="text-xs text-gray-400"><AnimatedCount target={32184} />명 분석 완료</span>
               <span className="text-xs text-yellow-400">⭐ 4.8</span>
             </div>
+
             <h1 className="text-2xl font-black leading-tight mb-2">
               당신 올해 운명,<br />
               <span className="text-transparent bg-clip-text" style={{ backgroundImage: 'linear-gradient(90deg, #A78BFA, #EC4899)' }}>
                 이미 틀어졌습니다
               </span>
             </h1>
-            <p className="text-gray-400 text-sm mb-5">지금 확인 안 하면, 왜 꼬이는지도 모른다</p>
+            {/* ✅ 핵심 카피 교체 — 20만원 앵커 */}
+            <p className="text-gray-400 text-sm mb-5">
+              20만원짜리 사주관보다 더 정확하다고 소문났어요
+            </p>
             <Link href="/saju"
               className="block w-full py-4 rounded-2xl text-center font-black text-base text-white mb-3"
               style={{ background: 'linear-gradient(135deg, #8B5CF6, #EC4899)' }}>
@@ -103,7 +113,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* 감정 트리거 배너 */}
+        {/* 감정 트리거 */}
         <div className="px-4 mb-4">
           <div className="rounded-2xl p-4 border border-yellow-900/40" style={{ background: 'linear-gradient(135deg, #1a1200, #0f0a00)' }}>
             <div className="flex items-start gap-3">
@@ -121,7 +131,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* 캐릭터 */}
+        {/* 캐릭터 — 실제 이미지 */}
         <div className="px-4 mb-6">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-base font-bold">👁 운명을 보는 자들</h2>
@@ -130,37 +140,45 @@ export default function HomePage() {
           <div className="grid grid-cols-2 gap-2">
             {CHARACTERS.map(c => (
               <Link key={c.id} href={`/characters/${c.id}`}>
-                <div className="rounded-2xl p-3 cursor-pointer transition-transform hover:scale-[1.02]"
+                <div className="rounded-2xl overflow-hidden cursor-pointer transition-transform hover:scale-[1.02]"
                   style={{ background: c.bg, border: `1px solid ${c.color}30` }}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <img src={`/characters/${c.id === "doRyeong" ? "doryeong" : c.id === "sinRyeong" ? "sinryeong" : c.id}.png`} alt={c.name} className="w-10 h-10 rounded-xl object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display="none" }} />
-                    <div>
-                      <p className="text-xs font-bold">{c.name}</p>
-                      <p className="text-xs" style={{ color: c.color }}>{c.tag}</p>
-                    </div>
+                  {/* 실제 캐릭터 이미지 */}
+                  <div className="h-28 overflow-hidden relative">
+                    <img src={CHAR_IMG[c.id]} alt={c.name}
+                      className="w-full h-full object-cover object-top"
+                      onError={e => { (e.target as HTMLImageElement).style.opacity = '0' }} />
+                    <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, transparent 40%, ${c.bg.split(',')[0].replace('linear-gradient(135deg, ', '')})` }} />
                   </div>
-                  <p className="text-xs text-gray-300 leading-relaxed whitespace-pre-line italic">{c.hook}</p>
+                  <div className="p-3 -mt-4 relative">
+                    <p className="text-xs font-bold mb-0.5">{c.name}</p>
+                    <p className="text-xs mb-1.5" style={{ color: c.color }}>{c.tag}</p>
+                    <p className="text-xs text-gray-300 leading-relaxed whitespace-pre-line italic">{c.hook}</p>
+                  </div>
                 </div>
               </Link>
             ))}
           </div>
         </div>
 
-        {/* 메뉴 그리드 */}
+        {/* 메뉴 그리드 — 캐릭터 이미지 배경 */}
         <div className="px-4 mb-6">
           <h2 className="text-base font-bold mb-3">🧿 신탁 메뉴</h2>
           <p className="text-xs text-gray-600 mb-2 font-medium">⭐ 프리미엄</p>
           <div className="grid grid-cols-2 gap-2 mb-4">
             {MENUS.filter(m => m.paid).map(m => (
               <Link key={m.href} href={m.href}>
-                <div className="rounded-2xl p-4 bg-[#111118] border border-yellow-900/30 hover:border-yellow-600/50 transition-all cursor-pointer">
-                  <div className="flex items-start justify-between mb-2">
-                    <span className="text-2xl">{m.emoji}</span>
-                    <span className="text-xs px-2 py-0.5 rounded-full font-bold text-black" style={{ background: m.badgeColor }}>{m.badge}</span>
+                <div className="rounded-2xl overflow-hidden bg-[#111118] border border-yellow-900/30 hover:border-yellow-600/50 transition-all cursor-pointer">
+                  <div className="h-20 overflow-hidden relative">
+                    <img src={m.img} alt={m.label} className="w-full h-full object-cover object-top opacity-60" />
+                    <div className="absolute top-2 right-2">
+                      <span className="text-xs px-2 py-0.5 rounded-full font-bold text-black" style={{ background: m.badgeColor }}>{m.badge}</span>
+                    </div>
                   </div>
-                  <p className="font-bold text-sm mb-0.5">{m.label}</p>
-                  <p className="text-gray-500 text-xs">{m.desc}</p>
-                  <p className="text-xs text-yellow-400 mt-2 font-medium">보러가기 →</p>
+                  <div className="p-3">
+                    <p className="font-bold text-sm mb-0.5">{m.label}</p>
+                    <p className="text-gray-500 text-xs">{m.desc}</p>
+                    <p className="text-xs text-yellow-400 mt-1.5 font-medium">보러가기 →</p>
+                  </div>
                 </div>
               </Link>
             ))}
@@ -169,14 +187,18 @@ export default function HomePage() {
           <div className="grid grid-cols-2 gap-2">
             {MENUS.filter(m => !m.paid).map(m => (
               <Link key={m.href} href={m.href}>
-                <div className="rounded-2xl p-4 bg-[#111118] border border-gray-800 hover:border-gray-600 transition-all cursor-pointer">
-                  <div className="flex items-start justify-between mb-2">
-                    <span className="text-2xl">{m.emoji}</span>
-                    <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: m.badgeColor + '30', color: m.badgeColor }}>{m.badge}</span>
+                <div className="rounded-2xl overflow-hidden bg-[#111118] border border-gray-800 hover:border-gray-600 transition-all cursor-pointer">
+                  <div className="h-20 overflow-hidden relative">
+                    <img src={m.img} alt={m.label} className="w-full h-full object-cover object-top opacity-40" />
+                    <div className="absolute top-2 right-2">
+                      <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: m.badgeColor + '30', color: m.badgeColor }}>{m.badge}</span>
+                    </div>
                   </div>
-                  <p className="font-bold text-sm mb-0.5">{m.label}</p>
-                  <p className="text-gray-500 text-xs">{m.desc}</p>
-                  <p className="text-xs text-gray-400 mt-2">보러가기 →</p>
+                  <div className="p-3">
+                    <p className="font-bold text-sm mb-0.5">{m.label}</p>
+                    <p className="text-gray-500 text-xs">{m.desc}</p>
+                    <p className="text-xs text-gray-400 mt-1.5">보러가기 →</p>
+                  </div>
                 </div>
               </Link>
             ))}
@@ -219,7 +241,7 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* 엽전 가격 안내 */}
+        {/* 엽전 안내 */}
         <div className="px-4 mb-6">
           <div className="rounded-2xl p-4 bg-[#111118] border border-gray-800 flex items-center justify-between">
             <div className="text-center">
@@ -239,21 +261,33 @@ export default function HomePage() {
 
       </div>
 
-      {/* 하단 네비게이션 */}
+      {/* ✅ 하단 네비 — 무료운세 중앙 메인 버튼 */}
       <nav className="fixed bottom-0 left-0 right-0 bg-[#0a0a0f] border-t border-gray-800 z-50">
-        <div className="max-w-md mx-auto flex items-center justify-around py-2 px-4">
-          {[
-            { href: '/', icon: '🏠', label: '홈' },
-            { href: '/saju', icon: '🔮', label: '사주풀기' },
-            { href: '/daily', icon: '⭐', label: '오늘운세' },
-            { href: '/daeun', icon: '🌊', label: '대운' },
-            { href: '/characters', icon: '👁', label: '신령' },
-          ].map(item => (
-            <Link key={item.href} href={item.href} className="flex flex-col items-center gap-0.5 py-1 px-2">
-              <span className="text-xl">{item.icon}</span>
-              <span className="text-xs text-gray-500">{item.label}</span>
-            </Link>
-          ))}
+        <div className="max-w-md mx-auto flex items-center justify-around py-1 px-2">
+          <Link href="/" className="flex flex-col items-center gap-0.5 py-2 px-3">
+            <span className="text-xl">🏠</span>
+            <span className="text-xs text-gray-500">홈</span>
+          </Link>
+          <Link href="/saju" className="flex flex-col items-center gap-0.5 py-2 px-3">
+            <span className="text-xl">🔮</span>
+            <span className="text-xs text-gray-500">사주</span>
+          </Link>
+          {/* ✅ 무료운세 중앙 강조 버튼 */}
+          <Link href="/daily" className="flex flex-col items-center -mt-4">
+            <div className="w-14 h-14 rounded-full flex items-center justify-center shadow-lg border-4 border-[#0a0a0f]"
+              style={{ background: 'linear-gradient(135deg, #8B5CF6, #EC4899)' }}>
+              <span className="text-2xl">⭐</span>
+            </div>
+            <span className="text-xs text-purple-400 mt-0.5 font-medium">무료운세</span>
+          </Link>
+          <Link href="/storage" className="flex flex-col items-center gap-0.5 py-2 px-3">
+            <span className="text-xl">📦</span>
+            <span className="text-xs text-gray-500">보관함</span>
+          </Link>
+          <Link href="/characters" className="flex flex-col items-center gap-0.5 py-2 px-3">
+            <span className="text-xl">👁</span>
+            <span className="text-xs text-gray-500">신령</span>
+          </Link>
         </div>
       </nav>
 
