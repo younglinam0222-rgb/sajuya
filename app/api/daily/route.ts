@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
 }`
 
     const stream = client.messages.stream({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-5',
       max_tokens: 1000,
       system: '너는 직설적인 운세 판결자야. 일일운세를 구체적이고 임팩트 있게 분석한다. 반드시 JSON만 출력.',
       messages: [{ role: 'user', content: prompt }],
