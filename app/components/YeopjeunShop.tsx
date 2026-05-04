@@ -150,13 +150,7 @@ export default function YeopjeunShop({ onClose, currentBalance = 0 }: YeopjeunSh
                     : '2px solid #1f1f2e',
                 }}>
 
-                {/* BEST 태그 */}
-                {pkg.tag && (
-                  <span className="absolute top-3 right-3 text-xs px-2 py-0.5 rounded-full font-black text-black"
-                    style={{ background: 'linear-gradient(135deg, #F59E0B, #EC4899)' }}>
-                    {pkg.tag}
-                  </span>
-                )}
+                {/* (BEST 태그는 이름 옆으로 이동) */}
 
                 <div className="flex items-center gap-3">
                   {/* 선택 라디오 */}
@@ -179,6 +173,12 @@ export default function YeopjeunShop({ onClose, currentBalance = 0 }: YeopjeunSh
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-sm text-white">{pkg.name}</span>
+                      {pkg.tag && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-black text-black flex-shrink-0"
+                          style={{ background: 'linear-gradient(135deg, #F59E0B, #EC4899)' }}>
+                          {pkg.tag}
+                        </span>
+                      )}
                       {pkg.bonus > 0 && (
                         <span className="text-xs px-1.5 py-0.5 rounded-full text-green-400 font-medium"
                           style={{ background: '#10B98120' }}>
@@ -190,7 +190,7 @@ export default function YeopjeunShop({ onClose, currentBalance = 0 }: YeopjeunSh
                   </div>
 
                   {/* 가격 */}
-                  <div className="text-right flex-shrink-0">
+                  <div className="text-right flex-shrink-0 flex flex-col items-end gap-0.5">
                     <p className="font-black text-white text-sm">{pkg.price.toLocaleString()}원</p>
                     {pkg.bonus > 0 && (
                       <p className="text-xs text-gray-600 line-through">
