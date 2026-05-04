@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { CHARACTERS, CharacterId } from '@/lib/characters'
+import { CHARACTERS } from '@/lib/characters'
 import { OCCUPATIONS, OccupationId } from '@/lib/occupations'
 
 interface Section { id: string; emoji: string; title: string; body: string }
