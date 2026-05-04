@@ -7,12 +7,18 @@ import { OCCUPATIONS } from '@/lib/occupations'
 
 interface Section { id: string; emoji: string; title: string; body: string }
 
-// ✅ character emoji 별도 정의 (characters.ts에 emoji 없으므로)
-const CHARACTER_EMOJI: Record<string, string> = {
-  baekhalma: '👵',
-  doRyeong: '🧑',
-  gumiho: '🦊',
-  sinRyeong: '🧙',
+const CHARACTER_IMG: Record<string, string> = {
+  baekhalma: '/characters/baekhalma.png',
+  doRyeong: '/characters/doryeong.png',
+  gumiho: '/characters/gumiho.png',
+  sinRyeong: '/characters/sinryeong.png',
+}
+
+const CHARACTER_COLOR: Record<string, string> = {
+  baekhalma: '#8B5CF6',
+  doRyeong: '#3B82F6',
+  gumiho: '#EC4899',
+  sinRyeong: '#10B981',
 }
 
 const SECTION_ICONS: Record<string, { svg: string; color: string; bg: string }> = {
@@ -25,16 +31,10 @@ const SECTION_ICONS: Record<string, { svg: string; color: string; bg: string }> 
   warning:       { svg:'M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z', color:'#f87171', bg:'rgba(248,113,113,.15)' },
   lucky:         { svg:'M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z', color:'#fbbf24', bg:'rgba(251,191,36,.15)' },
   relation:      { svg:'M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z', color:'#60a5fa', bg:'rgba(96,165,250,.15)' },
-  money2:        { svg:'M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9', color:'#34d399', bg:'rgba(52,211,153,.15)' },
   thisyear:      { svg:'M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z', color:'#fbbf24', bg:'rgba(251,191,36,.15)' },
   nextyear:      { svg:'M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-3.758-3.848 5.25 5.25 0 00-10.233 2.33A4.502 4.502 0 002.25 15z', color:'#818cf8', bg:'rgba(129,140,248,.15)' },
   daymaster:     { svg:'M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3', color:'#a78bfa', bg:'rgba(167,139,250,.15)' },
   personality:   { svg:'M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z', color:'#c084fc', bg:'rgba(192,132,252,.15)' },
-  fortune:       { svg:'M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625z', color:'#60a5fa', bg:'rgba(96,165,250,.15)' },
-  loveStyle:     { svg:'M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z', color:'#f472b6', bg:'rgba(244,114,182,.15)' },
-  idealType:     { svg:'M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z', color:'#fb923c', bg:'rgba(251,146,60,.15)' },
-  compatibility: { svg:'M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244', color:'#f472b6', bg:'rgba(244,114,182,.15)' },
-  exlove:        { svg:'M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z', color:'#9ca3af', bg:'rgba(156,163,175,.12)' },
   bigPicture:    { svg:'M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z', color:'#4ade80', bg:'rgba(74,222,128,.15)' },
   daeun:         { svg:'M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5', color:'#60a5fa', bg:'rgba(96,165,250,.15)' },
   spiritual:     { svg:'M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z', color:'#4ade80', bg:'rgba(74,222,128,.15)' },
@@ -66,9 +66,7 @@ export default function ResultPage() {
   const [formInfo, setFormInfo] = useState<any>(null)
   const [sajuData, setSajuData] = useState<any>(null)
 
-  useEffect(() => {
-    fetchReading()
-  }, [shareId])
+  useEffect(() => { fetchReading() }, [shareId])
 
   const fetchReading = async () => {
     try {
@@ -111,10 +109,9 @@ export default function ResultPage() {
     setOpenIdx(prev => prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx])
   }
 
-  // ✅ character.name만 사용 (emoji는 별도 맵에서)
   const character = CHARACTERS[characterId]
-  const characterEmoji = CHARACTER_EMOJI[characterId] ?? '🔮'
-  // ✅ OccupationId 타입 제거, any로 접근
+  const charImg = CHARACTER_IMG[characterId] ?? '/characters/baekhalma.png'
+  const charColor = CHARACTER_COLOR[characterId] ?? '#8B5CF6'
   const occupation = (OCCUPATIONS as Record<string, any>)[occupationId]
 
   const elementColor = (el: string) => {
@@ -142,7 +139,7 @@ export default function ResultPage() {
         <div className="text-lg font-black mb-2">풀이를 찾을 수 없어요</div>
         <div className="text-sm text-[#666] mb-6">{error}</div>
         <Link href="/saju" className="px-6 py-3 rounded-2xl font-bold text-sm"
-          style={{background:'#7c3aed',color:'#fff'}}>
+          style={{ background: '#7c3aed', color: '#fff' }}>
           새로 풀이받기
         </Link>
       </div>
@@ -158,20 +155,30 @@ export default function ResultPage() {
 
   return (
     <div className="bg-[#0a0a0a] min-h-screen text-white max-w-[430px] mx-auto pb-8">
-      {/* 헤더 */}
+
+      {/* 헤더 — 실제 캐릭터 이미지 */}
       <div className="relative overflow-hidden px-6 py-8 text-center"
-        style={{background:'linear-gradient(160deg,#050010,#0f0030,#050010)'}}>
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold mb-4"
-          style={{background:'rgba(167,139,250,.1)',border:'1px solid rgba(167,139,250,.3)',color:'#c4b5fd'}}>
-          {/* ✅ emoji를 별도 맵에서 가져옴 */}
-          {characterEmoji} {character?.name ?? characterId} 신탁
+        style={{ background: 'linear-gradient(160deg,#050010,#0f0030,#050010)' }}>
+
+        {/* 캐릭터 이미지 */}
+        <div className="w-20 h-20 rounded-full overflow-hidden mx-auto mb-3 border-2"
+          style={{ borderColor: charColor }}>
+          <img src={charImg} alt={character?.name ?? characterId}
+            className="w-full h-full object-cover object-top"
+            onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+        </div>
+
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold mb-3"
+          style={{ background: 'rgba(167,139,250,.1)', border: '1px solid rgba(167,139,250,.3)', color: '#c4b5fd' }}>
+          {character?.name ?? characterId} 신탁
           {occupation && (
             <span className="px-2 py-0.5 rounded text-[9px] font-bold"
-              style={{background:'rgba(139,92,246,.15)',color:'#a78bfa'}}>
+              style={{ background: 'rgba(139,92,246,.15)', color: '#a78bfa' }}>
               {occupation.emoji} {occupation.label}
             </span>
           )}
         </div>
+
         {formInfo && (
           <>
             <div className="text-2xl font-black text-white mb-1">{formInfo.name} 님의 사주팔자</div>
@@ -184,49 +191,49 @@ export default function ResultPage() {
 
       {/* 만세력 */}
       {sajuData && manjuPillars.length > 0 && (
-        <div className="mx-4 mt-4 rounded-2xl overflow-hidden" style={{border:'1px solid #222'}}>
+        <div className="mx-4 mt-4 rounded-2xl overflow-hidden" style={{ border: '1px solid #222' }}>
           <div className="py-2.5 text-center text-xs font-black text-yellow-400 tracking-widest"
-            style={{background:'#111',borderBottom:'1px solid #222'}}>
+            style={{ background: '#111', borderBottom: '1px solid #222' }}>
             만세력 (四柱八字)
           </div>
-          <div className="grid grid-cols-4 text-center" style={{borderBottom:'1px solid #222'}}>
-            {manjuPillars.map(({label}) => (
+          <div className="grid grid-cols-4 text-center" style={{ borderBottom: '1px solid #222' }}>
+            {manjuPillars.map(({ label }) => (
               <div key={label} className="py-1.5 text-[10px] font-bold"
-                style={{background:'#0d0d0d',borderRight:'1px solid #222',color:'#666'}}>
+                style={{ background: '#0d0d0d', borderRight: '1px solid #222', color: '#666' }}>
                 {label}
               </div>
             ))}
           </div>
-          <div className="grid grid-cols-4 text-center" style={{borderBottom:'1px solid #222'}}>
-            {manjuPillars.map(({label, pillar}) => (
-              <div key={label} className="py-2.5" style={{background:elementBg(pillar?.stemElement),borderRight:'1px solid #222'}}>
-                <div className="text-3xl font-black" style={{color:elementColor(pillar?.stemElement)}}>{pillar?.stem}</div>
-                <div className="text-[9px] mt-0.5" style={{color:'rgba(255,255,255,.4)'}}>{pillar?.stemElement}</div>
-                <div className="text-[9px] font-bold" style={{color:'rgba(255,255,255,.5)'}}>{pillar?.sipsinStem}</div>
+          <div className="grid grid-cols-4 text-center" style={{ borderBottom: '1px solid #222' }}>
+            {manjuPillars.map(({ label, pillar }) => (
+              <div key={label} className="py-2.5" style={{ background: elementBg(pillar?.stemElement), borderRight: '1px solid #222' }}>
+                <div className="text-3xl font-black" style={{ color: elementColor(pillar?.stemElement) }}>{pillar?.stem}</div>
+                <div className="text-[9px] mt-0.5" style={{ color: 'rgba(255,255,255,.4)' }}>{pillar?.stemElement}</div>
+                <div className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,.5)' }}>{pillar?.sipsinStem}</div>
               </div>
             ))}
           </div>
-          <div className="grid grid-cols-4 text-center" style={{borderBottom:'1px solid #222'}}>
-            {manjuPillars.map(({label, pillar}) => (
-              <div key={label} className="py-2.5" style={{background:elementBg(pillar?.branchElement),borderRight:'1px solid #222'}}>
-                <div className="text-3xl font-black" style={{color:elementColor(pillar?.branchElement)}}>{pillar?.branch}</div>
-                <div className="text-[9px] mt-0.5" style={{color:'rgba(255,255,255,.4)'}}>{pillar?.branchElement}</div>
-                <div className="text-[9px] font-bold" style={{color:'rgba(255,255,255,.5)'}}>{pillar?.sipsinBranch}</div>
+          <div className="grid grid-cols-4 text-center" style={{ borderBottom: '1px solid #222' }}>
+            {manjuPillars.map(({ label, pillar }) => (
+              <div key={label} className="py-2.5" style={{ background: elementBg(pillar?.branchElement), borderRight: '1px solid #222' }}>
+                <div className="text-3xl font-black" style={{ color: elementColor(pillar?.branchElement) }}>{pillar?.branch}</div>
+                <div className="text-[9px] mt-0.5" style={{ color: 'rgba(255,255,255,.4)' }}>{pillar?.branchElement}</div>
+                <div className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,.5)' }}>{pillar?.sipsinBranch}</div>
               </div>
             ))}
           </div>
           {sajuData.elementCount && (
-            <div className="grid grid-cols-5 text-center" style={{background:'#0d0d0d'}}>
-              {(['木','火','土','金','水'] as const).map(el => (
-                <div key={el} className="py-2" style={{borderRight:'1px solid #222'}}>
-                  <div className="text-xs font-black" style={{color:elementColor(el)}}>{el}</div>
+            <div className="grid grid-cols-5 text-center" style={{ background: '#0d0d0d' }}>
+              {(['木', '火', '土', '金', '水'] as const).map(el => (
+                <div key={el} className="py-2" style={{ borderRight: '1px solid #222' }}>
+                  <div className="text-xs font-black" style={{ color: elementColor(el) }}>{el}</div>
                   <div className="text-[10px] text-[#555] mt-0.5">{sajuData.elementCount[el] ?? 0}개</div>
                 </div>
               ))}
             </div>
           )}
           {(sajuData.animal || sajuData.currentDaeun) && (
-            <div className="flex items-center gap-3 px-4 py-2.5 flex-wrap" style={{background:'#111'}}>
+            <div className="flex items-center gap-3 px-4 py-2.5 flex-wrap" style={{ background: '#111' }}>
               {sajuData.animal && <span className="text-xs font-bold text-yellow-400">{sajuData.animal}띠</span>}
               {sajuData.currentDaeun && (
                 <span className="text-[10px] text-[#555]">
@@ -259,14 +266,14 @@ export default function ResultPage() {
                 </span>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                   stroke="#555" strokeWidth="2" strokeLinecap="round"
-                  style={{transform: isOpen ? 'rotate(180deg)' : '', transition:'transform .2s', flexShrink: 0}}>
-                  <path d="M19 9l-7 7-7-7"/>
+                  style={{ transform: isOpen ? 'rotate(180deg)' : '', transition: 'transform .2s', flexShrink: 0 }}>
+                  <path d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
               {isOpen && (
-                <div className="px-4 pb-5 border-t" style={{borderColor: isWarning ? 'rgba(239,68,68,.12)' : '#1e1e1e'}}>
+                <div className="px-4 pb-5 border-t" style={{ borderColor: isWarning ? 'rgba(239,68,68,.12)' : '#1e1e1e' }}>
                   <p className="text-sm leading-[1.95] pt-4 whitespace-pre-line"
-                    style={{color: isWarning ? '#fca5a5' : '#bbb'}}>{sec.body}</p>
+                    style={{ color: isWarning ? '#fca5a5' : '#bbb' }}>{sec.body}</p>
                 </div>
               )}
             </div>
@@ -277,7 +284,7 @@ export default function ResultPage() {
       {/* 버튼 */}
       <div className="px-4 mt-4 space-y-3">
         <button className="w-full py-4 rounded-2xl font-black text-base"
-          style={{background:'#fee500', color:'#3c1e1e'}}
+          style={{ background: '#fee500', color: '#3c1e1e' }}
           onClick={() => {
             if (navigator.share) {
               navigator.share({ title: '내 사주팔자 풀이', url: window.location.href })
@@ -290,14 +297,14 @@ export default function ResultPage() {
         </button>
         <Link href="/saju"
           className="block w-full py-3 rounded-2xl font-bold text-sm text-center"
-          style={{background:'#111', border:'1px solid #222', color:'#666'}}>
+          style={{ background: '#111', border: '1px solid #222', color: '#666' }}>
           ↺ 새로 풀이받기
         </Link>
       </div>
 
-      <div className="mx-4 mt-6 px-3 py-3 rounded-xl" style={{background:'#0a0a0a', border:'0.5px solid #111'}}>
-        <p className="text-[9px] leading-relaxed" style={{color:'#3a3a3a'}}>
-          본 서비스는 사주명리학 이론을 AI가 분석한 참고용 엔터테인먼트 콘텐츠입니다. 실제 투자·재무·의료·법률 등 중요한 의사결정의 근거로 사용하지 마십시오. © 사주야
+      <div className="mx-4 mt-6 px-3 py-3 rounded-xl" style={{ background: '#0a0a0a', border: '0.5px solid #111' }}>
+        <p className="text-[9px] leading-relaxed" style={{ color: '#3a3a3a' }}>
+          본 서비스는 사주명리학 이론을 기반으로 분석한 참고용 엔터테인먼트 콘텐츠입니다. 실제 투자·재무·의료·법률 등 중요한 의사결정의 근거로 사용하지 마십시오. © 사주야
         </p>
       </div>
     </div>
