@@ -403,7 +403,7 @@ function SajuPageContent() {
               <div key={label} className="py-2" style={{borderRight:'1px solid #222'}}>
                 <div className="text-[9px] text-[#555] mb-1">지장간</div>
                 <div className="flex flex-col gap-0.5 items-center">
-                  {(pillar?.jijanggan || []).map((s,i)=>(
+                  {(pillar?.jijanggan || []).map((s:string,i:number)=>(
                     <span key={i} className="text-[9px] font-bold"
                       style={{color: elementColor(pillar?.stemElement)}}>
                       {s}
