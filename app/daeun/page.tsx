@@ -34,7 +34,6 @@ const HOURS = [
   { value: '21', label: '해시(21~23)' },
 ]
 
-const FREE_SECTIONS = ['current', 'next10', 'career']
 const SECTIONS = [
   { key: 'current', icon: '🌊', title: '현재 대운 분석', color: '#10B981' },
   { key: 'next10', icon: '🔭', title: '향후 10년 흐름', color: '#3B82F6' },
@@ -48,6 +47,7 @@ const SECTIONS = [
 export default function DaeunPage() {
   const [stage, setStage] = useState<Stage>('input')
   const [result, setResult] = useState<Partial<DaeunResult>>({})
+  const [calType, setCalType] = useState<'solar' | 'lunar'>('solar')
   const [form, setForm] = useState({ name: '', year: '1990', month: '1', day: '1', hour: '', gender: 'female' })
 
   const handleSubmit = async () => {
@@ -59,7 +59,7 @@ export default function DaeunPage() {
       const res = await fetch('/api/daeun', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, calType }),
       })
       if (!res.body) return
 
@@ -100,7 +100,9 @@ export default function DaeunPage() {
   if (stage === 'loading') {
     return (
       <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center text-white px-4">
-        <div className="text-5xl mb-4">🧙</div>
+        <div className="w-20 h-20 rounded-full overflow-hidden mb-4 border-2 border-green-500">
+          <img src="/characters/sinryeong.png" alt="무등산 신령님" className="w-full h-full object-cover object-top" />
+        </div>
         <p className="text-lg font-bold mb-2">{form.name}님의 대운 분석 중...</p>
         <p className="text-gray-400 text-sm mb-8">무등산 신령님이 대운의 흐름을 살펴보고 있어요</p>
         <div className="w-64 h-1.5 bg-gray-800 rounded-full overflow-hidden">
@@ -118,10 +120,9 @@ export default function DaeunPage() {
             <button onClick={() => setStage('input')} className="text-gray-400 text-xl">←</button>
             <div>
               <h1 className="text-lg font-bold">{form.name}님의 대운 해설</h1>
-              <p className="text-gray-500 text-xs">무등산 신령님의 분석</p>
+              <p className="text-gray-500 text-xs">무등산 신령님의 분석 · {calType === 'solar' ? '양력' : '음력'}</p>
             </div>
           </div>
-
           <div className="space-y-3">
             {SECTIONS.map(s => {
               const content = result[s.key as keyof DaeunResult]
@@ -138,7 +139,6 @@ export default function DaeunPage() {
               )
             })}
           </div>
-
           <button onClick={() => setStage('input')}
             className="w-full mt-6 py-3 rounded-2xl text-sm text-gray-400 border border-gray-800">
             다시 보기
@@ -169,8 +169,21 @@ export default function DaeunPage() {
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                 className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-green-500" />
             </div>
+
             <div>
               <label className="text-xs text-gray-400 mb-1.5 block">생년월일</label>
+              {/* 양력/음력 토글 */}
+              <div className="flex gap-2 mb-2">
+                {(['solar', 'lunar'] as const).map(t => (
+                  <button key={t} onClick={() => setCalType(t)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                    style={calType === t
+                      ? { background: '#10B981', color: 'white' }
+                      : { background: '#1F2937', color: '#9CA3AF', border: '1px solid #374151' }}>
+                    {t === 'solar' ? '양력' : '음력'}
+                  </button>
+                ))}
+              </div>
               <div className="grid grid-cols-3 gap-2">
                 <select value={form.year} onChange={e => setForm(f => ({ ...f, year: e.target.value }))}
                   className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none">
@@ -186,6 +199,7 @@ export default function DaeunPage() {
                 </select>
               </div>
             </div>
+
             <div>
               <label className="text-xs text-gray-400 mb-1.5 block">태어난 시간 <span className="text-gray-600">(선택)</span></label>
               <select value={form.hour} onChange={e => setForm(f => ({ ...f, hour: e.target.value }))}
@@ -193,14 +207,16 @@ export default function DaeunPage() {
                 {HOURS.map(h => <option key={h.value} value={h.value}>{h.label}</option>)}
               </select>
             </div>
+
             <div>
               <label className="text-xs text-gray-400 mb-1.5 block">성별</label>
               <div className="grid grid-cols-2 gap-2">
                 {['male', 'female'].map(g => (
                   <button key={g} onClick={() => setForm(f => ({ ...f, gender: g }))}
-                    className={`py-2.5 rounded-xl text-sm font-medium transition-all ${
-                      form.gender === g ? 'bg-green-500 text-white' : 'bg-gray-900 text-gray-400 border border-gray-700'
-                    }`}>
+                    className="py-2.5 rounded-xl text-sm font-medium transition-all"
+                    style={form.gender === g
+                      ? { background: '#10B981', color: 'white' }
+                      : { background: '#111827', color: '#9CA3AF', border: '1px solid #374151' }}>
                     {g === 'male' ? '남성' : '여성'}
                   </button>
                 ))}
@@ -212,7 +228,7 @@ export default function DaeunPage() {
         <button onClick={handleSubmit} disabled={!form.name}
           className="w-full py-4 rounded-2xl font-bold text-base text-white disabled:opacity-40 disabled:cursor-not-allowed"
           style={{ background: 'linear-gradient(135deg, #10B981, #3B82F6)' }}>
-          대운 분석하기 🧙
+          대운 분석하기 →
         </button>
       </div>
     </div>
