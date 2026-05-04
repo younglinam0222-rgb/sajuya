@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
 }`
 
     const stream = client.messages.stream({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-5',
       max_tokens: 1500,
       system: '너는 구미호 선생이야. 천 년의 연애 경험으로 궁합을 꿰뚫어본다. 요염하면서도 날카롭게, 현실적으로 분석한다. 반드시 JSON만 출력.',
       messages: [{ role: 'user', content: prompt }],
