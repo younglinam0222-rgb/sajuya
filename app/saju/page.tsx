@@ -89,6 +89,8 @@ function SajuPageContent() {
               setShareId(data.shareId)
               if (data.sajuData) setSajuData(data.sajuData)
               parseResult(streamRef.current)
+               // URL을 result 페이지로 변경 (뒤로가기 없이)
+  window.history.replaceState(null, '', `/result/${data.shareId}`)
             }
           } catch {}
         }
