@@ -13,10 +13,10 @@ const CHAR_IMG: Record<string, string> = {
 }
 
 const CHARACTERS = [
-  { id: 'baekhalma', name: '건물주 백할매', hook: '"너 올해 돈 못 모아.\n이유 내가 딱 말해준다."', tag: '재물·직업', color: '#8B5CF6', bg: 'linear-gradient(135deg, #1a1025, #2d1b69)' },
-  { id: 'doRyeong', name: '근본도령', hook: '"지금 인생 방향 자체가\n틀렸을 수 있다."', tag: '종합 사주', color: '#3B82F6', bg: 'linear-gradient(135deg, #0f1525, #1e3a8a)' },
-  { id: 'gumiho', name: '구미호 선생', hook: '"왜 연애가 안 되는지\n사주에 다 나와있다."', tag: '연애·궁합', color: '#EC4899', bg: 'linear-gradient(135deg, #1a0f18, #831843)' },
-  { id: 'sinRyeong', name: '무등산 신령님', hook: '"허허... 이 사람\n전성기 아직 안 왔소."', tag: '대운·인생', color: '#10B981', bg: 'linear-gradient(135deg, #0a1a14, #065f46)' },
+  { id: 'baekhalma', name: '건물주 백할매', tag: '재물·직업', color: '#8B5CF6', bg: 'linear-gradient(135deg, #1a1025, #2d1b69)' },
+  { id: 'doRyeong', name: '근본도령', tag: '종합 사주', color: '#3B82F6', bg: 'linear-gradient(135deg, #0f1525, #1e3a8a)' },
+  { id: 'gumiho', name: '구미호 선생', tag: '연애·궁합', color: '#EC4899', bg: 'linear-gradient(135deg, #1a0f18, #831843)' },
+  { id: 'sinRyeong', name: '무등산 신령님', tag: '대운·인생', color: '#10B981', bg: 'linear-gradient(135deg, #0a1a14, #065f46)' },
 ]
 
 interface MenuItem {
@@ -58,8 +58,7 @@ export default function HomePage() {
           <div className="flex items-center gap-2">
             <Link href="/daily" className="text-xs px-3 py-1.5 rounded-full bg-yellow-500/20 text-yellow-400 font-medium">⭐ 무료운세</Link>
             {session ? (
-              <button
-                onClick={() => setShowShop(true)}
+              <button onClick={() => setShowShop(true)}
                 className="text-xs px-3 py-1.5 rounded-full bg-gray-800 text-yellow-400 font-medium flex items-center gap-1">
                 🪙 {balance}냥
                 <span className="text-gray-600">+충전</span>
@@ -101,7 +100,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* 캐릭터 */}
+        {/* 캐릭터 — 심플 버전 (문구 없음) */}
         <div className="px-4 mb-6">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-base font-bold">👁 운명을 보는 자들</h2>
@@ -110,18 +109,23 @@ export default function HomePage() {
           <div className="grid grid-cols-2 gap-2">
             {CHARACTERS.map(c => (
               <Link key={c.id} href={`/characters/${c.id}`}>
-                <div className="rounded-2xl overflow-hidden cursor-pointer transition-transform hover:scale-[1.02]"
+                <div className="rounded-2xl overflow-hidden cursor-pointer transition-transform hover:scale-[1.02] relative"
                   style={{ background: c.bg, border: `1px solid ${c.color}30` }}>
-                  <div className="h-44 overflow-hidden relative">
-                    <img src={CHAR_IMG[c.id]} alt={c.name}
+                  {/* 이미지 꽉 채우기 */}
+                  <div className="h-52 overflow-hidden relative">
+                    <img
+                      src={CHAR_IMG[c.id]}
+                      alt={c.name}
                       className="w-full h-full object-cover object-top"
-                      onError={e => { (e.target as HTMLImageElement).style.opacity = '0' }} />
-                    <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, transparent 40%, ${c.bg.split(',')[0].replace('linear-gradient(135deg, ', '')})` }} />
-                  </div>
-                  <div className="p-3 -mt-4 relative">
-                    <p className="text-xs font-bold mb-0.5">{c.name}</p>
-                    <p className="text-xs mb-1.5" style={{ color: c.color }}>{c.tag}</p>
-                    <p className="text-xs text-gray-300 leading-relaxed whitespace-pre-line italic">{c.hook}</p>
+                      onError={e => { (e.target as HTMLImageElement).style.opacity = '0' }}
+                    />
+                    {/* 하단 그라데이션 오버레이 */}
+                    <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, transparent 50%, rgba(0,0,0,0.85) 100%)' }} />
+                    {/* 이름/태그 오버레이 */}
+                    <div className="absolute bottom-0 left-0 right-0 p-3">
+                      <p className="text-sm font-black text-white">{c.name}</p>
+                      <p className="text-xs font-medium mt-0.5" style={{ color: c.color }}>{c.tag}</p>
+                    </div>
                   </div>
                 </div>
               </Link>
@@ -133,7 +137,6 @@ export default function HomePage() {
         <div className="px-4 mb-6">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-base font-bold">🧿 신탁 메뉴</h2>
-            {/* 엽전 충전 버튼 */}
             <button
               onClick={() => session ? setShowShop(true) : setShowLoginModal(true)}
               className="text-xs px-3 py-1.5 rounded-full font-bold text-black"
@@ -188,13 +191,54 @@ export default function HomePage() {
         {/* 서비스 안내 */}
         <div className="px-4 mb-6">
           <div className="rounded-2xl p-4 bg-[#111118] border border-gray-800">
-            <p className="text-sm font-bold mb-2">🔮 사주야는 이런 서비스예요</p>
-            <ul className="space-y-1.5 text-xs text-gray-400">
-              <li>• AI가 사주 원리를 기반으로 풀이해드려요</li>
-              <li>• 재물·연애·대운·궁합 등 다양한 주제를 다뤄요</li>
-              <li>• 일일운세는 매일 무료로 확인할 수 있어요</li>
-              <li className="text-gray-600 pt-1">※ 본 서비스는 오락 및 참고 목적으로 제공되며, 실제 결과를 예측하거나 보장하지 않습니다.</li>
-            </ul>
+            <p className="text-sm font-bold mb-3">🔮 사주야에서 할 수 있는 것들</p>
+            <div className="space-y-2.5">
+              <div className="flex items-start gap-2.5">
+                <span className="text-base flex-shrink-0">🪙</span>
+                <div>
+                  <p className="text-xs font-bold text-white">990원 사주 풀이</p>
+                  <p className="text-xs text-gray-500">타고난 성격, 재물운, 직업운까지 직설로 분석</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <span className="text-base flex-shrink-0">💞</span>
+                <div>
+                  <p className="text-xs font-bold text-white">궁합</p>
+                  <p className="text-xs text-gray-500">꼭 커플만 궁합 보란 법 있나요? 자유롭게 조합해보세요</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <span className="text-base flex-shrink-0">🌊</span>
+                <div>
+                  <p className="text-xs font-bold text-white">대운 풀이</p>
+                  <p className="text-xs text-gray-500">10년 단위 인생의 큰 흐름 해설</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <span className="text-base flex-shrink-0">📆</span>
+                <div>
+                  <p className="text-xs font-bold text-white">연도별 운세</p>
+                  <p className="text-xs text-gray-500">올해 총운, 월별 운세를 한눈에</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <span className="text-base flex-shrink-0">⭐</span>
+                <div>
+                  <p className="text-xs font-bold text-white">오늘의 운세 — 무료</p>
+                  <p className="text-xs text-gray-500">매일 무료로 확인하는 일일운세</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <span className="text-base flex-shrink-0">📅</span>
+                <div>
+                  <p className="text-xs font-bold text-white">택일</p>
+                  <p className="text-xs text-gray-500">이사, 결혼, 개업 등 좋은 날짜 추천</p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 pt-3 border-t border-gray-800">
+              <p className="text-xs text-gray-600">※ 사주야는 오락 및 참고 목적의 서비스입니다</p>
+            </div>
           </div>
         </div>
 
@@ -272,10 +316,7 @@ export default function HomePage() {
 
       {/* 엽전 상점 모달 */}
       {showShop && (
-        <YeopjeunShop
-          onClose={() => setShowShop(false)}
-          currentBalance={balance}
-        />
+        <YeopjeunShop onClose={() => setShowShop(false)} currentBalance={balance} />
       )}
 
       {/* 로그인 모달 */}
