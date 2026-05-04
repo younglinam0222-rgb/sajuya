@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
               controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: chunks[i] })}\n\n`))
               i++; setTimeout(send, 15)
             } else {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, shareId, fromCache: true })}\n\n`))
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, shareId, fromCache: true, sajuData: saju })}\n\n`))
               controller.close()
             }
           }
@@ -74,7 +74,9 @@ export async function POST(req: NextRequest) {
 
     // 프롬프트 구성
     const occupationPrompt = buildOccupationPrompt(occupationId)
-    const fullSystemPrompt = character.systemPrompt + occupationPrompt
+    const fullSystemPrompt = `절대로 마크다운 코드블록을 사용하지 마. \`\`\`json 이나 \`\`\` 절대 금지. 순수 JSON만 반환.
+
+` + character.systemPrompt + occupationPrompt
     const sectionList = character.sections.map(s => `[${s.emoji} ${s.title}]`).join(', ')
     const shareTitle = generateShareTitle(occupationId, form.name)
 
@@ -109,7 +111,7 @@ JSON 형식으로만 반환:
 
     const stream = await client.messages.create({
       model: 'claude-sonnet-4-5',
-      max_tokens: 1400,
+      max_tokens: 4000,
       system: fullSystemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
       stream: true,
@@ -139,7 +141,7 @@ JSON 형식으로만 반환:
             }),
             setCachedReading(cacheHash, fullText, occupationId, characterId),
           ])
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, shareId })}\n\n`))
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, shareId, sajuData: saju })}\n\n`))
         } catch (err) {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: '풀이 생성 중 오류' })}\n\n`))
         } finally {

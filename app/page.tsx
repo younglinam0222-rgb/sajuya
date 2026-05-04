@@ -19,10 +19,10 @@ const MENU_CARDS = [
 ]
 
 const CHARACTERS = [
-  { id: 'baekhalma', name: '건물주 백할매', emoji: '👵', bg: '#1a1000' },
-  { id: 'doRyeong', name: '근본도령', emoji: '🧙', bg: '#0a0020' },
-  { id: 'gumiho', name: '구미호 선생', emoji: '🦊', bg: '#1a0010' },
-  { id: 'sinRyeong', name: '무등신령', emoji: '⛰️', bg: '#001a08' },
+ { id: 'baekhalma', name: '건물주 백할매', emoji: '👵', bg: '#1a1000' },
+{ id: 'doryeong', name: '근본도령', emoji: '🧙', bg: '#0a0020' },
+{ id: 'gumiho', name: '구미호 선생', emoji: '🦊', bg: '#1a0010' },
+{ id: 'sinryeong', name: '무등신령', emoji: '⛰️', bg: '#001a08' },
 ]
 
 export default function HomePage() {
@@ -116,14 +116,14 @@ export default function HomePage() {
       {/* CHARACTERS */}
       <div className="px-4 mt-5">
         <div className="flex justify-between items-center mb-3">
-          <div className="text-sm font-black text-white">🧙 신탁 마스터</div>
+          <div className="text-sm font-black text-white">👁️ 운명을 보는 자들</div>
           <span className="text-xs" style={{color:'#555'}}>전체보기 ›</span>
         </div>
         <div className="flex gap-3 overflow-x-auto pb-1" style={{scrollbarWidth:'none'}}>
           {CHARACTERS.map(c => (
-            <Link href={`/saju?character=${c.id}`} key={c.id} className="flex-shrink-0 w-20 text-center">
-              <div className="w-14 h-14 rounded-full mx-auto mb-1.5 flex items-center justify-center text-2xl" style={{background:c.bg,border:'2px solid #2a2a2a'}}>{c.emoji}</div>
-              <div className="text-[11px] font-bold text-white truncate">{c.name.slice(0,5)}</div>
+            <Link href={`/saju?character=${c.id}`} key={c.id} className="flex-shrink-0 w-24 text-center">
+              <div className="w-14 h-14 rounded-full mx-auto mb-1.5 overflow-hidden relative" style={{background:c.bg,border:'2px solid #2a2a2a'}}>   <img src={`/characters/${c.id.toLowerCase()}.png`} alt={c.name} className="w-full h-full object-cover" onError={(e)=>{(e.target as HTMLImageElement).style.display='none'}} /> </div>
+              <div className="text-[11px] font-bold text-white truncate">{c.name}</div>
               <div className="text-[9px] mt-0.5" style={{color:'#555'}}>🪙 1엽전</div>
             </Link>
           ))}
