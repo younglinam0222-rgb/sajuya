@@ -76,22 +76,20 @@ export default function HomePage() {
         <div className="px-4 pt-4 pb-4">
           <div className="rounded-3xl overflow-hidden relative p-6"
             style={{ background: 'linear-gradient(135deg, #1a0a2e 0%, #0f0a1a 50%, #0a1a0f 100%)', border: '1px solid #ffffff10' }}>
-            <h1 className="text-2xl font-black leading-tight mb-2">
-              당신 올해 운명,<br />
+            <h1 className="text-2xl font-black leading-tight mb-3">
+              모르면 그냥 흘러가.<br />
               <span className="text-transparent bg-clip-text" style={{ backgroundImage: 'linear-gradient(90deg, #A78BFA, #EC4899)' }}>
-                이미 틀어졌습니다
+                알면 달라져.
               </span>
             </h1>
-            <p className="text-gray-400 text-sm mb-1">
-              AI가 사주 원리를 바탕으로 풀이해드려요.
-            </p>
-            <p className="text-gray-600 text-xs mb-5">
-              ※ 본 서비스는 오락·참고 목적이며 실제 결과를 보장하지 않습니다.
+            <p className="text-gray-400 text-sm mb-5">
+              당신 사주에 뭐가 있는지,<br />
+              지금 확인해봐.
             </p>
             <Link href="/saju"
               className="block w-full py-4 rounded-2xl text-center font-black text-base text-white mb-3"
               style={{ background: 'linear-gradient(135deg, #8B5CF6, #EC4899)' }}>
-              내 사주 풀이받기 →
+              내 사주 확인하기 →
             </Link>
             <Link href="/daily"
               className="block w-full py-2 rounded-xl text-xs text-center text-gray-400 border border-gray-800">
