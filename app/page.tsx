@@ -29,13 +29,24 @@ const CHARACTERS = [
   { id: 'sinRyeong', name: '무등산 신령님', hook: '"허허... 이 사람\n전성기 아직 안 왔소."', tag: '대운·인생', color: '#10B981', bg: 'linear-gradient(135deg, #0a1a14, #065f46)' },
 ]
 
-const MENUS = [
-  { href: '/saju', label: '사주 풀이', desc: '백할매 팩폭으로 알려줌', img: '/characters/baekhalma.png', badge: '590원', badgeColor: '#F59E0B', paid: true },
-  { href: '/gunghap', label: '궁합 해설', desc: '우리 사이 되는지 봐줌', img: '/characters/gumiho.png', badge: '590원', badgeColor: '#F59E0B', paid: true },
-  { href: '/daeun', label: '대운 해설', desc: '10년 주기 큰 흐름', img: '/characters/sinryeong.png', badge: '일부무료', badgeColor: '#10B981', paid: false },
-  { href: '/taekil', label: '택 · 일', desc: '좋은 날짜 골라줌', img: '/characters/baekhalma.png', badge: '일부무료', badgeColor: '#10B981', paid: false },
-  { href: '/yearly', label: '연도별 운세', desc: '특정 연도 운세 분석', img: '/characters/doryeong.png', badge: '일부무료', badgeColor: '#10B981', paid: false },
-  { href: '/daily', label: '일일 운세', desc: '오늘 하루 기운', img: '/characters/gumiho.png', badge: '무료', badgeColor: '#3B82F6', paid: false },
+interface MenuItem {
+  href: string
+  label: string
+  desc: string
+  emoji: string
+  img: string
+  badge: string
+  badgeColor: string
+  paid: boolean
+}
+
+const MENUS: MenuItem[] = [
+  { href: '/saju', label: '사주 풀이', desc: '백할매 팩폭으로 알려줌', emoji: '🔮', img: '/characters/baekhalma.png', badge: '590원', badgeColor: '#F59E0B', paid: true },
+  { href: '/gunghap', label: '궁합 해설', desc: '우리 사이 되는지 봐줌', emoji: '💞', img: '/characters/gumiho.png', badge: '590원', badgeColor: '#F59E0B', paid: true },
+  { href: '/daeun', label: '대운 해설', desc: '10년 주기 큰 흐름', emoji: '🌊', img: '/characters/sinryeong.png', badge: '일부무료', badgeColor: '#10B981', paid: false },
+  { href: '/taekil', label: '택 · 일', desc: '좋은 날짜 골라줌', emoji: '📅', img: '/characters/baekhalma.png', badge: '일부무료', badgeColor: '#10B981', paid: false },
+  { href: '/yearly', label: '연도별 운세', desc: '특정 연도 운세 분석', emoji: '📆', img: '/characters/doryeong.png', badge: '일부무료', badgeColor: '#10B981', paid: false },
+  { href: '/daily', label: '일일 운세', desc: '오늘 하루 기운', emoji: '⭐', img: '/characters/gumiho.png', badge: '무료', badgeColor: '#3B82F6', paid: false },
 ]
 
 const REVIEWS = [
@@ -77,7 +88,6 @@ export default function HomePage() {
         <div className="px-4 pt-4 pb-4">
           <div className="rounded-3xl overflow-hidden relative p-6"
             style={{ background: 'linear-gradient(135deg, #1a0a2e 0%, #0f0a1a 50%, #0a1a0f 100%)', border: '1px solid #ffffff10' }}>
-            {/* 소셜 증거 */}
             <div className="flex items-center gap-2 mb-4">
               <div className="flex -space-x-1">
                 {Object.values(CHAR_IMG).map((src, i) => (
@@ -95,7 +105,6 @@ export default function HomePage() {
                 이미 틀어졌습니다
               </span>
             </h1>
-            {/* ✅ 핵심 카피 교체 — 20만원 앵커 */}
             <p className="text-gray-400 text-sm mb-5">
               20만원짜리 사주관보다 더 정확하다고 소문났어요
             </p>
@@ -131,7 +140,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* 캐릭터 — 실제 이미지 */}
+        {/* 캐릭터 — 실제 이미지 (높이 키움) */}
         <div className="px-4 mb-6">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-base font-bold">👁 운명을 보는 자들</h2>
@@ -142,8 +151,8 @@ export default function HomePage() {
               <Link key={c.id} href={`/characters/${c.id}`}>
                 <div className="rounded-2xl overflow-hidden cursor-pointer transition-transform hover:scale-[1.02]"
                   style={{ background: c.bg, border: `1px solid ${c.color}30` }}>
-                  {/* 실제 캐릭터 이미지 */}
-                  <div className="h-28 overflow-hidden relative">
+                  {/* 캐릭터 이미지 — 높이 h-44로 키움 */}
+                  <div className="h-44 overflow-hidden relative">
                     <img src={CHAR_IMG[c.id]} alt={c.name}
                       className="w-full h-full object-cover object-top"
                       onError={e => { (e.target as HTMLImageElement).style.opacity = '0' }} />
@@ -160,7 +169,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* 메뉴 그리드 — 캐릭터 이미지 배경 */}
+        {/* 메뉴 그리드 */}
         <div className="px-4 mb-6">
           <h2 className="text-base font-bold mb-3">🧿 신탁 메뉴</h2>
           <p className="text-xs text-gray-600 mb-2 font-medium">⭐ 프리미엄</p>
@@ -168,8 +177,9 @@ export default function HomePage() {
             {MENUS.filter(m => m.paid).map(m => (
               <Link key={m.href} href={m.href}>
                 <div className="rounded-2xl overflow-hidden bg-[#111118] border border-yellow-900/30 hover:border-yellow-600/50 transition-all cursor-pointer">
-                  <div className="h-20 overflow-hidden relative">
-                    <img src={m.img} alt={m.label} className="w-full h-full object-cover object-top opacity-60" />
+                  {/* 이모지 배경 (이미지 준비 전) */}
+                  <div className="h-20 overflow-hidden relative bg-[#1a1025] flex items-center justify-center">
+                    <span className="text-5xl">{m.emoji}</span>
                     <div className="absolute top-2 right-2">
                       <span className="text-xs px-2 py-0.5 rounded-full font-bold text-black" style={{ background: m.badgeColor }}>{m.badge}</span>
                     </div>
@@ -261,7 +271,7 @@ export default function HomePage() {
 
       </div>
 
-      {/* ✅ 하단 네비 — 무료운세 중앙 메인 버튼 */}
+      {/* 하단 네비 */}
       <nav className="fixed bottom-0 left-0 right-0 bg-[#0a0a0f] border-t border-gray-800 z-50">
         <div className="max-w-md mx-auto flex items-center justify-around py-1 px-2">
           <Link href="/" className="flex flex-col items-center gap-0.5 py-2 px-3">
@@ -272,7 +282,6 @@ export default function HomePage() {
             <span className="text-xl">🔮</span>
             <span className="text-xs text-gray-500">사주</span>
           </Link>
-          {/* ✅ 무료운세 중앙 강조 버튼 */}
           <Link href="/daily" className="flex flex-col items-center -mt-4">
             <div className="w-14 h-14 rounded-full flex items-center justify-center shadow-lg border-4 border-[#0a0a0f]"
               style={{ background: 'linear-gradient(135deg, #8B5CF6, #EC4899)' }}>
