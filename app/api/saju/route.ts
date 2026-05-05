@@ -196,9 +196,30 @@ export async function POST(req: NextRequest) {
       ? `\n상대방 정보: ${partnerInfo.name || '이름 미상'} / ${partnerInfo.year}년 ${partnerInfo.month}월 ${partnerInfo.day}일생 / ${partnerInfo.gender === 'male' ? '남성' : '여성'}${partnerInfo.hour ? ` / 태어난 시간: ${partnerInfo.hour}` : ''}`
       : ''
 
+    const currentYear = new Date().getFullYear()
+    const currentAge = currentYear - parseInt(year) + 1
+
+    // 현재 나이 기준 lifecycle 구간 동적 생성
+    // 현재 10년대 포함 앞뒤로 5구간 (과거 1~2개 + 현재 + 미래)
+    const currentDecade = Math.floor(currentAge / 10) * 10
+    const decadeOffsets = currentAge < 20
+      ? [0, 10, 20, 30, 40]           // 10대: 10~50대
+      : currentAge >= 70
+        ? [-40, -30, -20, -10, 0]     // 70대+: 30대~현재
+        : [-10, 0, 10, 20, 30]        // 일반: 현재 -1 ~ +3
+    const lifecycleAges = decadeOffsets
+      .map(o => currentDecade + o)
+      .filter(a => a >= 10 && a <= 90)
+    // 항상 5개 보장
+    while (lifecycleAges.length < 5) lifecycleAges.push(lifecycleAges[lifecycleAges.length - 1] + 10)
+    const lifecycleTemplate = lifecycleAges
+      .map(a => `      {"age":"${a}대","score":0,"season":"봄/여름/가을/겨울 중 하나","desc":"이 시기 핵심 한 줄"}`)
+      .join(',\n')
+
     const sajuInfo = `
 [이 사람 사주 정보]
 이름: ${name} / 생년월일: ${year}년 ${month}월 ${day}일 / 성별: ${genderStr} / 직업: ${occupation ?? '일반인'}
+현재 나이: ${currentAge}세 (${currentYear}년 기준) ← 반드시 이 나이 기준으로만 분석할 것. 이미 지난 시기 얘기 절대 금지.
 태어난 시간: ${manse.hourStr}
 띠: ${manse.animal}띠
 사주 기운: ${elementDesc}
@@ -221,6 +242,8 @@ export async function POST(req: NextRequest) {
     const prompt1 = `
 ${voiceGuide}
 ${sajuInfo}
+
+[현재 상황] 이 사람은 지금 ${currentAge}세야. 분석할 때 이미 지난 나이대(예: 현재 40대면 20대·30대 얘기는 과거로만 짧게)는 넘어가고, 지금과 앞으로의 시기에 집중해서 써.
 
 [궁금한 것]: ${questionIntent}
 → ${intentInstruction}
@@ -246,11 +269,7 @@ ${styleRules}
     "overview": "이 사람 사주 전체 핵심 3~4문장. 쉬운 말로. 읽으면 고개 끄덕이는 내용.",
     "golden_period": "전성기가 언제고 지금 뭘 해야 하는지 2~3문장. 구체적인 나이 포함.",
     "lifecycle": [
-      {"age":"20대","score":75,"season":"봄","desc":"이 시기 핵심 한 줄. 쉬운 말로."},
-      {"age":"30대","score":85,"season":"여름","desc":"핵심 한 줄"},
-      {"age":"40대","score":90,"season":"여름","desc":"핵심 한 줄"},
-      {"age":"50대","score":70,"season":"가을","desc":"핵심 한 줄"},
-      {"age":"60대","score":60,"season":"겨울","desc":"핵심 한 줄"}
+${lifecycleTemplate}
     ],
     "peak_guide": "전성기 활용법 3~4문장. 지금 당장 할 수 있는 것 위주로.",
     "warning": "가장 조심해야 할 것 2문장. 무섭지 않게, 근데 진지하게."
@@ -262,6 +281,8 @@ ${styleRules}
     const prompt2 = `
 ${voiceGuide}
 ${sajuInfo}
+
+[현재 상황] 이 사람은 지금 ${currentAge}세야. 분석할 때 이미 지난 나이대(예: 현재 40대면 20대·30대 얘기는 과거로만 짧게)는 넘어가고, 지금과 앞으로의 시기에 집중해서 써.
 
 [궁금한 것]: ${questionIntent}
 → ${intentInstruction}
