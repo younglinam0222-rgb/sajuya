@@ -229,7 +229,7 @@ ${styleRules}
 
 판결문 1번~6번과 전체 strategy를 작성해.
 각 판결문은 반드시 500자 이상. 내용 없으면 실격.
-1~3번은 is_free: true (무료 공개), 4~6번은 is_free: false (유료 잠금).
+1~12번 전부 is_free: true (무료 공개 — 런칭 프로모션).
 
 반드시 아래 JSON만 출력. 마크다운 없이.
 
@@ -238,9 +238,9 @@ ${styleRules}
     {"id":"1","title":"소름 돋는 상황 묘사 제목","teaser":"읽으면 클릭하고 싶은 한 줄 훅","is_free":true,"content":"500자 이상 판결문. 공감+비유+팩폭+행동팁 포함. 문단 사이 빈줄.\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
     {"id":"2","title":"제목","teaser":"한 줄 훅","is_free":true,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
     {"id":"3","title":"제목","teaser":"한 줄 훅","is_free":true,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
-    {"id":"4","title":"제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
-    {"id":"5","title":"제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
-    {"id":"6","title":"제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"}
+    {"id":"4","title":"제목","teaser":"한 줄 훅","is_free":true,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
+    {"id":"5","title":"제목","teaser":"한 줄 훅","is_free":true,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
+    {"id":"6","title":"제목","teaser":"한 줄 훅","is_free":true,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"}
   ],
   "strategy": {
     "overview": "이 사람 사주 전체 핵심 3~4문장. 쉬운 말로. 읽으면 고개 끄덕이는 내용.",
@@ -269,18 +269,18 @@ ${sajuInfo}
 ${styleRules}
 
 판결문 7번~12번을 작성해. 앞의 1~6번과 주제가 겹치지 않게 새로운 각도로 파고들어.
-각 판결문은 반드시 500자 이상. 전부 is_free: false (유료 잠금).
+각 판결문은 반드시 500자 이상. 전부 is_free: true (무료 공개 — 런칭 프로모션).
 
 반드시 아래 JSON만 출력. 마크다운 없이.
 
 {
   "titles": [
-    {"id":"7","title":"소름 돋는 상황 묘사 제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
-    {"id":"8","title":"제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
-    {"id":"9","title":"제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
-    {"id":"10","title":"제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
-    {"id":"11","title":"제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
-    {"id":"12","title":"제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"}
+    {"id":"7","title":"소름 돋는 상황 묘사 제목","teaser":"한 줄 훅","is_free":true,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
+    {"id":"8","title":"제목","teaser":"한 줄 훅","is_free":true,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
+    {"id":"9","title":"제목","teaser":"한 줄 훅","is_free":true,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
+    {"id":"10","title":"제목","teaser":"한 줄 훅","is_free":true,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
+    {"id":"11","title":"제목","teaser":"한 줄 훅","is_free":true,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
+    {"id":"12","title":"제목","teaser":"한 줄 훅","is_free":true,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"}
   ]
 }
 `
