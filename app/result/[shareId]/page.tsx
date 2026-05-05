@@ -2,39 +2,37 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { CHARACTERS } from '@/lib/characters'
-import { OCCUPATIONS } from '@/lib/occupations'
 
 interface Section { id: string; emoji: string; title: string; body: string }
 interface SajuTitle { id: string; title: string; teaser: string; is_free: boolean; content: string }
 
 const CHARACTER_IMG: Record<string, string> = {
   baekhalma: '/characters/baekhalma.png',
-  doRyeong: '/characters/doryeong.png',
-  gumiho: '/characters/gumiho.png',
+  doRyeong:  '/characters/doryeong.png',
+  gumiho:    '/characters/gumiho.png',
   sinRyeong: '/characters/sinryeong.png',
 }
 const CHARACTER_COLOR: Record<string, string> = {
   baekhalma: '#8B5CF6',
-  doRyeong: '#3B82F6',
-  gumiho: '#EC4899',
+  doRyeong:  '#3B82F6',
+  gumiho:    '#EC4899',
   sinRyeong: '#10B981',
 }
 const CHARACTER_NAMES: Record<string, string> = {
   baekhalma: '건물주 백할매',
-  doRyeong: '근본도령',
-  gumiho: '구미호 선생',
+  doRyeong:  '근본도령',
+  gumiho:    '구미호 선생',
   sinRyeong: '무등산 신령님',
 }
 
 const SECTION_ICONS: Record<string, { svg: string; color: string; bg: string }> = {
-  energy:      { svg:'M13 10V3L4 14h7v7l9-11h-7z', color:'#fbbf24', bg:'rgba(251,191,36,.15)' },
-  money:       { svg:'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z', color:'#fbbf24', bg:'rgba(251,191,36,.15)' },
-  career:      { svg:'M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z', color:'#a78bfa', bg:'rgba(167,139,250,.15)' },
-  love:        { svg:'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z', color:'#f472b6', bg:'rgba(244,114,182,.15)' },
-  health:      { svg:'M4.5 12.75l6 6 9-13.5', color:'#4ade80', bg:'rgba(74,222,128,.15)' },
-  warning:     { svg:'M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z', color:'#f87171', bg:'rgba(248,113,113,.15)' },
-  lucky:       { svg:'M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z', color:'#fbbf24', bg:'rgba(251,191,36,.15)' },
+  energy:  { svg:'M13 10V3L4 14h7v7l9-11h-7z', color:'#fbbf24', bg:'rgba(251,191,36,.15)' },
+  money:   { svg:'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z', color:'#fbbf24', bg:'rgba(251,191,36,.15)' },
+  career:  { svg:'M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z', color:'#a78bfa', bg:'rgba(167,139,250,.15)' },
+  love:    { svg:'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z', color:'#f472b6', bg:'rgba(244,114,182,.15)' },
+  health:  { svg:'M4.5 12.75l6 6 9-13.5', color:'#4ade80', bg:'rgba(74,222,128,.15)' },
+  warning: { svg:'M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z', color:'#f87171', bg:'rgba(248,113,113,.15)' },
+  lucky:   { svg:'M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z', color:'#fbbf24', bg:'rgba(251,191,36,.15)' },
 }
 
 function SectionIcon({ id }: { id: string }) {
@@ -48,52 +46,56 @@ function SectionIcon({ id }: { id: string }) {
   )
 }
 
+const elementColor = (el: string) => ({ '木':'#4ade80','火':'#f87171','土':'#fbbf24','金':'#d1d5db','水':'#60a5fa' }[el] || '#888')
+const elementBg    = (el: string) => ({ '木':'rgba(34,197,94,.12)','火':'rgba(239,68,68,.12)','土':'rgba(234,179,8,.12)','金':'rgba(156,163,175,.12)','水':'rgba(96,165,250,.12)' }[el] || 'rgba(100,100,100,.1)')
+
 export default function ResultPage() {
-  const params = useParams()
+  const params  = useParams()
   const shareId = params.shareId as string
 
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [sections, setSections] = useState<Section[]>([])
-  const [titles, setTitles] = useState<SajuTitle[]>([])
-  const [strategy, setStrategy] = useState<any>(null)
-  const [openIdx, setOpenIdx] = useState<number[]>([0])
+  const [loading,     setLoading]     = useState(true)
+  const [error,       setError]       = useState('')
+  const [sections,    setSections]    = useState<Section[]>([])
+  const [titles,      setTitles]      = useState<SajuTitle[]>([])
+  const [strategy,    setStrategy]    = useState<any>(null)
+  const [openIdx,     setOpenIdx]     = useState<number[]>([0])
   const [characterId, setCharacterId] = useState('baekhalma')
-  const [formInfo, setFormInfo] = useState<any>(null)
-  const [sajuData, setSajuData] = useState<any>(null)
-  const [copied, setCopied] = useState(false)
+  const [formInfo,    setFormInfo]    = useState<any>(null)
+  const [sajuData,    setSajuData]    = useState<any>(null)
+  const [isPaid,      setIsPaid]      = useState(false)
+  const [copied,      setCopied]      = useState(false)
 
   useEffect(() => { fetchReading() }, [shareId])
 
   const fetchReading = async () => {
     try {
-      const res = await fetch(`/api/result/${shareId}`)
+      // ✅ 수정: /api/result → /api/readings
+      const res = await fetch(`/api/readings/${shareId}`)
       if (!res.ok) throw new Error('not found')
       const data = await res.json()
-      setCharacterId(data.character_id ?? 'baekhalma')
 
+      setCharacterId(data.character_id ?? 'baekhalma')
+      setIsPaid(data.is_paid ?? false)
+
+      // ✅ 수정: saju_data는 jsonb → 이미 객체로 옴. string이면 파싱.
       if (data.saju_data) {
-        try {
-          const parsed = JSON.parse(data.saju_data)
-          setFormInfo(parsed.form)
-          setSajuData(parsed.saju)
-        } catch {}
+        const sajuParsed = typeof data.saju_data === 'string'
+          ? JSON.parse(data.saju_data)
+          : data.saju_data
+        setFormInfo(sajuParsed.form ?? null)
+        setSajuData(sajuParsed.saju ?? null)
       }
 
       if (data.ai_result) {
         try {
-          let clean = data.ai_result.trim()
+          let clean = (typeof data.ai_result === 'string' ? data.ai_result : JSON.stringify(data.ai_result))
+            .trim()
             .replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim()
           const s = clean.indexOf('{'), e = clean.lastIndexOf('}')
           if (s !== -1 && e !== -1) clean = clean.slice(s, e + 1)
           const parsed = JSON.parse(clean)
-          // 새 포맷 (titles + strategy)
-          if (parsed.titles) {
-            setTitles(parsed.titles)
-            setStrategy(parsed.strategy)
-          }
-          // 구 포맷 (sections)
-          if (parsed.sections) setSections(parsed.sections)
+          if (parsed.titles)   { setTitles(parsed.titles); setStrategy(parsed.strategy ?? null) }
+          if (parsed.sections) { setSections(parsed.sections) }
         } catch {
           setError('풀이 데이터를 불러오는 중 오류가 발생했습니다.')
         }
@@ -105,9 +107,9 @@ export default function ResultPage() {
     }
   }
 
-  const charImg = CHARACTER_IMG[characterId] ?? '/characters/baekhalma.png'
+  const charImg   = CHARACTER_IMG[characterId]   ?? '/characters/baekhalma.png'
   const charColor = CHARACTER_COLOR[characterId] ?? '#8B5CF6'
-  const charName = CHARACTER_NAMES[characterId] ?? characterId
+  const charName  = CHARACTER_NAMES[characterId] ?? characterId
 
   const handleCopyLink = async () => {
     await navigator.clipboard.writeText(window.location.href)
@@ -116,40 +118,35 @@ export default function ResultPage() {
   }
 
   const handleKakaoShare = () => {
-    const url = window.location.href
+    const url   = window.location.href
     const title = formInfo ? `${formInfo.name}님의 사주팔자 풀이` : '사주야 풀이 결과'
-    const desc = `${charName}이 직접 본 사주 결과 — 지금 확인해보세요`
-
-    // 카카오 SDK가 있으면 사용, 없으면 fallback
+    const desc  = `${charName}이 직접 본 사주 결과 — 지금 확인해보세요`
     if (typeof window !== 'undefined' && (window as any).Kakao?.Share) {
       ;(window as any).Kakao.Share.sendDefault({
         objectType: 'feed',
         content: {
-          title,
-          description: desc,
+          title, description: desc,
           imageUrl: `${window.location.origin}${charImg}`,
           link: { mobileWebUrl: url, webUrl: url },
         },
-        buttons: [{
-          title: '풀이 보기',
-          link: { mobileWebUrl: url, webUrl: url },
-        }],
+        buttons: [{ title: '풀이 보기', link: { mobileWebUrl: url, webUrl: url } }],
       })
     } else {
-      // 카카오 SDK 없으면 링크 복사
       handleCopyLink()
     }
   }
 
-  const elementColor = (el: string) => ({ '木':'#4ade80','火':'#f87171','土':'#fbbf24','金':'#d1d5db','水':'#60a5fa' }[el] || '#888')
-  const elementBg = (el: string) => ({ '木':'rgba(34,197,94,.12)','火':'rgba(239,68,68,.12)','土':'rgba(234,179,8,.12)','金':'rgba(156,163,175,.12)','水':'rgba(96,165,250,.12)' }[el] || 'rgba(100,100,100,.1)')
-
+  // ── 로딩 ──────────────────────────────────────────
   if (loading) return (
     <div className="bg-[#0a0a0a] min-h-screen flex items-center justify-center text-white">
-      <div className="text-center"><div className="text-4xl mb-4 animate-spin">🔮</div><div className="text-sm text-[#666]">풀이를 불러오는 중...</div></div>
+      <div className="text-center">
+        <div className="text-4xl mb-4 animate-spin">🔮</div>
+        <div className="text-sm text-[#666]">풀이를 불러오는 중...</div>
+      </div>
     </div>
   )
 
+  // ── 에러 ──────────────────────────────────────────
   if (error) return (
     <div className="bg-[#0a0a0a] min-h-screen flex items-center justify-center text-white max-w-[430px] mx-auto px-4">
       <div className="text-center">
@@ -169,6 +166,7 @@ export default function ResultPage() {
   ] : []
 
   const freeTitles = titles.filter(t => t.is_free)
+  // is_paid true면 전체 공개, false면 잠금
   const paidTitles = titles.filter(t => !t.is_free)
 
   return (
@@ -246,25 +244,30 @@ export default function ResultPage() {
       {/* 새 포맷: titles */}
       {titles.length > 0 && (
         <div className="px-4 pt-4">
-          <div className="text-xs font-bold text-[#555] mb-3">✦ 무료 판결 3가지</div>
+
+          {/* 무료 판결 */}
+          <div className="text-xs font-bold text-[#555] mb-3">✦ 무료 판결 {freeTitles.length}가지</div>
           <div className="space-y-3 mb-4">
             {freeTitles.map((t, i) => (
               <div key={t.id} className="rounded-2xl overflow-hidden border" style={{ borderColor: `${charColor}40`, background: '#111' }}>
                 <div className="p-4">
                   <div className="flex items-start gap-3">
                     <span className="text-xs font-bold px-2 py-1 rounded-full flex-shrink-0"
-                      style={{ background: `${charColor}25`, color: charColor }}>무료 {i+1}</span>
-                    <p className="font-bold text-base leading-snug text-white">{t.title}</p>
+                      style={{ background: `${charColor}25`, color: charColor }}>무료 {i + 1}</span>
+                    <div>
+                      <p className="font-bold text-base leading-snug text-white">{t.title}</p>
+                      {t.teaser && <p className="text-xs text-gray-500 mt-0.5">{t.teaser}</p>}
+                    </div>
                   </div>
                   {t.content && (
                     <div className="text-gray-300 text-sm leading-relaxed mt-3">
-                      {t.content.split('\n').map((line, i) => (
+                      {t.content.split('\n').map((line, j) =>
                         line.startsWith('⚠️')
-                          ? <p key={i} className="mt-4 text-yellow-300 font-medium">{line}</p>
+                          ? <p key={j} className="mt-4 text-yellow-300 font-medium">{line}</p>
                           : line === ''
-                            ? <div key={i} className="h-2" />
-                            : <p key={i}>{line}</p>
-                      ))}
+                            ? <div key={j} className="h-2" />
+                            : <p key={j}>{line}</p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -272,36 +275,87 @@ export default function ResultPage() {
             ))}
           </div>
 
+          {/* 유료 판결 */}
           {paidTitles.length > 0 && (
-            <div className="space-y-3 mb-4">
-              {paidTitles.map((t, i) => (
-                <div key={t.id} className="rounded-2xl overflow-hidden border" style={{ borderColor: `${charColor}40`, background: '#111' }}>
-                  <div className="p-4">
-                    <div className="flex items-start gap-3">
-                      <span className="text-xs font-bold px-2 py-1 rounded-full flex-shrink-0"
-                        style={{ background: `${charColor}25`, color: charColor }}>{i+4}</span>
-                      <p className="font-bold text-base leading-snug text-white">{t.title}</p>
-                    </div>
-                    {t.content && (
-                      <div className="text-gray-300 text-sm leading-relaxed mt-3">
-                        {t.content.split('\n').map((line, j) => (
-                          line.startsWith('⚠️')
-                            ? <p key={j} className="mt-4 text-yellow-300 font-medium">{line}</p>
-                            : line === ''
-                              ? <div key={j} className="h-2" />
-                              : <p key={j}>{line}</p>
-                        ))}
+            <div className="mb-4">
+              {isPaid ? (
+                // 결제 완료 → 전부 공개
+                <>
+                  <div className="text-xs font-bold text-[#555] mb-3">🔓 전체 판결 {paidTitles.length}개</div>
+                  <div className="space-y-3">
+                    {paidTitles.map((t, i) => (
+                      <div key={t.id} className="rounded-2xl overflow-hidden border" style={{ borderColor: `${charColor}40`, background: '#111' }}>
+                        <div className="p-4">
+                          <div className="flex items-start gap-3">
+                            <span className="text-xs font-bold px-2 py-1 rounded-full flex-shrink-0"
+                              style={{ background: `${charColor}25`, color: charColor }}>{i + freeTitles.length + 1}</span>
+                            <div>
+                              <p className="font-bold text-base leading-snug text-white">{t.title}</p>
+                              {t.teaser && <p className="text-xs text-gray-500 mt-0.5">{t.teaser}</p>}
+                            </div>
+                          </div>
+                          {t.content && (
+                            <div className="text-gray-300 text-sm leading-relaxed mt-3">
+                              {t.content.split('\n').map((line, j) =>
+                                line.startsWith('⚠️')
+                                  ? <p key={j} className="mt-4 text-yellow-300 font-medium">{line}</p>
+                                  : line === ''
+                                    ? <div key={j} className="h-2" />
+                                    : <p key={j}>{line}</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    )}
+                    ))}
                   </div>
-                </div>
-              ))}
+                </>
+              ) : (
+                // 미결제 → 잠금
+                <>
+                  <div className="text-xs font-bold text-[#555] mb-3">🔒 잠긴 판결 {paidTitles.length}개</div>
+                  <div className="space-y-2">
+                    {paidTitles.map((t, i) => (
+                      <div key={t.id} className="rounded-2xl overflow-hidden border border-gray-800 bg-[#111]">
+                        <div className="p-4">
+                          <div className="flex items-start gap-3">
+                            <span className="text-xs font-bold px-2 py-1 rounded-full flex-shrink-0 bg-gray-800 text-gray-500">
+                              {i + freeTitles.length + 1}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-bold text-base leading-snug text-white">{t.title}</p>
+                              {t.teaser && <p className="text-xs text-gray-600 mt-0.5">{t.teaser}</p>}
+                            </div>
+                            <span className="text-gray-600 flex-shrink-0 text-lg">🔒</span>
+                          </div>
+                          <div className="mt-3 h-14 rounded-xl overflow-hidden relative">
+                            <div className="text-gray-600 text-sm leading-relaxed blur-sm select-none">
+                              {t.content?.slice(0, 80) ?? '풀이 내용이 잠겨있어요.'}
+                            </div>
+                            <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#111]" />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    className="w-full mt-3 py-3.5 rounded-2xl font-bold text-sm text-white"
+                    style={{ background: `linear-gradient(135deg, ${charColor}, ${charColor}bb)` }}>
+                    🔓 전체 {paidTitles.length}개 열기 — 990원
+                  </button>
+                </>
+              )}
             </div>
           )}
 
           {/* 전략 섹션 */}
           {strategy && (
             <div className="space-y-3 mb-4">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-lg">⚔️</span>
+                <span className="font-bold text-base">인생 전략 분석</span>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">책사 모드</span>
+              </div>
               {strategy.overview && (
                 <div className="rounded-2xl p-4 bg-[#111] border border-gray-800">
                   <div className="flex items-center gap-2 mb-2"><span>🌌</span><span className="font-bold text-sm">인생의 큰 그림</span></div>
@@ -313,11 +367,12 @@ export default function ResultPage() {
                   <div className="flex items-center gap-2 mb-4"><span>📊</span><span className="font-bold text-sm text-white">나이대별 운의 흐름</span></div>
                   <div className="flex items-end gap-2 h-28 mb-3">
                     {strategy.lifecycle.map((d: any) => {
+                      const maxScore = Math.max(...strategy.lifecycle.map((x: any) => x.score), 1)
                       const colors: Record<string,string> = { '봄':'#10B981','여름':'#F59E0B','가을':'#F97316','겨울':'#3B82F6' }
                       return (
                         <div key={d.age} className="flex-1 flex flex-col items-center gap-1">
                           <span className="text-[10px] text-gray-400">{d.score}</span>
-                          <div className="w-full rounded-t-lg" style={{ height: `${Math.max((d.score/100)*100,8)}%`, background: colors[d.season]??'#8B5CF6', minHeight: 8 }} />
+                          <div className="w-full rounded-t-lg" style={{ height: `${Math.max((d.score/maxScore)*100,8)}%`, background: colors[d.season]??'#8B5CF6', minHeight: 8 }} />
                         </div>
                       )
                     })}
@@ -336,7 +391,7 @@ export default function ResultPage() {
                   <div className="space-y-2">
                     {strategy.lifecycle.map((d: any) => {
                       const colors: Record<string,string> = { '봄':'#10B981','여름':'#F59E0B','가을':'#F97316','겨울':'#3B82F6' }
-                      const icons: Record<string,string> = { '봄':'🌱','여름':'☀️','가을':'🍂','겨울':'❄️' }
+                      const icons:  Record<string,string> = { '봄':'🌱','여름':'☀️','가을':'🍂','겨울':'❄️' }
                       return (
                         <div key={d.age} className="flex items-start gap-2 py-1 border-b border-gray-800 last:border-0">
                           <span className="text-xs font-bold text-gray-500 w-8 flex-shrink-0">{d.age}</span>
@@ -377,13 +432,14 @@ export default function ResultPage() {
           <div className="text-xs font-bold text-[#555] mb-3">✦ 저장된 풀이</div>
           {sections.map((sec, idx) => {
             const isWarning = sec.id === 'warning'
-            const isOpen = openIdx.includes(idx)
+            const isOpen    = openIdx.includes(idx)
             return (
               <div key={sec.id} className="rounded-2xl mb-3 overflow-hidden" style={{
                 background: isWarning ? '#1a0808' : '#111',
-                border: `1px solid ${isWarning ? 'rgba(239,68,68,.2)' : '#1e1e1e'}`
+                border: `1px solid ${isWarning ? 'rgba(239,68,68,.2)' : '#1e1e1e'}`,
               }}>
-                <button className="w-full px-4 py-3.5 flex items-center gap-3 text-left" onClick={() => setOpenIdx(prev => prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx])}>
+                <button className="w-full px-4 py-3.5 flex items-center gap-3 text-left"
+                  onClick={() => setOpenIdx(prev => prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx])}>
                   <SectionIcon id={sec.id} />
                   <span className={`flex-1 text-sm font-bold ${isWarning ? 'text-red-300' : 'text-white'} leading-snug`}>{sec.title}</span>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2" strokeLinecap="round"
@@ -404,24 +460,17 @@ export default function ResultPage() {
 
       {/* 공유 버튼 */}
       <div className="px-4 mt-4 space-y-3">
-        {/* 카카오 공유 */}
-        <button
-          className="w-full py-4 rounded-2xl font-black text-base flex items-center justify-center gap-2"
+        <button className="w-full py-4 rounded-2xl font-black text-base flex items-center justify-center gap-2"
           style={{ background: '#fee500', color: '#3c1e1e' }}
           onClick={handleKakaoShare}>
           💬 카카오로 공유하기
         </button>
-
-        {/* 링크 복사 */}
-        <button
-          className="w-full py-3 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all"
+        <button className="w-full py-3 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all"
           style={{ background: copied ? '#10B981' : '#1a1a2e', border: '1px solid #333', color: copied ? 'white' : '#aaa' }}
           onClick={handleCopyLink}>
           {copied ? '✅ 링크 복사됐어요!' : '🔗 링크 복사하기'}
         </button>
-
-        <Link href="/saju"
-          className="block w-full py-3 rounded-2xl font-bold text-sm text-center"
+        <Link href="/saju" className="block w-full py-3 rounded-2xl font-bold text-sm text-center"
           style={{ background: '#111', border: '1px solid #222', color: '#666' }}>
           ↺ 새로 풀이받기
         </Link>
