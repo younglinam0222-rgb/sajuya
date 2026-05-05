@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
@@ -29,15 +29,15 @@ const QUESTION_INTENTS = ['인생 전반', '돈/재물', '연애/결혼', '직�
 
 const CHARACTERS = [
   { id: 'baekhalma', name: '건물주 백할매', img: '/characters/baekhalma.png', desc: '팩폭 재물 전문', color: '#8B5CF6' },
-  { id: 'doRyeong', name: '근본도령', img: '/characters/doryeong.png', desc: '다정한 종합 분석', color: '#3B82F6' },
-  { id: 'gumiho', name: '구미호 선생', img: '/characters/gumiho.png', desc: '연애 궁합 전문', color: '#EC4899' },
-  { id: 'sinRyeong', name: '무등산 신령님', img: '/characters/sinryeong.png', desc: '대운 인생 전문', color: '#10B981' },
+  { id: 'doRyeong',  name: '근본도령',       img: '/characters/doryeong.png',  desc: '다정한 종합 분석', color: '#3B82F6' },
+  { id: 'gumiho',    name: '구미호 선생',    img: '/characters/gumiho.png',    desc: '연애 궁합 전문',  color: '#EC4899' },
+  { id: 'sinRyeong', name: '무등산 신령님',  img: '/characters/sinryeong.png', desc: '대운 인생 전문',  color: '#10B981' },
 ]
 
 const SEASON_COLORS: Record<string, string> = { '봄':'#10B981','여름':'#F59E0B','가을':'#F97316','겨울':'#3B82F6' }
-const SEASON_ICONS: Record<string, string> = { '봄':'🌱','여름':'☀️','가을':'🍂','겨울':'❄️' }
+const SEASON_ICONS:  Record<string, string> = { '봄':'🌱','여름':'☀️','가을':'🍂','겨울':'❄️' }
 const ELEMENT_COLORS: Record<string, string> = { '木':'#4ade80','火':'#f87171','土':'#fbbf24','金':'#d1d5db','水':'#60a5fa' }
-const ELEMENT_BG: Record<string, string> = { '木':'rgba(34,197,94,.15)','火':'rgba(239,68,68,.15)','土':'rgba(234,179,8,.15)','金':'rgba(156,163,175,.15)','水':'rgba(96,165,250,.15)' }
+const ELEMENT_BG:    Record<string, string> = { '木':'rgba(34,197,94,.15)','火':'rgba(239,68,68,.15)','土':'rgba(234,179,8,.15)','金':'rgba(156,163,175,.15)','水':'rgba(96,165,250,.15)' }
 
 const LOADING_TIPS = [
   '사주팔자 계산하는 중...',
@@ -49,6 +49,7 @@ const LOADING_TIPS = [
 
 type Stage = 'input' | 'loading' | 'saving' | 'result'
 
+// ─── 만세력 테이블 ────────────────────────────────────
 function ManseTable({ manse, charColor }: { manse: ManseData; charColor: string }) {
   const pillars = [
     { label: '시주', p: manse.hourPillar },
@@ -99,6 +100,7 @@ function ManseTable({ manse, charColor }: { manse: ManseData; charColor: string 
   )
 }
 
+// ─── 로딩 화면 ───────────────────────────────────────
 function LoadingScreen({ name, character, saving }: { name: string; character: typeof CHARACTERS[0]; saving?: boolean }) {
   const [tipIdx, setTipIdx] = useState(0)
   const [progress, setProgress] = useState(0)
@@ -123,8 +125,10 @@ function LoadingScreen({ name, character, saving }: { name: string; character: t
   )
 }
 
+// ─── 라이프사이클 차트 ───────────────────────────────
 function LifecycleChart({ data }: { data: LifecycleItem[] }) {
   if (!data?.length) return null
+  const maxScore = Math.max(...data.map(d => d.score), 1)
   return (
     <div className="rounded-2xl p-4 bg-[#111118] border border-gray-800">
       <div className="flex items-center gap-2 mb-4"><span>📊</span><span className="font-bold text-sm text-white">나이대별 운의 흐름</span></div>
@@ -132,7 +136,11 @@ function LifecycleChart({ data }: { data: LifecycleItem[] }) {
         {data.map(d => (
           <div key={d.age} className="flex-1 flex flex-col items-center gap-1">
             <span className="text-xs text-gray-400">{d.score}</span>
-            <div className="w-full rounded-t-lg" style={{ height: `${Math.max((d.score/100)*100,8)}%`, background: SEASON_COLORS[d.season]??'#8B5CF6', minHeight: 8 }} />
+            <div className="w-full rounded-t-lg" style={{
+              height: `${Math.max((d.score / maxScore) * 100, 8)}%`,
+              background: SEASON_COLORS[d.season] ?? '#8B5CF6',
+              minHeight: 8,
+            }} />
           </div>
         ))}
       </div>
@@ -140,7 +148,7 @@ function LifecycleChart({ data }: { data: LifecycleItem[] }) {
         {data.map(d => (
           <div key={d.age} className="flex-1 text-center">
             <p className="text-xs text-gray-400">{d.age}</p>
-            <p className="text-xs">{SEASON_ICONS[d.season]??'✨'}</p>
+            <p className="text-xs">{SEASON_ICONS[d.season] ?? '✨'}</p>
           </div>
         ))}
       </div>
@@ -148,7 +156,7 @@ function LifecycleChart({ data }: { data: LifecycleItem[] }) {
         {data.map(d => (
           <div key={d.age} className="flex items-start gap-2">
             <span className="text-xs font-bold text-gray-500 w-8 flex-shrink-0">{d.age}</span>
-            <span className="text-xs" style={{ color: SEASON_COLORS[d.season]??'#fff' }}>{SEASON_ICONS[d.season]} {d.season}</span>
+            <span className="text-xs" style={{ color: SEASON_COLORS[d.season] ?? '#fff' }}>{SEASON_ICONS[d.season]} {d.season}</span>
             <span className="text-xs text-gray-400">{d.desc}</span>
           </div>
         ))}
@@ -157,25 +165,28 @@ function LifecycleChart({ data }: { data: LifecycleItem[] }) {
   )
 }
 
+// ─── 판결문 카드 ─────────────────────────────────────
 function TitleCard({ item, charColor, idx }: { item: SajuTitle; charColor: string; idx: number }) {
-  const [open, setOpen] = useState(false)
   return (
     <div className="rounded-2xl overflow-hidden border" style={{ borderColor: `${charColor}40`, background: '#111118' }}>
       <div className="p-4">
         <div className="flex items-start gap-3">
           <span className="text-xs font-bold px-2 py-1 rounded-full flex-shrink-0"
-            style={{ background: `${charColor}25`, color: charColor }}>{idx+1}</span>
-          <p className="font-bold text-base leading-snug text-white">{item.title}</p>
+            style={{ background: `${charColor}25`, color: charColor }}>{idx + 1}</span>
+          <div>
+            <p className="font-bold text-base leading-snug text-white">{item.title}</p>
+            {item.teaser && <p className="text-xs text-gray-500 mt-1">{item.teaser}</p>}
+          </div>
         </div>
         {item.content && (
           <div className="text-gray-300 text-sm leading-relaxed mt-3">
-            {item.content.split('\n').map((line, i) => (
+            {item.content.split('\n').map((line, i) =>
               line.startsWith('⚠️')
                 ? <p key={i} className="mt-4 text-yellow-300 font-medium">{line}</p>
                 : line === ''
                   ? <div key={i} className="h-2" />
                   : <p key={i}>{line}</p>
-            ))}
+            )}
           </div>
         )}
       </div>
@@ -183,6 +194,31 @@ function TitleCard({ item, charColor, idx }: { item: SajuTitle; charColor: strin
   )
 }
 
+// ─── 잠금 카드 (유료) ───────────────────────────────
+function LockedCard({ item, charColor, idx }: { item: SajuTitle; charColor: string; idx: number }) {
+  return (
+    <div className="rounded-2xl overflow-hidden border border-gray-800 bg-[#111118] relative">
+      <div className="p-4">
+        <div className="flex items-start gap-3">
+          <span className="text-xs font-bold px-2 py-1 rounded-full flex-shrink-0 bg-gray-800 text-gray-500">{idx + 1}</span>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-base leading-snug text-white">{item.title}</p>
+            {item.teaser && <p className="text-xs text-gray-600 mt-1">{item.teaser}</p>}
+          </div>
+          <span className="text-gray-600 flex-shrink-0 text-lg">🔒</span>
+        </div>
+        <div className="mt-3 h-16 rounded-xl overflow-hidden relative">
+          <div className="text-gray-600 text-sm leading-relaxed line-clamp-3 blur-sm select-none">
+            {item.content?.slice(0, 80) ?? '풀이 내용이 잠겨있어요.'}
+          </div>
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#111118]" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── 메인 페이지 ─────────────────────────────────────
 export default function SajuPage() {
   const router = useRouter()
   const [stage, setStage] = useState<Stage>('input')
@@ -198,6 +234,10 @@ export default function SajuPage() {
     name: '', year: '1990', month: '1', day: '1', hour: '', gender: 'male',
   })
 
+  // 최신 결과를 저장 콜백에서 안전하게 참조하기 위한 ref
+  const finalResultRef = useRef<Partial<SajuResult>>({})
+  const finalManseRef  = useRef<ManseData | null>(null)
+
   const isRomance = form.questionIntent === '연애/결혼'
 
   const handleSubmit = async () => {
@@ -205,6 +245,8 @@ export default function SajuPage() {
     setStage('loading')
     setResult({})
     setManse(null)
+    finalResultRef.current = {}
+    finalManseRef.current  = null
 
     try {
       const res = await fetch('/api/saju', {
@@ -215,48 +257,61 @@ export default function SajuPage() {
           partnerInfo: isRomance ? partnerForm : undefined,
         }),
       })
-      if (!res.body) return
+      if (!res.body) throw new Error('응답 body 없음')
 
-      const reader = res.body.getReader()
+      const reader  = res.body.getReader()
       const decoder = new TextDecoder()
       let accumulated = ''
-      let finalResult: Partial<SajuResult> = {}
-      let finalManse: ManseData | null = null
+      let done = false
 
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        const chunk = decoder.decode(value)
+      // ── 스트림 읽기 (DONE 플래그로 while 탈출) ──────────
+      while (!done) {
+        const { done: streamDone, value } = await reader.read()
+        if (streamDone) break
+
+        const chunk = decoder.decode(value, { stream: true })
         for (const line of chunk.split('\n')) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6)
-            if (data === '[DONE]') break
-            try {
-              const parsed = JSON.parse(data)
-              if (parsed.type === 'manse') {
-                finalManse = parsed.data
-                setManse(parsed.data)
-                continue
-              }
-              if (parsed.text) {
-                accumulated += parsed.text
-                try {
-                  const clean = accumulated.replace(/```json/g,'').replace(/```/g,'').trim()
-                  const s = clean.indexOf('{'), e = clean.lastIndexOf('}')
-                  if (s !== -1 && e !== -1) {
-                    finalResult = JSON.parse(clean.slice(s, e+1))
-                    setResult(finalResult)
-                  }
-                } catch (parseErr) {
-                  console.log('파싱 중...', accumulated.length, '글자')
+          if (!line.startsWith('data: ')) continue
+          const data = line.slice(6).trim()
+
+          if (data === '[DONE]') {
+            done = true  // while 탈출
+            break
+          }
+
+          try {
+            const parsed = JSON.parse(data)
+
+            // 만세력 이벤트
+            if (parsed.type === 'manse') {
+              finalManseRef.current = parsed.data
+              setManse(parsed.data)
+              continue
+            }
+
+            // 텍스트 청크 누적
+            if (parsed.text) {
+              accumulated += parsed.text
+              // 중간에 완성된 JSON이면 미리 파싱해서 화면 반영
+              try {
+                const cleanStr = accumulated.replace(/```json/g,'').replace(/```/g,'').trim()
+                const s = cleanStr.indexOf('{'), e = cleanStr.lastIndexOf('}')
+                if (s !== -1 && e > s) {
+                  const interim = JSON.parse(cleanStr.slice(s, e + 1))
+                  finalResultRef.current = interim
+                  setResult(interim)
                 }
+              } catch {
+                // 아직 JSON 미완성 — 무시하고 계속 누적
               }
-            } catch {}
+            }
+          } catch {
+            // JSON 파싱 실패 — 무시
           }
         }
       }
 
-      // 스트리밍 완료 → 자동 저장
+      // ── 스트리밍 완료 → 자동 저장 ──────────────────────
       setStage('saving')
       try {
         const saveRes = await fetch('/api/readings/save', {
@@ -267,34 +322,35 @@ export default function SajuPage() {
             occupationId: form.occupation,
             sajuData: {
               form: { ...form, calType },
-              saju: finalManse,
+              saju: finalManseRef.current,
               partner: isRomance ? partnerForm : null,
             },
-            aiResult: JSON.stringify(finalResult),
+            aiResult: JSON.stringify(finalResultRef.current),
             isPaid: false,
           }),
         })
         if (saveRes.ok) {
           const { shareId } = await saveRes.json()
-          // 저장 성공 → result 페이지로 이동
           router.push(`/result/${shareId}`)
           return
         }
       } catch (saveErr) {
-        console.error('저장 실패 (무시):', saveErr)
+        console.error('[사주야] 저장 실패 (fallback):', saveErr)
       }
 
       // 저장 실패해도 결과는 보여줌
       setStage('result')
     } catch (e) {
-      console.error(e)
+      console.error('[사주야] 분석 오류:', e)
       setStage('input')
     }
   }
 
+  // ── 로딩 / 저장 화면 ──────────────────────────────
   if (stage === 'loading') return <LoadingScreen name={form.name} character={selectedChar} />
-  if (stage === 'saving') return <LoadingScreen name={form.name} character={selectedChar} saving />
+  if (stage === 'saving')  return <LoadingScreen name={form.name} character={selectedChar} saving />
 
+  // ── 결과 화면 (저장 실패 fallback) ────────────────
   if (stage === 'result' && result.titles) {
     const freeTitles = result.titles.filter(t => t.is_free)
     const paidTitles = result.titles.filter(t => !t.is_free)
@@ -311,22 +367,35 @@ export default function SajuPage() {
 
           {manse && <ManseTable manse={manse} charColor={selectedChar.color} />}
 
-          <div className="mb-2">
-            <p className="text-xs text-gray-500 mb-2 font-medium">✨ 무료 판결 3가지</p>
+          {/* 무료 판결 */}
+          <div className="mb-4">
+            <p className="text-xs text-gray-500 mb-2 font-medium">✨ 무료 판결 {freeTitles.length}가지</p>
             <div className="space-y-3">
-              {freeTitles.map((t, i) => <TitleCard key={t.id} item={t} charColor={selectedChar.color} idx={i} />)}
+              {freeTitles.map((t, i) => (
+                <TitleCard key={t.id} item={t} charColor={selectedChar.color} idx={i} />
+              ))}
             </div>
           </div>
 
-              {paidTitles.length > 0 && (
+          {/* 유료 판결 (잠금) */}
+          {paidTitles.length > 0 && (
             <div className="mt-4">
               <p className="text-xs text-gray-500 font-medium mb-2">🔒 잠긴 판결 {paidTitles.length}개</p>
               <div className="space-y-2">
-                {paidTitles.map((t, i) => <TitleCard key={t.id} item={t} charColor={selectedChar.color} idx={i+3} />)}
+                {paidTitles.map((t, i) => (
+                  <LockedCard key={t.id} item={t} charColor={selectedChar.color} idx={i + freeTitles.length} />
+                ))}
               </div>
+              <button
+                className="w-full mt-3 py-3.5 rounded-2xl font-bold text-sm text-white"
+                style={{ background: `linear-gradient(135deg, ${selectedChar.color}, ${selectedChar.color}bb)` }}
+              >
+                🔓 전체 {paidTitles.length}개 열기 — 990원
+              </button>
             </div>
           )}
 
+          {/* 전략 분석 */}
           {result.strategy && (
             <div className="mt-6 space-y-3">
               <div className="flex items-center gap-2 mb-1">
@@ -370,6 +439,7 @@ export default function SajuPage() {
     )
   }
 
+  // ── 입력 화면 ────────────────────────────────────
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
       <div className="max-w-md mx-auto px-4 pt-6">
@@ -500,7 +570,7 @@ export default function SajuPage() {
           </div>
         </div>
 
-        {/* 상대방 정보 */}
+        {/* 상대방 정보 (연애/결혼 선택 시) */}
         {isRomance && (
           <div className="bg-[#111118] rounded-2xl p-4 mb-3 border space-y-3"
             style={{ borderColor: `${selectedChar.color}40` }}>
