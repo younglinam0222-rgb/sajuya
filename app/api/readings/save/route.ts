@@ -16,21 +16,20 @@ export async function POST(req: NextRequest) {
     const shareId = randomUUID().replace(/-/g, '').slice(0, 12)
 
     const { error } = await supabase.from('readings').insert({
-      share_id: shareId,
-      user_id: token?.sub ?? null,
-      user_email: token?.email ?? null,
+      share_id:     shareId,
+      user_id:      token?.sub   ?? null,
+      user_email:   token?.email ?? null,
       character_id: characterId,
       occupation_id: occupationId ?? 'general',
-      saju_data: JSON.stringify(sajuData),
-      ai_result: aiResult,
-      is_paid: isPaid ?? false,
+      saju_data:    sajuData,   // ✅ 수정: jsonb 컬럼에 객체 그대로 저장 (stringify 제거)
+      ai_result:    aiResult,
+      is_paid:      isPaid ?? false,
     })
 
     if (error) throw error
-
     return NextResponse.json({ shareId })
   } catch (e) {
-    console.error(e)
+    console.error('[사주야] 저장 실패:', e)
     return NextResponse.json({ error: '저장 실패' }, { status: 500 })
   }
 }
