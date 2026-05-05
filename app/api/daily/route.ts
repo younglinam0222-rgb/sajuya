@@ -69,11 +69,12 @@ const CHARACTER_VOICE: Record<string, string> = {
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, year, month, day, hour, gender, characterId } = await req.json()
+    const { name, year, month, day, hour, gender, characterId, calType } = await req.json()
 
     const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }))
     const todayStr  = `${now.getFullYear()}년 ${now.getMonth()+1}월 ${now.getDate()}일`
     const genderStr = gender === 'male' ? '남성' : '여성'
+    const calTypeStr = calType === 'lunar' ? '음력' : '양력'
     const age       = now.getFullYear() - parseInt(year) + 1
 
     const manse      = calcManse(parseInt(year), parseInt(month), parseInt(day), hour)
@@ -91,7 +92,7 @@ ${voice}
 오늘은 ${todayStr}이야.
 오늘 날짜 일주: ${todayPillar.stem}${todayPillar.branch} (${todayPillar.stemKr}${todayPillar.branchKr})
 
-상담자: ${name} (${year}년 ${month}월 ${day}일생, ${manse.animal}띠, ${genderStr}, ${age}세)
+상담자: ${name} (${year}년 ${month}월 ${day}일생 ${calTypeStr}, ${manse.animal}띠, ${genderStr}, ${age}세)
 사주 기운: ${elementDesc}
 일간: ${manse.dayPillar.stem}(${manse.dayPillar.stemKr}) — ${manse.dayPillar.stemElement} 기운
 연주: ${manse.yearPillar.stem}${manse.yearPillar.branch} / 월주: ${manse.monthPillar.stem}${manse.monthPillar.branch} / 일주: ${manse.dayPillar.stem}${manse.dayPillar.branch} / 시주: ${manse.hourPillar ? manse.hourPillar.stem+manse.hourPillar.branch : '미상'}
