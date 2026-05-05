@@ -49,7 +49,6 @@ const LOADING_TIPS = [
 
 type Stage = 'input' | 'loading' | 'saving' | 'result'
 
-// ─── 만세력 테이블 ────────────────────────────────────
 function ManseTable({ manse, charColor }: { manse: ManseData; charColor: string }) {
   const pillars = [
     { label: '시주', p: manse.hourPillar },
@@ -100,7 +99,6 @@ function ManseTable({ manse, charColor }: { manse: ManseData; charColor: string 
   )
 }
 
-// ─── 로딩 화면 ───────────────────────────────────────
 function LoadingScreen({ name, character, saving }: { name: string; character: typeof CHARACTERS[0]; saving?: boolean }) {
   const [tipIdx, setTipIdx] = useState(0)
   const [progress, setProgress] = useState(0)
@@ -125,7 +123,6 @@ function LoadingScreen({ name, character, saving }: { name: string; character: t
   )
 }
 
-// ─── 라이프사이클 차트 ───────────────────────────────
 function LifecycleChart({ data }: { data: LifecycleItem[] }) {
   if (!data?.length) return null
   const maxScore = Math.max(...data.map(d => d.score), 1)
@@ -136,11 +133,7 @@ function LifecycleChart({ data }: { data: LifecycleItem[] }) {
         {data.map(d => (
           <div key={d.age} className="flex-1 flex flex-col items-center gap-1">
             <span className="text-xs text-gray-400">{d.score}</span>
-            <div className="w-full rounded-t-lg" style={{
-              height: `${Math.max((d.score / maxScore) * 100, 8)}%`,
-              background: SEASON_COLORS[d.season] ?? '#8B5CF6',
-              minHeight: 8,
-            }} />
+            <div className="w-full rounded-t-lg" style={{ height: `${Math.max((d.score/maxScore)*100,8)}%`, background: SEASON_COLORS[d.season]??'#8B5CF6', minHeight: 8 }} />
           </div>
         ))}
       </div>
@@ -148,7 +141,7 @@ function LifecycleChart({ data }: { data: LifecycleItem[] }) {
         {data.map(d => (
           <div key={d.age} className="flex-1 text-center">
             <p className="text-xs text-gray-400">{d.age}</p>
-            <p className="text-xs">{SEASON_ICONS[d.season] ?? '✨'}</p>
+            <p className="text-xs">{SEASON_ICONS[d.season]??'✨'}</p>
           </div>
         ))}
       </div>
@@ -156,7 +149,7 @@ function LifecycleChart({ data }: { data: LifecycleItem[] }) {
         {data.map(d => (
           <div key={d.age} className="flex items-start gap-2">
             <span className="text-xs font-bold text-gray-500 w-8 flex-shrink-0">{d.age}</span>
-            <span className="text-xs" style={{ color: SEASON_COLORS[d.season] ?? '#fff' }}>{SEASON_ICONS[d.season]} {d.season}</span>
+            <span className="text-xs" style={{ color: SEASON_COLORS[d.season]??'#fff' }}>{SEASON_ICONS[d.season]} {d.season}</span>
             <span className="text-xs text-gray-400">{d.desc}</span>
           </div>
         ))}
@@ -165,28 +158,25 @@ function LifecycleChart({ data }: { data: LifecycleItem[] }) {
   )
 }
 
-// ─── 판결문 카드 ─────────────────────────────────────
+// ✅ 수정: 데드코드(open state) 제거
 function TitleCard({ item, charColor, idx }: { item: SajuTitle; charColor: string; idx: number }) {
   return (
     <div className="rounded-2xl overflow-hidden border" style={{ borderColor: `${charColor}40`, background: '#111118' }}>
       <div className="p-4">
         <div className="flex items-start gap-3">
           <span className="text-xs font-bold px-2 py-1 rounded-full flex-shrink-0"
-            style={{ background: `${charColor}25`, color: charColor }}>{idx + 1}</span>
-          <div>
-            <p className="font-bold text-base leading-snug text-white">{item.title}</p>
-            {item.teaser && <p className="text-xs text-gray-500 mt-1">{item.teaser}</p>}
-          </div>
+            style={{ background: `${charColor}25`, color: charColor }}>{idx+1}</span>
+          <p className="font-bold text-base leading-snug text-white">{item.title}</p>
         </div>
         {item.content && (
           <div className="text-gray-300 text-sm leading-relaxed mt-3">
-            {item.content.split('\n').map((line, i) =>
+            {item.content.split('\n').map((line, i) => (
               line.startsWith('⚠️')
                 ? <p key={i} className="mt-4 text-yellow-300 font-medium">{line}</p>
                 : line === ''
                   ? <div key={i} className="h-2" />
                   : <p key={i}>{line}</p>
-            )}
+            ))}
           </div>
         )}
       </div>
@@ -194,31 +184,6 @@ function TitleCard({ item, charColor, idx }: { item: SajuTitle; charColor: strin
   )
 }
 
-// ─── 잠금 카드 (유료) ───────────────────────────────
-function LockedCard({ item, charColor, idx }: { item: SajuTitle; charColor: string; idx: number }) {
-  return (
-    <div className="rounded-2xl overflow-hidden border border-gray-800 bg-[#111118] relative">
-      <div className="p-4">
-        <div className="flex items-start gap-3">
-          <span className="text-xs font-bold px-2 py-1 rounded-full flex-shrink-0 bg-gray-800 text-gray-500">{idx + 1}</span>
-          <div className="flex-1 min-w-0">
-            <p className="font-bold text-base leading-snug text-white">{item.title}</p>
-            {item.teaser && <p className="text-xs text-gray-600 mt-1">{item.teaser}</p>}
-          </div>
-          <span className="text-gray-600 flex-shrink-0 text-lg">🔒</span>
-        </div>
-        <div className="mt-3 h-16 rounded-xl overflow-hidden relative">
-          <div className="text-gray-600 text-sm leading-relaxed line-clamp-3 blur-sm select-none">
-            {item.content?.slice(0, 80) ?? '풀이 내용이 잠겨있어요.'}
-          </div>
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#111118]" />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── 메인 페이지 ─────────────────────────────────────
 export default function SajuPage() {
   const router = useRouter()
   const [stage, setStage] = useState<Stage>('input')
@@ -234,7 +199,7 @@ export default function SajuPage() {
     name: '', year: '1990', month: '1', day: '1', hour: '', gender: 'male',
   })
 
-  // 최신 결과를 저장 콜백에서 안전하게 참조하기 위한 ref
+  // ✅ 수정: ref로 저장 시 stale 클로저 방지
   const finalResultRef = useRef<Partial<SajuResult>>({})
   const finalManseRef  = useRef<ManseData | null>(null)
 
@@ -257,61 +222,47 @@ export default function SajuPage() {
           partnerInfo: isRomance ? partnerForm : undefined,
         }),
       })
-      if (!res.body) throw new Error('응답 body 없음')
+      if (!res.body) return
 
       const reader  = res.body.getReader()
       const decoder = new TextDecoder()
       let accumulated = ''
+      // ✅ 수정: done 플래그로 while 루프 탈출
       let done = false
 
-      // ── 스트림 읽기 (DONE 플래그로 while 탈출) ──────────
       while (!done) {
         const { done: streamDone, value } = await reader.read()
         if (streamDone) break
-
         const chunk = decoder.decode(value, { stream: true })
         for (const line of chunk.split('\n')) {
-          if (!line.startsWith('data: ')) continue
-          const data = line.slice(6).trim()
-
-          if (data === '[DONE]') {
-            done = true  // while 탈출
-            break
-          }
-
-          try {
-            const parsed = JSON.parse(data)
-
-            // 만세력 이벤트
-            if (parsed.type === 'manse') {
-              finalManseRef.current = parsed.data
-              setManse(parsed.data)
-              continue
-            }
-
-            // 텍스트 청크 누적
-            if (parsed.text) {
-              accumulated += parsed.text
-              // 중간에 완성된 JSON이면 미리 파싱해서 화면 반영
-              try {
-                const cleanStr = accumulated.replace(/```json/g,'').replace(/```/g,'').trim()
-                const s = cleanStr.indexOf('{'), e = cleanStr.lastIndexOf('}')
-                if (s !== -1 && e > s) {
-                  const interim = JSON.parse(cleanStr.slice(s, e + 1))
-                  finalResultRef.current = interim
-                  setResult(interim)
-                }
-              } catch {
-                // 아직 JSON 미완성 — 무시하고 계속 누적
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6).trim()
+            if (data === '[DONE]') { done = true; break }
+            try {
+              const parsed = JSON.parse(data)
+              if (parsed.type === 'manse') {
+                finalManseRef.current = parsed.data
+                setManse(parsed.data)
+                continue
               }
-            }
-          } catch {
-            // JSON 파싱 실패 — 무시
+              if (parsed.text) {
+                accumulated += parsed.text
+                try {
+                  const clean = accumulated.replace(/```json/g,'').replace(/```/g,'').trim()
+                  const s = clean.indexOf('{'), e = clean.lastIndexOf('}')
+                  if (s !== -1 && e !== -1) {
+                    const interim = JSON.parse(clean.slice(s, e+1))
+                    finalResultRef.current = interim
+                    setResult(interim)
+                  }
+                } catch { /* 누적 중 */ }
+              }
+            } catch {}
           }
         }
       }
 
-      // ── 스트리밍 완료 → 자동 저장 ──────────────────────
+      // 저장
       setStage('saving')
       try {
         const saveRes = await fetch('/api/readings/save', {
@@ -335,25 +286,22 @@ export default function SajuPage() {
           return
         }
       } catch (saveErr) {
-        console.error('[사주야] 저장 실패 (fallback):', saveErr)
+        console.error('저장 실패 (무시):', saveErr)
       }
 
-      // 저장 실패해도 결과는 보여줌
       setStage('result')
     } catch (e) {
-      console.error('[사주야] 분석 오류:', e)
+      console.error(e)
       setStage('input')
     }
   }
 
-  // ── 로딩 / 저장 화면 ──────────────────────────────
   if (stage === 'loading') return <LoadingScreen name={form.name} character={selectedChar} />
-  if (stage === 'saving')  return <LoadingScreen name={form.name} character={selectedChar} saving />
+  if (stage === 'saving') return <LoadingScreen name={form.name} character={selectedChar} saving />
 
-  // ── 결과 화면 (저장 실패 fallback) ────────────────
   if (stage === 'result' && result.titles) {
-    const freeTitles = result.titles.filter(t => t.is_free)
-    const paidTitles = result.titles.filter(t => !t.is_free)
+    // 런칭 프로모션: 전부 무료
+    const allTitles = result.titles
     return (
       <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
         <div className="max-w-md mx-auto px-4 pt-6">
@@ -367,35 +315,13 @@ export default function SajuPage() {
 
           {manse && <ManseTable manse={manse} charColor={selectedChar.color} />}
 
-          {/* 무료 판결 */}
-          <div className="mb-4">
-            <p className="text-xs text-gray-500 mb-2 font-medium">✨ 무료 판결 {freeTitles.length}가지</p>
+          <div className="mb-2">
+            <p className="text-xs text-gray-500 mb-2 font-medium">✨ 판결 {allTitles.length}가지</p>
             <div className="space-y-3">
-              {freeTitles.map((t, i) => (
-                <TitleCard key={t.id} item={t} charColor={selectedChar.color} idx={i} />
-              ))}
+              {allTitles.map((t, i) => <TitleCard key={t.id} item={t} charColor={selectedChar.color} idx={i} />)}
             </div>
           </div>
 
-          {/* 유료 판결 (잠금) */}
-          {paidTitles.length > 0 && (
-            <div className="mt-4">
-              <p className="text-xs text-gray-500 font-medium mb-2">🔒 잠긴 판결 {paidTitles.length}개</p>
-              <div className="space-y-2">
-                {paidTitles.map((t, i) => (
-                  <LockedCard key={t.id} item={t} charColor={selectedChar.color} idx={i + freeTitles.length} />
-                ))}
-              </div>
-              <button
-                className="w-full mt-3 py-3.5 rounded-2xl font-bold text-sm text-white"
-                style={{ background: `linear-gradient(135deg, ${selectedChar.color}, ${selectedChar.color}bb)` }}
-              >
-                🔓 전체 {paidTitles.length}개 열기 — 990원
-              </button>
-            </div>
-          )}
-
-          {/* 전략 분석 */}
           {result.strategy && (
             <div className="mt-6 space-y-3">
               <div className="flex items-center gap-2 mb-1">
@@ -439,7 +365,6 @@ export default function SajuPage() {
     )
   }
 
-  // ── 입력 화면 ────────────────────────────────────
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
       <div className="max-w-md mx-auto px-4 pt-6">
@@ -570,7 +495,7 @@ export default function SajuPage() {
           </div>
         </div>
 
-        {/* 상대방 정보 (연애/결혼 선택 시) */}
+        {/* 상대방 정보 */}
         {isRomance && (
           <div className="bg-[#111118] rounded-2xl p-4 mb-3 border space-y-3"
             style={{ borderColor: `${selectedChar.color}40` }}>
