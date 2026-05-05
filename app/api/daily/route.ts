@@ -3,7 +3,6 @@ import Anthropic from '@anthropic-ai/sdk'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
-// ─── 만세력 계산 (saju/route.ts와 동일) ──────────────
 const STEMS    = ['甲','乙','丙','丁','戊','己','庚','辛','壬','癸']
 const BRANCHES = ['子','丑','寅','卯','辰','巳','午','未','申','酉','戌','亥']
 const STEM_KR  = ['갑','을','병','정','무','기','경','신','임','계']
@@ -40,33 +39,27 @@ function calcHourPillar(h: number, dayStemIdx: number) {
 }
 function calcTodayPillar() {
   const now = new Date()
-  const y = now.getFullYear(), m = now.getMonth() + 1, d = now.getDate()
-  return calcDayPillar(y, m, d)
+  return calcDayPillar(now.getFullYear(), now.getMonth() + 1, now.getDate())
 }
-
 function calcManse(year: number, month: number, day: number, hourStr?: string) {
   const yp = calcYearPillar(year)
   const mp = calcMonthPillar(year, month)
   const dp = calcDayPillar(year, month, day)
   const dayStemIdx = dp.stemIdx
-
   let hp = null
   if (hourStr) {
     const h = parseInt(hourStr.split(':')[0])
     if (!isNaN(h) && h >= 0 && h <= 23) hp = calcHourPillar(h, dayStemIdx)
   }
-
-  const elements: Record<string, number> = { 木:0, 火:0, 土:0, 金:0, 水:0 }
+  const elements: Record<string, number> = { '木':0, '火':0, '土':0, '金':0, '水':0 }
   const pillars = [yp, mp, dp, ...(hp ? [hp] : [])]
   pillars.forEach(p => {
     elements[p.stemElement] = (elements[p.stemElement]||0) + 1
     elements[p.branchElement] = (elements[p.branchElement]||0) + 1
   })
-
   return { yearPillar: yp, monthPillar: mp, dayPillar: dp, hourPillar: hp, elementCount: elements, animal: ANIMALS[yp.branchIdx] }
 }
 
-// ─── 캐릭터 말투 ────────────────────────────────────
 const CHARACTER_VOICE: Record<string, string> = {
   baekhalma: `너는 건물주 백할매야. 직설적이고 쿨한 할머니. "야", "봐봐", "쯧쯧" 씀. 팩폭 뒤에 걱정 한마디 붙임.`,
   doRyeong:  `너는 근본도령이야. 친한 형/오빠가 솔직하게 말해주는 느낌. "야", "솔직히", "있잖아" 씀.`,
@@ -83,8 +76,7 @@ export async function POST(req: NextRequest) {
     const genderStr = gender === 'male' ? '남성' : '여성'
     const age       = now.getFullYear() - parseInt(year) + 1
 
-    // 만세력
-    const manse    = calcManse(parseInt(year), parseInt(month), parseInt(day), hour)
+    const manse      = calcManse(parseInt(year), parseInt(month), parseInt(day), hour)
     const todayPillar = calcTodayPillar()
 
     const elementNames: Record<string,string> = { '木':'나무', '火':'불', '土':'땅', '金':'금속', '水':'물' }
@@ -101,54 +93,61 @@ ${voice}
 
 상담자: ${name} (${year}년 ${month}월 ${day}일생, ${manse.animal}띠, ${genderStr}, ${age}세)
 사주 기운: ${elementDesc}
-일간(핵심기운): ${manse.dayPillar.stem}(${manse.dayPillar.stemKr}) — ${manse.dayPillar.stemElement} 기운
+일간: ${manse.dayPillar.stem}(${manse.dayPillar.stemKr}) — ${manse.dayPillar.stemElement} 기운
 연주: ${manse.yearPillar.stem}${manse.yearPillar.branch} / 월주: ${manse.monthPillar.stem}${manse.monthPillar.branch} / 일주: ${manse.dayPillar.stem}${manse.dayPillar.branch} / 시주: ${manse.hourPillar ? manse.hourPillar.stem+manse.hourPillar.branch : '미상'}
 
 오늘 날짜 기운과 이 사람 사주 기운이 어떻게 만나는지 분석해서 일일운세를 줘.
 캐릭터 말투 100% 유지. 어려운 명리 용어 절대 금지. 20-30대 말로.
-
-[말투 규칙]
-- "~가 아니라 ~야" / "봐봐, ~잖아" / "솔직히 ~" 같은 패턴 섞어서
+- "~가 아니라 ~야" / "봐봐, ~잖아" / "솔직히 ~" 패턴 섞어서
 - 판결하듯이 써. 읽으면 "맞다" 싶게
 - 각 섹션 3~4문장. 구체적으로.
 
-반드시 아래 JSON만 출력. 마크다운 없이.
+반드시 아래 JSON만 출력. 마크다운 없이. 점수는 0~100 사이 정수.
 
 {
-  "overall": "오늘 총운 3~4문장. 오늘 에너지 흐름 직설 판결.",
+  "overall": "오늘 총운 3~4문장",
   "overall_score": 75,
-  "money": "재물운 2~3문장. 오늘 돈 관련 판결.",
+  "money": "재물운 2~3문장",
   "money_score": 70,
-  "love": "연애운 2~3문장. 오늘 인연/관계 판결.",
+  "love": "연애운 2~3문장",
   "love_score": 80,
-  "health": "건강운 2~3문장. 오늘 몸과 마음 상태.",
+  "health": "건강운 2~3문장",
   "health_score": 65,
   "lucky": "행운의 방향: OO / 행운의 색: OO / 행운의 숫자: OO / 오늘의 한마디: 한문장",
-  "warning": "오늘 조심할 것 2문장. 구체적으로.",
-  "today_word": "오늘을 한마디로 — 짧고 임팩트 있게 (예: '참아라, 오늘은 지는 게 이기는 거다')"
+  "warning": "오늘 조심할 것 2문장",
+  "today_word": "오늘을 한마디로 — 짧고 임팩트있게"
 }
 `
 
-    const stream = client.messages.stream({
+    // ── 논스트리밍으로 완성 후 전송 (파싱 안정성) ──────
+    const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 1500,
-      system: `너는 사주야 서비스의 일일운세 캐릭터야. 반드시 JSON만 출력. 마크다운 코드블록 절대 금지.`,
+      system: '너는 사주야 서비스의 일일운세 캐릭터야. 반드시 순수 JSON만 출력. 마크다운 코드블록 절대 금지.',
       messages: [{ role: 'user', content: prompt }],
     })
 
+    const raw = response.content[0].type === 'text' ? response.content[0].text : ''
+    const clean = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
+    const s = clean.indexOf('{'), e = clean.lastIndexOf('}')
+    if (s === -1 || e === -1) throw new Error('JSON 파싱 실패')
+
+    const parsed = JSON.parse(clean.slice(s, e + 1))
+    console.log('[일일운세] 생성 완료:', response.usage.output_tokens, 'tok')
+
+    // ── SSE로 만세력 + 결과 전송 ────────────────────────
     const encoder = new TextEncoder()
     const readable = new ReadableStream({
-      async start(controller) {
-        // 만세력 데이터 먼저 전송
+      start(controller) {
         controller.enqueue(encoder.encode(
           `data: ${JSON.stringify({ type: 'manse', data: { ...manse, todayPillar } })}\n\n`
         ))
-        for await (const chunk of stream) {
-          if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
-            controller.enqueue(encoder.encode(
-              `data: ${JSON.stringify({ text: chunk.delta.text })}\n\n`
-            ))
-          }
+        const jsonStr = JSON.stringify(parsed)
+        const chunkSize = 200
+        for (let i = 0; i < jsonStr.length; i += chunkSize) {
+          controller.enqueue(encoder.encode(
+            `data: ${JSON.stringify({ text: jsonStr.slice(i, i + chunkSize) })}\n\n`
+          ))
         }
         controller.enqueue(encoder.encode('data: [DONE]\n\n'))
         controller.close()
