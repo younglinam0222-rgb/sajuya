@@ -278,18 +278,16 @@ export default function SajuPage() {
                     finalResult = JSON.parse(clean.slice(s, e+1))
                     setResult(finalResult)
                   }
-                } catch {}
+                } catch (parseErr) {
+                  console.log('파싱 중...', accumulated.length, '글자')
+                }
               }
             } catch {}
           }
         }
       }
 
-      // 스트리밍 완료 → 자동 저장 (titles 있을 때만)
-      if (!finalResult.titles?.length) {
-        setStage('result')
-        return
-      }
+      // 스트리밍 완료 → 자동 저장
       setStage('saving')
       try {
         const saveRes = await fetch('/api/readings/save', {
