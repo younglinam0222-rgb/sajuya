@@ -253,7 +253,7 @@ content 형식 규칙:
 
     const stream = client.messages.stream({
       model: 'claude-sonnet-4-5',
-      max_tokens: 4000,
+      max_tokens: 6000,
       system: `너는 ${character.name}이야. 사주를 쉽고 재미있게 풀어주는 캐릭터. 한자나 어려운 명리 용어는 절대 쓰지 않고, 20-30대가 바로 이해할 수 있는 말로만 설명해. 반드시 JSON만 출력하고 마크다운 없이.`,
       messages: [{ role: 'user', content: prompt }],
     })
