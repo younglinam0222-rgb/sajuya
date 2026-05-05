@@ -256,7 +256,17 @@ export default function ResultPage() {
                       style={{ background: `${charColor}25`, color: charColor }}>무료 {i+1}</span>
                     <p className="font-bold text-base leading-snug text-white">{t.title}</p>
                   </div>
-                  {t.content && <p className="text-gray-300 text-sm leading-relaxed mt-3 whitespace-pre-line">{t.content}</p>}
+                  {t.content && (
+                    <div className="text-gray-300 text-sm leading-relaxed mt-3">
+                      {t.content.split('\n').map((line, i) => (
+                        line.startsWith('⚠️')
+                          ? <p key={i} className="mt-4 text-yellow-300 font-medium">{line}</p>
+                          : line === ''
+                            ? <div key={i} className="h-2" />
+                            : <p key={i}>{line}</p>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -333,15 +343,15 @@ export default function ResultPage() {
                       )
                     })}
                   </div>
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     {strategy.lifecycle.map((d: any) => {
                       const colors: Record<string,string> = { '봄':'#10B981','여름':'#F59E0B','가을':'#F97316','겨울':'#3B82F6' }
                       const icons: Record<string,string> = { '봄':'🌱','여름':'☀️','가을':'🍂','겨울':'❄️' }
                       return (
-                        <div key={d.age} className="flex items-start gap-2">
-                          <span className="text-[10px] font-bold text-gray-500 w-8 flex-shrink-0">{d.age}</span>
-                          <span className="text-[10px]" style={{ color: colors[d.season]??'#fff' }}>{icons[d.season]} {d.season}</span>
-                          <span className="text-[10px] text-gray-400">{d.desc}</span>
+                        <div key={d.age} className="flex items-start gap-2 py-1 border-b border-gray-800 last:border-0">
+                          <span className="text-xs font-bold text-gray-500 w-8 flex-shrink-0">{d.age}</span>
+                          <span className="text-xs flex-shrink-0 w-14" style={{ color: colors[d.season]??'#fff' }}>{icons[d.season]} {d.season}</span>
+                          <span className="text-xs text-gray-400 leading-relaxed">{d.desc}</span>
                         </div>
                       )
                     })}
