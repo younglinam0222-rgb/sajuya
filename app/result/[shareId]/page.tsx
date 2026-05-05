@@ -165,9 +165,8 @@ export default function ResultPage() {
     { label: '연주', pillar: sajuData.yearPillar },
   ] : []
 
-  const freeTitles = titles.filter(t => t.is_free)
-  // is_paid true면 전체 공개, false면 잠금
-  const paidTitles = titles.filter(t => !t.is_free)
+  const freeTitles = titles          // 런칭 프로모션: 전부 무료 공개
+  const paidTitles: SajuTitle[] = [] // 잠금 없음 (유료 전환 시 원래대로 복구)
 
   return (
     <div className="bg-[#0a0a0a] min-h-screen text-white max-w-[430px] mx-auto pb-8">
