@@ -168,7 +168,17 @@ function TitleCard({ item, charColor, idx }: { item: SajuTitle; charColor: strin
               style={{ background: `${charColor}25`, color: charColor }}>무료 {idx+1}</span>
             <p className="font-bold text-base leading-snug text-white">{item.title}</p>
           </div>
-          {item.content && <p className="text-gray-300 text-sm leading-relaxed mt-3 whitespace-pre-line">{item.content}</p>}
+          {item.content && (
+                    <div className="text-gray-300 text-sm leading-relaxed mt-3">
+                      {item.content.split('\n').map((line, i) => (
+                        line.startsWith('⚠️')
+                          ? <p key={i} className="mt-4 text-yellow-300 font-medium">{line}</p>
+                          : line === ''
+                            ? <div key={i} className="h-2" />
+                            : <p key={i}>{line}</p>
+                      ))}
+                    </div>
+                  )}
         </div>
       </div>
     )
