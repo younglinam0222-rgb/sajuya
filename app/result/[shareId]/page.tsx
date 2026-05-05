@@ -308,10 +308,56 @@ export default function ResultPage() {
                   <p className="text-gray-300 text-sm leading-relaxed">{strategy.overview}</p>
                 </div>
               )}
+              {strategy.lifecycle?.length > 0 && (
+                <div className="rounded-2xl p-4 bg-[#111] border border-gray-800">
+                  <div className="flex items-center gap-2 mb-4"><span>📊</span><span className="font-bold text-sm text-white">나이대별 운의 흐름</span></div>
+                  <div className="flex items-end gap-2 h-28 mb-3">
+                    {strategy.lifecycle.map((d: any) => {
+                      const colors: Record<string,string> = { '봄':'#10B981','여름':'#F59E0B','가을':'#F97316','겨울':'#3B82F6' }
+                      return (
+                        <div key={d.age} className="flex-1 flex flex-col items-center gap-1">
+                          <span className="text-[10px] text-gray-400">{d.score}</span>
+                          <div className="w-full rounded-t-lg" style={{ height: `${Math.max((d.score/100)*100,8)}%`, background: colors[d.season]??'#8B5CF6', minHeight: 8 }} />
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div className="flex gap-2 mb-3">
+                    {strategy.lifecycle.map((d: any) => {
+                      const icons: Record<string,string> = { '봄':'🌱','여름':'☀️','가을':'🍂','겨울':'❄️' }
+                      return (
+                        <div key={d.age} className="flex-1 text-center">
+                          <p className="text-[10px] text-gray-400">{d.age}</p>
+                          <p className="text-xs">{icons[d.season]??'✨'}</p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div className="space-y-1.5">
+                    {strategy.lifecycle.map((d: any) => {
+                      const colors: Record<string,string> = { '봄':'#10B981','여름':'#F59E0B','가을':'#F97316','겨울':'#3B82F6' }
+                      const icons: Record<string,string> = { '봄':'🌱','여름':'☀️','가을':'🍂','겨울':'❄️' }
+                      return (
+                        <div key={d.age} className="flex items-start gap-2">
+                          <span className="text-[10px] font-bold text-gray-500 w-8 flex-shrink-0">{d.age}</span>
+                          <span className="text-[10px]" style={{ color: colors[d.season]??'#fff' }}>{icons[d.season]} {d.season}</span>
+                          <span className="text-[10px] text-gray-400">{d.desc}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
               {strategy.golden_period && (
                 <div className="rounded-2xl p-4 bg-[#111] border border-yellow-900/30">
                   <div className="flex items-center gap-2 mb-2"><span>🏆</span><span className="font-bold text-sm text-yellow-400">전성기는 언제?</span></div>
                   <p className="text-gray-300 text-sm leading-relaxed">{strategy.golden_period}</p>
+                </div>
+              )}
+              {strategy.peak_guide && (
+                <div className="rounded-2xl p-4 bg-[#111] border border-gray-800">
+                  <div className="flex items-center gap-2 mb-2"><span>🚀</span><span className="font-bold text-sm text-green-400">전성기 1000% 활용법</span></div>
+                  <p className="text-gray-300 text-sm leading-relaxed">{strategy.peak_guide}</p>
                 </div>
               )}
               {strategy.warning && (
