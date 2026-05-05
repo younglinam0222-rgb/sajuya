@@ -159,57 +159,26 @@ function LifecycleChart({ data }: { data: LifecycleItem[] }) {
 
 function TitleCard({ item, charColor, idx }: { item: SajuTitle; charColor: string; idx: number }) {
   const [open, setOpen] = useState(false)
-  if (item.is_free) {
-    return (
-      <div className="rounded-2xl overflow-hidden border" style={{ borderColor: `${charColor}40`, background: '#111118' }}>
-        <div className="p-4">
-          <div className="flex items-start gap-3">
-            <span className="text-xs font-bold px-2 py-1 rounded-full flex-shrink-0"
-              style={{ background: `${charColor}25`, color: charColor }}>무료 {idx+1}</span>
-            <p className="font-bold text-base leading-snug text-white">{item.title}</p>
-          </div>
-          {item.content && (
-                    <div className="text-gray-300 text-sm leading-relaxed mt-3">
-                      {item.content.split('\n').map((line, i) => (
-                        line.startsWith('⚠️')
-                          ? <p key={i} className="mt-4 text-yellow-300 font-medium">{line}</p>
-                          : line === ''
-                            ? <div key={i} className="h-2" />
-                            : <p key={i}>{line}</p>
-                      ))}
-                    </div>
-                  )}
-        </div>
-      </div>
-    )
-  }
   return (
-    <div className="rounded-2xl overflow-hidden border border-gray-800 bg-[#111118]">
-      <button className="w-full p-4 text-left" onClick={() => setOpen(!open)}>
+    <div className="rounded-2xl overflow-hidden border" style={{ borderColor: `${charColor}40`, background: '#111118' }}>
+      <div className="p-4">
         <div className="flex items-start gap-3">
-          <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-gray-800">🔒</div>
-          <div className="flex-1">
-            <p className="font-bold text-base leading-snug text-white">{item.title}</p>
-            <p className="text-gray-500 text-xs mt-1">{item.teaser}</p>
-          </div>
+          <span className="text-xs font-bold px-2 py-1 rounded-full flex-shrink-0"
+            style={{ background: `${charColor}25`, color: charColor }}>{idx+1}</span>
+          <p className="font-bold text-base leading-snug text-white">{item.title}</p>
         </div>
-      </button>
-      {open && (
-        <div className="px-4 pb-4 border-t border-gray-800">
-          <div className="mt-3 p-3 rounded-xl bg-gray-900">
-            <p className="text-xs text-gray-400 mb-1 leading-relaxed">{item.teaser}</p>
-            <button className="w-full mt-2 py-2.5 rounded-xl text-sm font-black text-white"
-              style={{ background: `linear-gradient(135deg, ${charColor}, ${charColor}bb)` }}>
-              🔓 이 판결만 열기 · 990원
-            </button>
-            <p className="text-center text-xs text-gray-600 mt-2">또는</p>
-            <button className="w-full mt-1 py-2 rounded-xl text-xs font-bold text-white"
-              style={{ background: '#1a1025', border: `1px solid ${charColor}40`, color: charColor }}>
-              전체 9개 한번에 열기 · 990원
-            </button>
+        {item.content && (
+          <div className="text-gray-300 text-sm leading-relaxed mt-3">
+            {item.content.split('\n').map((line, i) => (
+              line.startsWith('⚠️')
+                ? <p key={i} className="mt-4 text-yellow-300 font-medium">{line}</p>
+                : line === ''
+                  ? <div key={i} className="h-2" />
+                  : <p key={i}>{line}</p>
+            ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }
