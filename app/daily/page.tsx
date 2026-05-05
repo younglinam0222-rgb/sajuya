@@ -44,6 +44,94 @@ function getTodayKST() {
   })
 }
 
+// ─── 바이오리듬 차트 ──────────────────────────────────
+function BiorhythmChart({ result, charColor }: { result: Partial<DailyResult>; charColor: string }) {
+  const scores = [
+    { label: '총운', score: result.overall_score ?? 0, color: '#F59E0B', icon: '⭐' },
+    { label: '재물', score: result.money_score   ?? 0, color: '#10B981', icon: '💰' },
+    { label: '연애', score: result.love_score    ?? 0, color: '#EC4899', icon: '💕' },
+    { label: '건강', score: result.health_score  ?? 0, color: '#3B82F6', icon: '🌿' },
+  ]
+
+  // SVG 사인파 생성 (7일치 — 오늘 중심)
+  const W = 340, H = 100, days = 7, todayX = W / 2
+  const getY = (score: number, dayOffset: number, freq: number) => {
+    const base = H / 2
+    const amp  = (score / 100) * (H / 2 - 10)
+    return base - amp * Math.sin((dayOffset / days) * Math.PI * freq + Math.PI / 2)
+  }
+
+  const buildPath = (score: number, freq: number) => {
+    const pts: string[] = []
+    for (let i = 0; i <= W; i += 4) {
+      const dayOffset = ((i / W) * days) - days / 2
+      const y = getY(score, dayOffset, freq)
+      pts.push(`${i === 0 ? 'M' : 'L'} ${i} ${y}`)
+    }
+    return pts.join(' ')
+  }
+
+  return (
+    <div className="rounded-2xl p-4 bg-[#111118] border border-gray-800">
+      <div className="flex items-center gap-2 mb-3">
+        <span>📈</span>
+        <span className="font-bold text-sm text-white">오늘의 운세 바이오리듬</span>
+        <span className="text-xs text-gray-600 ml-auto">← 어제 · 오늘 · 내일 →</span>
+      </div>
+
+      {/* SVG 파형 차트 */}
+      <div className="relative overflow-hidden rounded-xl bg-[#0d0d0d] mb-3" style={{ height: H + 20 }}>
+        <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0">
+          {/* 중앙선 */}
+          <line x1="0" y1={H/2} x2={W} y2={H/2} stroke="#ffffff10" strokeWidth="1" strokeDasharray="4 4" />
+          {/* 오늘 수직선 */}
+          <line x1={todayX} y1="0" x2={todayX} y2={H} stroke="#ffffff20" strokeWidth="1" />
+
+          {/* 각 운세 파형 */}
+          {scores.map((s, i) => (
+            <path key={s.label}
+              d={buildPath(s.score, 1 + i * 0.15)}
+              fill="none"
+              stroke={s.color}
+              strokeWidth="1.5"
+              strokeOpacity="0.8"
+            />
+          ))}
+
+          {/* 오늘 점 표시 */}
+          {scores.map((s, i) => {
+            const y = getY(s.score, 0, 1 + i * 0.15)
+            return (
+              <circle key={s.label} cx={todayX} cy={y} r="3"
+                fill={s.color} stroke="#0d0d0d" strokeWidth="1.5" />
+            )
+          })}
+        </svg>
+
+        {/* 오늘 레이블 */}
+        <div className="absolute bottom-1 left-1/2 -translate-x-1/2">
+          <span className="text-[10px] text-gray-500 font-bold">오늘</span>
+        </div>
+      </div>
+
+      {/* 점수 범례 */}
+      <div className="grid grid-cols-4 gap-2">
+        {scores.map(s => (
+          <div key={s.label} className="text-center">
+            <div className="text-base mb-0.5">{s.icon}</div>
+            <div className="text-lg font-black" style={{ color: s.color }}>{s.score}</div>
+            <div className="text-[10px] text-gray-500">{s.label}</div>
+            {/* 미니 게이지 */}
+            <div className="mt-1 h-1 bg-gray-800 rounded-full overflow-hidden">
+              <div className="h-full rounded-full" style={{ width: `${s.score}%`, background: s.color }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── 점수 바 컴포넌트 ──────────────────────────────────
 function ScoreBar({ score, color }: { score: number; color: string }) {
   return (
@@ -146,6 +234,7 @@ export default function DailyPage() {
   const [result, setResult]     = useState<Partial<DailyResult>>({})
   const [manse, setManse]       = useState<ManseData | null>(null)
   const [selectedChar, setSelectedChar] = useState(CHARACTERS[0])
+  const [calType, setCalType] = useState<'solar'|'lunar'>('solar')
   const [form, setForm] = useState({
     name: '', year: '1990', month: '1', day: '1', hour: '', gender: 'female',
   })
@@ -161,7 +250,7 @@ export default function DailyPage() {
       const res = await fetch('/api/daily', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, characterId: selectedChar.id }),
+        body: JSON.stringify({ ...form, calType, characterId: selectedChar.id }),
       })
       if (!res.body) return
 
@@ -234,7 +323,7 @@ export default function DailyPage() {
           )}
 
           {/* 종합 점수 */}
-          {avgScore > 0 && (
+          {result.overall && (
             <div className="rounded-2xl p-4 bg-[#111118] border border-gray-800 mb-4">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm font-bold">📊 오늘의 운세 점수</span>
@@ -296,6 +385,11 @@ export default function DailyPage() {
                 </div>
                 <p className="text-red-200 text-sm leading-relaxed">{result.warning}</p>
               </div>
+            )}
+
+            {/* 바이오리듬 차트 */}
+            {result.overall !== undefined && (
+              <BiorhythmChart result={result} charColor={selectedChar.color} />
             )}
           </div>
 
@@ -361,6 +455,17 @@ export default function DailyPage() {
           {/* 생년월일 */}
           <div>
             <label className="text-xs text-gray-400 mb-1.5 block">생년월일</label>
+            <div className="flex gap-2 mb-2">
+              {(['solar','lunar'] as const).map(t => (
+                <button key={t} onClick={() => setCalType(t)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                  style={calType === t
+                    ? { background: selectedChar.color, color: 'white' }
+                    : { background: '#1F2937', color: '#9CA3AF', border: '1px solid #374151' }}>
+                  {t === 'solar' ? '양력' : '음력'}
+                </button>
+              ))}
+            </div>
             <div className="grid grid-cols-3 gap-2">
               <select value={form.year} onChange={e => setForm(f => ({ ...f, year: e.target.value }))}
                 className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none">
