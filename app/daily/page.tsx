@@ -467,10 +467,12 @@ export default function DailyPage() {
               ))}
             </div>
             <div className="grid grid-cols-3 gap-2">
-              <select value={form.year} onChange={e => setForm(f => ({ ...f, year: e.target.value }))}
-                className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none">
-                {YEARS.map(y => <option key={y} value={y}>{y}년</option>)}
-              </select>
+              <input
+                type="number" placeholder="출생연도" value={form.year}
+                min={1920} max={2010}
+                onChange={e => setForm(f => ({ ...f, year: e.target.value }))}
+                className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none"
+              />
               <select value={form.month} onChange={e => setForm(f => ({ ...f, month: e.target.value }))}
                 className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none">
                 {MONTHS.map(m => <option key={m} value={m}>{m}월</option>)}
