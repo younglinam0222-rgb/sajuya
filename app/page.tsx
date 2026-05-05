@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
@@ -158,48 +158,26 @@ function LifecycleChart({ data }: { data: LifecycleItem[] }) {
 }
 
 function TitleCard({ item, charColor, idx }: { item: SajuTitle; charColor: string; idx: number }) {
-  const [open, setOpen] = useState(false)
-  if (item.is_free) {
-    return (
-      <div className="rounded-2xl overflow-hidden border" style={{ borderColor: `${charColor}40`, background: '#111118' }}>
-        <div className="p-4">
-          <div className="flex items-start gap-3">
-            <span className="text-xs font-bold px-2 py-1 rounded-full flex-shrink-0"
-              style={{ background: `${charColor}25`, color: charColor }}>무료 {idx+1}</span>
-            <p className="font-bold text-base leading-snug text-white">{item.title}</p>
-          </div>
-          {item.content && <p className="text-gray-300 text-sm leading-relaxed mt-3 whitespace-pre-line">{item.content}</p>}
-        </div>
-      </div>
-    )
-  }
   return (
-    <div className="rounded-2xl overflow-hidden border border-gray-800 bg-[#111118]">
-      <button className="w-full p-4 text-left" onClick={() => setOpen(!open)}>
+    <div className="rounded-2xl overflow-hidden border" style={{ borderColor: `${charColor}40`, background: '#111118' }}>
+      <div className="p-4">
         <div className="flex items-start gap-3">
-          <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-gray-800">🔒</div>
-          <div className="flex-1">
-            <p className="font-bold text-base leading-snug text-white">{item.title}</p>
-            <p className="text-gray-500 text-xs mt-1">{item.teaser}</p>
-          </div>
+          <span className="text-xs font-bold px-2 py-1 rounded-full flex-shrink-0"
+            style={{ background: `${charColor}25`, color: charColor }}>{idx+1}</span>
+          <p className="font-bold text-base leading-snug text-white">{item.title}</p>
         </div>
-      </button>
-      {open && (
-        <div className="px-4 pb-4 border-t border-gray-800">
-          <div className="mt-3 p-3 rounded-xl bg-gray-900">
-            <p className="text-xs text-gray-400 mb-1 leading-relaxed">{item.teaser}</p>
-            <button className="w-full mt-2 py-2.5 rounded-xl text-sm font-black text-white"
-              style={{ background: `linear-gradient(135deg, ${charColor}, ${charColor}bb)` }}>
-              🔓 이 판결만 열기 · 990원
-            </button>
-            <p className="text-center text-xs text-gray-600 mt-2">또는</p>
-            <button className="w-full mt-1 py-2 rounded-xl text-xs font-bold text-white"
-              style={{ background: '#1a1025', border: `1px solid ${charColor}40`, color: charColor }}>
-              전체 9개 한번에 열기 · 990원
-            </button>
+        {item.content && (
+          <div className="text-gray-300 text-sm leading-relaxed mt-3">
+            {item.content.split('\n').map((line, i) => (
+              line.startsWith('⚠️')
+                ? <p key={i} className="mt-4 text-yellow-300 font-medium">{line}</p>
+                : line === ''
+                  ? <div key={i} className="h-2" />
+                  : <p key={i}>{line}</p>
+            ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }
@@ -219,6 +197,10 @@ export default function SajuPage() {
     name: '', year: '1990', month: '1', day: '1', hour: '', gender: 'male',
   })
 
+  // ✅ fix: ref로 저장 콜백 stale 클로저 방지
+  const finalResultRef = useRef<Partial<SajuResult>>({})
+  const finalManseRef  = useRef<ManseData | null>(null)
+
   const isRomance = form.questionIntent === '연애/결혼'
 
   const handleSubmit = async () => {
@@ -226,6 +208,8 @@ export default function SajuPage() {
     setStage('loading')
     setResult({})
     setManse(null)
+    finalResultRef.current = {}
+    finalManseRef.current  = null
 
     try {
       const res = await fetch('/api/saju', {
@@ -241,21 +225,21 @@ export default function SajuPage() {
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let accumulated = ''
-      let finalResult: Partial<SajuResult> = {}
-      let finalManse: ManseData | null = null
+      // ✅ fix: done 플래그로 while 탈출
+      let done = false
 
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        const chunk = decoder.decode(value)
+      while (!done) {
+        const { done: streamDone, value } = await reader.read()
+        if (streamDone) break
+        const chunk = decoder.decode(value, { stream: true })
         for (const line of chunk.split('\n')) {
           if (line.startsWith('data: ')) {
-            const data = line.slice(6)
-            if (data === '[DONE]') continue
+            const data = line.slice(6).trim()
+            if (data === '[DONE]') { done = true; break }
             try {
               const parsed = JSON.parse(data)
               if (parsed.type === 'manse') {
-                finalManse = parsed.data
+                finalManseRef.current = parsed.data
                 setManse(parsed.data)
                 continue
               }
@@ -265,8 +249,9 @@ export default function SajuPage() {
                   const clean = accumulated.replace(/```json/g,'').replace(/```/g,'').trim()
                   const s = clean.indexOf('{'), e = clean.lastIndexOf('}')
                   if (s !== -1 && e !== -1) {
-                    finalResult = JSON.parse(clean.slice(s, e+1))
-                    setResult(finalResult)
+                    const interim = JSON.parse(clean.slice(s, e+1))
+                    finalResultRef.current = interim
+                    setResult(interim)
                   }
                 } catch {}
               }
@@ -275,7 +260,6 @@ export default function SajuPage() {
         }
       }
 
-      // 스트리밍 완료 → 자동 저장
       setStage('saving')
       try {
         const saveRes = await fetch('/api/readings/save', {
@@ -286,16 +270,15 @@ export default function SajuPage() {
             occupationId: form.occupation,
             sajuData: {
               form: { ...form, calType },
-              saju: finalManse,
+              saju: finalManseRef.current,
               partner: isRomance ? partnerForm : null,
             },
-            aiResult: JSON.stringify(finalResult),
+            aiResult: JSON.stringify(finalResultRef.current),
             isPaid: false,
           }),
         })
         if (saveRes.ok) {
           const { shareId } = await saveRes.json()
-          // 저장 성공 → result 페이지로 이동
           router.push(`/result/${shareId}`)
           return
         }
@@ -303,7 +286,6 @@ export default function SajuPage() {
         console.error('저장 실패 (무시):', saveErr)
       }
 
-      // 저장 실패해도 결과는 보여줌
       setStage('result')
     } catch (e) {
       console.error(e)
@@ -315,8 +297,8 @@ export default function SajuPage() {
   if (stage === 'saving') return <LoadingScreen name={form.name} character={selectedChar} saving />
 
   if (stage === 'result' && result.titles) {
-    const freeTitles = result.titles.filter(t => t.is_free)
-    const paidTitles = result.titles.filter(t => !t.is_free)
+    // ✅ fix: 런칭 프로모션 - 전부 무료 공개
+    const allTitles = result.titles
     return (
       <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
         <div className="max-w-md mx-auto px-4 pt-6">
@@ -331,20 +313,11 @@ export default function SajuPage() {
           {manse && <ManseTable manse={manse} charColor={selectedChar.color} />}
 
           <div className="mb-2">
-            <p className="text-xs text-gray-500 mb-2 font-medium">✨ 무료 판결 3가지</p>
+            <p className="text-xs text-gray-500 mb-2 font-medium">✨ 판결 {allTitles.length}가지</p>
             <div className="space-y-3">
-              {freeTitles.map((t, i) => <TitleCard key={t.id} item={t} charColor={selectedChar.color} idx={i} />)}
+              {allTitles.map((t, i) => <TitleCard key={t.id} item={t} charColor={selectedChar.color} idx={i} />)}
             </div>
           </div>
-
-              {paidTitles.length > 0 && (
-            <div className="mt-4">
-              <p className="text-xs text-gray-500 font-medium mb-2">🔒 잠긴 판결 {paidTitles.length}개</p>
-              <div className="space-y-2">
-                {paidTitles.map((t, i) => <TitleCard key={t.id} item={t} charColor={selectedChar.color} idx={i+3} />)}
-              </div>
-            </div>
-          )}
 
           {result.strategy && (
             <div className="mt-6 space-y-3">
@@ -400,7 +373,6 @@ export default function SajuPage() {
           </div>
         </div>
 
-        {/* 캐릭터 선택 */}
         <div className="mb-4">
           <label className="text-xs text-gray-400 mb-2 block">신령 선택</label>
           <div className="grid grid-cols-2 gap-2">
@@ -426,7 +398,6 @@ export default function SajuPage() {
           </div>
         </div>
 
-        {/* 질문 의도 */}
         <div className="mb-4">
           <label className="text-xs text-gray-400 mb-2 block">무엇이 가장 궁금하세요?</label>
           <div className="flex flex-wrap gap-2">
@@ -442,7 +413,6 @@ export default function SajuPage() {
           </div>
         </div>
 
-        {/* 내 정보 */}
         <div className="bg-[#111118] rounded-2xl p-4 mb-3 border border-gray-800 space-y-3">
           <p className="text-xs font-bold text-gray-400">{isRomance ? '👤 내 정보' : '👤 기본 정보'}</p>
           <div>
@@ -519,7 +489,6 @@ export default function SajuPage() {
           </div>
         </div>
 
-        {/* 상대방 정보 */}
         {isRomance && (
           <div className="bg-[#111118] rounded-2xl p-4 mb-3 border space-y-3"
             style={{ borderColor: `${selectedChar.color}40` }}>
