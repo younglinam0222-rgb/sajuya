@@ -261,7 +261,7 @@ export default function SajuPage() {
         for (const line of chunk.split('\n')) {
           if (line.startsWith('data: ')) {
             const data = line.slice(6)
-            if (data === '[DONE]') continue
+            if (data === '[DONE]') break
             try {
               const parsed = JSON.parse(data)
               if (parsed.type === 'manse') {
@@ -285,7 +285,11 @@ export default function SajuPage() {
         }
       }
 
-      // 스트리밍 완료 → 자동 저장
+      // 스트리밍 완료 → 자동 저장 (titles 있을 때만)
+      if (!finalResult.titles?.length) {
+        setStage('result')
+        return
+      }
       setStage('saving')
       try {
         const saveRes = await fetch('/api/readings/save', {
