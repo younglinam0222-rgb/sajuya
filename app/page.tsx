@@ -74,11 +74,12 @@ const BANNERS = [
 
 interface MenuItem {
   href: string; label: string; desc: string; emoji: string
+  icon?: string
   badge: string; badgeColor: string; paid: boolean
 }
 
 const MENUS: MenuItem[] = [
-  { href: '/saju',    label: '사주 풀이',   desc: '생년월일시로 보는 종합 사주',  emoji: '🔮', badge: '990원',   badgeColor: '#F59E0B', paid: true },
+  { href: '/saju',    label: '사주 풀이',   desc: '생년월일시로 보는 종합 사주',  emoji: '🔮', icon: '/icons/saju.png', badge: '990원',   badgeColor: '#F59E0B', paid: true },
   { href: '/gunghap', label: '궁합 해설',   desc: '두 사람의 사주 궁합 분석',     emoji: '💞', badge: '990원',   badgeColor: '#F59E0B', paid: true },
   { href: '/daeun',   label: '대운 해설',   desc: '10년 주기 큰 흐름',           emoji: '🌊', badge: '일부무료', badgeColor: '#10B981', paid: false },
   { href: '/taekil',  label: '택 · 일',    desc: '좋은 날짜 골라줌',            emoji: '📅', badge: '일부무료', badgeColor: '#10B981', paid: false },
@@ -278,7 +279,10 @@ export default function HomePage() {
               <Link key={m.href} href={m.href}>
                 <div className="rounded-2xl overflow-hidden bg-[#111118] border border-yellow-900/30 active:scale-95 transition-transform cursor-pointer">
                   <div className="h-20 relative bg-[#1a1025] flex items-center justify-center">
-                    <span className="text-5xl">{m.emoji}</span>
+                    {m.icon
+                      ? <img src={m.icon} alt={m.label} className="w-14 h-14 object-contain" onError={e => { (e.target as HTMLImageElement).style.display='none' }} />
+                      : <span className="text-5xl">{m.emoji}</span>
+                    }
                     <div className="absolute top-2 right-2">
                       <span className="text-xs px-2 py-0.5 rounded-full font-bold text-black" style={{ background: m.badgeColor }}>{m.badge}</span>
                     </div>
