@@ -3,13 +3,14 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase'
+import { UNLOCK_PRICE } from '@/lib/pricing'
 
 export async function POST(req: NextRequest) {
   try {
     const { paymentKey, orderId, amount } = await req.json()
 
-    // 금액 검증
-    if (amount !== 990) {
+    // 금액 검증 — lib/pricing.ts의 UNLOCK_PRICE와 반드시 일치해야 함
+    if (amount !== UNLOCK_PRICE) {
       return NextResponse.json({ error: '결제 금액이 올바르지 않습니다' }, { status: 400 })
     }
 
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
     const { error: payError } = await supabase.from('payments').insert({
       order_id: orderId,
       toss_payment_key: paymentKey,
-      amount: 990,
+      amount: UNLOCK_PRICE,
       status: 'done',
     })
 

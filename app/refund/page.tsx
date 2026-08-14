@@ -4,6 +4,7 @@ import { useSession, signIn } from 'next-auth/react'
 import Link from 'next/link'
 import { useState } from 'react'
 import YeopjeunShop from '@/app/components/YeopjeunShop'
+import { Sparkles, HeartHandshake, Waves, CalendarCheck, CalendarRange, Star, Coins } from 'lucide-react'
 
 const CHAR_IMG: Record<string, string> = {
   baekhalma: '/characters/baekhalma.png',
@@ -48,7 +49,7 @@ export default function HomePage() {
         <div className="flex items-center justify-between px-4 pt-4 pb-2">
           <div className="flex items-center gap-2">
             <span className="text-2xl">🔮</span>
-            <span className="font-black text-lg">사주야</span>
+            <span className="font-black text-lg">사주궁</span>
           </div>
           <div className="flex items-center gap-2">
             <Link href="/daily" className="text-xs px-3 py-1.5 rounded-full bg-yellow-500/20 text-yellow-400 font-medium">⭐ 무료운세</Link>
@@ -176,18 +177,22 @@ export default function HomePage() {
         {/* 서비스 안내 */}
         <div className="px-4 mb-6">
           <div className="rounded-2xl p-4 bg-[#111118] border border-gray-800">
-            <p className="text-sm font-bold mb-3">🔮 사주야에서 할 수 있는 것들</p>
+            <p className="text-sm font-bold mb-3 flex items-center gap-1.5">
+              <Sparkles size={16} className="text-purple-400" /> 사주궁에서 할 수 있는 것들
+            </p>
             <div className="space-y-2.5">
               {[
-                { icon: '🪙', title: '990원 사주 풀이', desc: '타고난 성격, 재물운, 직업운까지 직설로 분석' },
-                { icon: '💞', title: '궁합', desc: '꼭 커플만 궁합 보란 법 있나요?' },
-                { icon: '🌊', title: '대운 풀이', desc: '10년 단위 인생의 큰 흐름 해설' },
-                { icon: '📆', title: '연도별 운세', desc: '올해 총운, 월별 운세를 한눈에' },
-                { icon: '⭐', title: '오늘의 운세 — 무료', desc: '매일 무료로 확인하는 일일운세' },
-                { icon: '📅', title: '택일', desc: '이사, 결혼, 개업 등 좋은 날짜 추천' },
+                { Icon: Coins,          color: '#F59E0B', title: '990원 사주 풀이', desc: '타고난 성격, 재물운, 직업운까지 직설로 분석' },
+                { Icon: HeartHandshake, color: '#EC4899', title: '궁합', desc: '꼭 커플만 궁합 보란 법 있나요?' },
+                { Icon: Waves,          color: '#10B981', title: '대운 풀이', desc: '10년 단위 인생의 큰 흐름 해설' },
+                { Icon: CalendarRange,  color: '#10B981', title: '연도별 운세', desc: '올해 총운, 월별 운세를 한눈에' },
+                { Icon: Star,           color: '#3B82F6', title: '오늘의 운세 — 무료', desc: '매일 무료로 확인하는 일일운세' },
+                { Icon: CalendarCheck,  color: '#10B981', title: '택일', desc: '이사, 결혼, 개업 등 좋은 날짜 추천' },
               ].map(item => (
                 <div key={item.title} className="flex items-start gap-2.5">
-                  <span className="text-base flex-shrink-0">{item.icon}</span>
+                  <span className="flex-shrink-0 w-6 h-6 rounded-lg flex items-center justify-center mt-0.5" style={{ background: `${item.color}20` }}>
+                    <item.Icon size={13} color={item.color} strokeWidth={2.25} />
+                  </span>
                   <div>
                     <p className="text-xs font-bold text-white">{item.title}</p>
                     <p className="text-xs text-gray-500">{item.desc}</p>
@@ -196,7 +201,7 @@ export default function HomePage() {
               ))}
             </div>
             <div className="mt-3 pt-3 border-t border-gray-800">
-              <p className="text-xs text-gray-600">※ 사주야는 오락 및 참고 목적의 서비스입니다</p>
+              <p className="text-xs text-gray-600">※ 사주궁는 오락 및 참고 목적의 서비스입니다</p>
             </div>
           </div>
         </div>
@@ -254,7 +259,7 @@ export default function HomePage() {
               본 서비스는 사주명리학 기반 엔터테인먼트 콘텐츠입니다.<br />
               의료·법률·재정 판단을 대체하지 않으며, 만 14세 이상 이용 가능합니다.
             </p>
-            <p className="text-center text-[10px] text-gray-800 mt-1">© 2025 사주야 · sajuya.help@gmail.com</p>
+            <p className="text-center text-[10px] text-gray-800 mt-1">© 2025 사주궁 · sajuya.help@gmail.com</p>
           </div>
         </div>
 

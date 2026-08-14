@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     if (error) throw error
     return NextResponse.json({ shareId })
   } catch (e) {
-    console.error('[사주야] 저장 실패:', e)
+    console.error('[사주궁] 저장 실패:', e)
     return NextResponse.json({ error: '저장 실패' }, { status: 500 })
   }
 }

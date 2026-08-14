@@ -1,7 +1,9 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
+import { useSession, signIn } from 'next-auth/react'
 import Link from 'next/link'
+import { UNLOCK_PRICE } from '@/lib/pricing'
 
 interface Section { id: string; emoji: string; title: string; body: string }
 interface SajuTitle { id: string; title: string; teaser: string; is_free: boolean; content: string }
@@ -51,7 +53,9 @@ const elementBg    = (el: string) => ({ '木':'rgba(34,197,94,.12)','火':'rgba(
 
 export default function ResultPage() {
   const params  = useParams()
+  const router  = useRouter()
   const shareId = params.shareId as string
+  const { status: authStatus } = useSession()
 
   const [loading,     setLoading]     = useState(true)
   const [error,       setError]       = useState('')
@@ -65,7 +69,9 @@ export default function ResultPage() {
   const [isPaid,      setIsPaid]      = useState(false)
   const [copied,      setCopied]      = useState(false)
 
-  useEffect(() => { fetchReading() }, [shareId])
+  useEffect(() => {
+    if (authStatus === 'authenticated') fetchReading()
+  }, [shareId, authStatus])
 
   const fetchReading = async () => {
     try {
@@ -119,7 +125,7 @@ export default function ResultPage() {
 
   const handleKakaoShare = () => {
     const url   = window.location.href
-    const title = formInfo ? `${formInfo.name}님의 사주팔자 풀이` : '사주야 풀이 결과'
+    const title = formInfo ? `${formInfo.name}님의 사주팔자 풀이` : '사주궁 풀이 결과'
     const desc  = `${charName}이 직접 본 사주 결과 — 지금 확인해보세요`
     if (typeof window !== 'undefined' && (window as any).Kakao?.Share) {
       ;(window as any).Kakao.Share.sendDefault({
@@ -134,6 +140,47 @@ export default function ResultPage() {
     } else {
       handleCopyLink()
     }
+  }
+
+  // ✅ 수정: 결제(Toss) 보류 — 로그인 여부만으로 전체 판결 공개 여부를 결정.
+  // 데이터 로딩/에러 체크보다 먼저 와야 함 (비로그인 상태에선 fetchReading 자체를 안 돌림)
+  if (authStatus === 'loading') {
+    return (
+      <div className="bg-[#0a0a0a] min-h-screen flex items-center justify-center text-gray-500 text-sm">
+        불러오는 중...
+      </div>
+    )
+  }
+
+  if (authStatus === 'unauthenticated') {
+    return (
+      <div className="bg-[#0a0a0a] min-h-screen flex flex-col items-center justify-center text-white px-6 text-center max-w-[430px] mx-auto">
+        <div className="text-5xl mb-5">🔒</div>
+        <div className="text-xl font-black mb-2">로그인하고 결과 확인하기</div>
+        <div className="text-sm text-gray-500 mb-8 leading-relaxed">
+          사주 풀이 결과는 로그인 후 볼 수 있어요<br />
+          <span className="text-yellow-400 font-bold">가입 즉시 🪙 1엽전 지급!</span>
+        </div>
+        <div className="w-full max-w-xs space-y-3">
+          <button onClick={() => signIn('kakao', { callbackUrl: `/result/${shareId}` })}
+            className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
+            style={{ background: '#fee500', color: '#3c1e1e' }}>
+            <span className="text-xl">💬</span> 카카오로 시작하기
+          </button>
+          <button onClick={() => signIn('google', { callbackUrl: `/result/${shareId}` })}
+            className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
+            style={{ background: '#fff', color: '#333', border: '1px solid #e5e7eb' }}>
+            <span style={{ fontSize: '18px', fontWeight: 900, color: '#4285F4' }}>G</span> 구글로 시작하기
+          </button>
+          <button onClick={() => signIn('naver', { callbackUrl: `/result/${shareId}` })}
+            className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
+            style={{ background: '#03c75a', color: '#fff' }}>
+            <span className="text-xl font-black">N</span> 네이버로 시작하기
+          </button>
+        </div>
+        <Link href="/" className="mt-6 text-xs text-gray-600">← 홈으로 돌아가기</Link>
+      </div>
+    )
   }
 
   // ── 로딩 ──────────────────────────────────────────
@@ -165,8 +212,9 @@ export default function ResultPage() {
     { label: '연주', pillar: sajuData.yearPillar },
   ] : []
 
-  const freeTitles = titles          // 런칭 프로모션: 전부 무료 공개
-  const paidTitles: SajuTitle[] = [] // 잠금 없음 (유료 전환 시 원래대로 복구)
+  // ✅ 수정: 결제(Toss) 보류 — 로그인 게이트를 이미 통과했으므로 전체 판결을 그냥 다 공개
+  const freeTitles = titles
+  const paidTitles: SajuTitle[] = []
 
   return (
     <div className="bg-[#0a0a0a] min-h-screen text-white max-w-[430px] mx-auto pb-8">
@@ -338,9 +386,18 @@ export default function ResultPage() {
                     ))}
                   </div>
                   <button
+                    onClick={() => {
+                      if (authStatus !== 'authenticated') {
+                        signIn(undefined, { callbackUrl: `/pay/${shareId}` })
+                      } else {
+                        router.push(`/pay/${shareId}`)
+                      }
+                    }}
                     className="w-full mt-3 py-3.5 rounded-2xl font-bold text-sm text-white"
                     style={{ background: `linear-gradient(135deg, ${charColor}, ${charColor}bb)` }}>
-                    🔓 전체 {paidTitles.length}개 열기 — 990원
+                    {authStatus === 'authenticated'
+                      ? `🔓 전체 ${paidTitles.length}개 열기 — ${UNLOCK_PRICE.toLocaleString()}원`
+                      : `🔒 로그인하고 전체 ${paidTitles.length}개 열기`}
                   </button>
                 </>
               )}
@@ -477,7 +534,7 @@ export default function ResultPage() {
 
       <div className="mx-4 mt-6 px-3 py-3 rounded-xl" style={{ background: '#0a0a0a', border: '0.5px solid #111' }}>
         <p className="text-[9px] leading-relaxed" style={{ color: '#3a3a3a' }}>
-          본 서비스는 사주명리학 이론을 기반으로 분석한 참고용 엔터테인먼트 콘텐츠입니다. 실제 투자·재무·의료·법률 등 중요한 의사결정의 근거로 사용하지 마십시오. © 사주야
+          본 서비스는 사주명리학 이론을 기반으로 분석한 참고용 엔터테인먼트 콘텐츠입니다. 실제 투자·재무·의료·법률 등 중요한 의사결정의 근거로 사용하지 마십시오. © 사주궁
         </p>
       </div>
     </div>

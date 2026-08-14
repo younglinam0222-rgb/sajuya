@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useSession, signIn } from 'next-auth/react'
 
 interface SajuTitle {
   id: string; title: string; teaser: string; is_free: boolean; content: string
@@ -25,6 +26,7 @@ const YEARS = Array.from({ length: 80 }, (_, i) => 2005 - i)
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1)
 const DAYS = Array.from({ length: 31 }, (_, i) => i + 1)
 const OCCUPATIONS = ['직장인', '사업가', '학생', '주부', '프리랜서']
+const MARITAL_STATUSES = ['미혼', '기혼', '이혼/사별']
 const QUESTION_INTENTS = ['인생 전반', '돈/재물', '연애/결혼', '직업/진로', '건강']
 
 const CHARACTERS = [
@@ -186,14 +188,16 @@ function TitleCard({ item, charColor, idx }: { item: SajuTitle; charColor: strin
 
 export default function SajuPage() {
   const router = useRouter()
+  const { status } = useSession()
   const [stage, setStage] = useState<Stage>('input')
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [result, setResult] = useState<Partial<SajuResult>>({})
   const [manse, setManse] = useState<ManseData | null>(null)
   const [selectedChar, setSelectedChar] = useState(CHARACTERS[0])
   const [calType, setCalType] = useState<'solar'|'lunar'>('solar')
   const [form, setForm] = useState({
     name: '', year: '1990', month: '1', day: '1',
-    hour: '', gender: 'female', occupation: '직장인', questionIntent: '인생 전반',
+    hour: '', gender: 'female', occupation: '직장인', maritalStatus: '미혼', questionIntent: '인생 전반',
   })
   const [partnerForm, setPartnerForm] = useState({
     name: '', year: '1990', month: '1', day: '1', hour: '', gender: 'male',
@@ -207,7 +211,13 @@ export default function SajuPage() {
 
   const handleSubmit = async () => {
     if (!form.name) return
+    // ✅ 추가: 혹시 모를 우회 방지 — 로그인 안 된 상태면 제출 자체를 막음
+    if (status !== 'authenticated') {
+      setErrorMsg('로그인 후 이용할 수 있어요.')
+      return
+    }
     setStage('loading')
+    setErrorMsg(null)
     setResult({})
     setManse(null)
     finalResultRef.current = {}
@@ -222,13 +232,20 @@ export default function SajuPage() {
           partnerInfo: isRomance ? partnerForm : undefined,
         }),
       })
-      if (!res.body) return
+      // ✅ 수정: body가 없으면 그냥 return 해서 '분석 중' 화면에 영원히 멈춰있던 버그.
+      // 이제 명확한 에러를 띄우고 입력 화면으로 되돌린다.
+      if (!res.body) {
+        setErrorMsg('서버 응답을 받지 못했어요. 다시 시도해주세요.')
+        setStage('input')
+        return
+      }
 
       const reader  = res.body.getReader()
       const decoder = new TextDecoder()
       let accumulated = ''
       // ✅ 수정: done 플래그로 while 루프 탈출
       let done = false
+      let serverError = false
 
       while (!done) {
         const { done: streamDone, value } = await reader.read()
@@ -240,6 +257,11 @@ export default function SajuPage() {
             if (data === '[DONE]') { done = true; break }
             try {
               const parsed = JSON.parse(data)
+              if (parsed.type === 'error') {
+                serverError = true
+                setErrorMsg(parsed.message || '분석 중 오류가 발생했습니다. 다시 시도해주세요.')
+                continue
+              }
               if (parsed.type === 'manse') {
                 finalManseRef.current = parsed.data
                 setManse(parsed.data)
@@ -260,6 +282,14 @@ export default function SajuPage() {
             } catch {}
           }
         }
+      }
+
+      // ✅ 수정: 서버가 에러 이벤트를 보냈거나 결과 파싱에 실패한 경우
+      // 빈 결과로 저장/이동하지 말고 바로 입력 화면으로.
+      if (serverError || !finalResultRef.current.titles) {
+        if (!serverError) setErrorMsg('풀이 생성에 실패했어요. 다시 시도해주세요.')
+        setStage('input')
+        return
       }
 
       // 저장
@@ -292,8 +322,49 @@ export default function SajuPage() {
       setStage('result')
     } catch (e) {
       console.error(e)
+      setErrorMsg('분석 중 오류가 발생했습니다. 다시 시도해주세요.')
       setStage('input')
     }
+  }
+
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center text-gray-500 text-sm">
+        불러오는 중...
+      </div>
+    )
+  }
+
+  // ✅ 추가: 로그인 안 하면 사주 풀이 기능 자체를 못 쓰게 막음
+  if (status === 'unauthenticated') {
+    return (
+      <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center text-white px-6 text-center">
+        <div className="text-5xl mb-5">🔮</div>
+        <div className="text-xl font-black mb-2">로그인하고 사주 풀이 받기</div>
+        <div className="text-sm text-gray-500 mb-8 leading-relaxed">
+          사주 풀이는 로그인 후 이용할 수 있어요<br />
+          <span className="text-yellow-400 font-bold">가입 즉시 🪙 1엽전 지급!</span>
+        </div>
+        <div className="w-full max-w-xs space-y-3">
+          <button onClick={() => signIn('kakao', { callbackUrl: '/saju' })}
+            className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
+            style={{ background: '#fee500', color: '#3c1e1e' }}>
+            <span className="text-xl">💬</span> 카카오로 시작하기
+          </button>
+          <button onClick={() => signIn('google', { callbackUrl: '/saju' })}
+            className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
+            style={{ background: '#fff', color: '#333', border: '1px solid #e5e7eb' }}>
+            <span style={{ fontSize: '18px', fontWeight: 900, color: '#4285F4' }}>G</span> 구글로 시작하기
+          </button>
+          <button onClick={() => signIn('naver', { callbackUrl: '/saju' })}
+            className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
+            style={{ background: '#03c75a', color: '#fff' }}>
+            <span className="text-xl font-black">N</span> 네이버로 시작하기
+          </button>
+        </div>
+        <Link href="/" className="mt-6 text-xs text-gray-600">← 홈으로 돌아가기</Link>
+      </div>
+    )
   }
 
   if (stage === 'loading') return <LoadingScreen name={form.name} character={selectedChar} />
@@ -372,9 +443,15 @@ export default function SajuPage() {
           <Link href="/" className="text-gray-400 text-xl">←</Link>
           <div>
             <h1 className="text-xl font-bold">사주 풀이</h1>
-            <p className="text-gray-500 text-xs mt-0.5">3개 무료 · 전체 열기 990원</p>
+            <p className="text-gray-500 text-xs mt-0.5">로그인하면 전체 무료 공개</p>
           </div>
         </div>
+
+        {errorMsg && (
+          <div className="mb-4 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
+            {errorMsg}
+          </div>
+        )}
 
         {/* 캐릭터 선택 */}
         <div className="mb-4">
@@ -480,6 +557,20 @@ export default function SajuPage() {
             </div>
           </div>
           <div>
+            <label className="text-xs text-gray-400 mb-1.5 block">결혼 상태</label>
+            <div className="grid grid-cols-3 gap-2">
+              {MARITAL_STATUSES.map(m => (
+                <button key={m} onClick={() => setForm(f => ({ ...f, maritalStatus: m }))}
+                  className="py-2.5 rounded-xl text-sm font-medium transition-all"
+                  style={form.maritalStatus === m
+                    ? { background: selectedChar.color, color: 'white' }
+                    : { background: '#111827', color: '#9CA3AF', border: '1px solid #374151' }}>
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
             <label className="text-xs text-gray-400 mb-1.5 block">직업</label>
             <div className="flex flex-wrap gap-2">
               {OCCUPATIONS.map(o => (
@@ -499,7 +590,9 @@ export default function SajuPage() {
         {isRomance && (
           <div className="bg-[#111118] rounded-2xl p-4 mb-3 border space-y-3"
             style={{ borderColor: `${selectedChar.color}40` }}>
-            <p className="text-xs font-bold" style={{ color: selectedChar.color }}>💕 상대방 정보</p>
+            <p className="text-xs font-bold" style={{ color: selectedChar.color }}>
+              {form.maritalStatus === '기혼' ? '💍 배우자 정보' : '💕 상대방 정보'}
+            </p>
             <div>
               <label className="text-xs text-gray-400 mb-1.5 block">상대방 이름 <span className="text-gray-600">(선택)</span></label>
               <input type="text" placeholder="몰라도 괜찮아요" value={partnerForm.name}
@@ -552,7 +645,7 @@ export default function SajuPage() {
           style={{ background: `linear-gradient(135deg, ${selectedChar.color}, ${selectedChar.color}bb)` }}>
           {selectedChar.name}에게 물어보기 →
         </button>
-        <p className="text-center text-gray-600 text-xs mt-3">3개 무료 · 전체 열기 990원</p>
+        <p className="text-center text-gray-600 text-xs mt-3">로그인하면 전체 무료 공개</p>
       </div>
     </div>
   )

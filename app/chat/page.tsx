@@ -6,7 +6,7 @@ export default function Page() {
     <div className="bg-[#0a0a0a] min-h-screen text-white max-w-[430px] mx-auto pb-8">
       <div className="bg-[#111] px-4 py-3 flex items-center gap-3 border-b border-[#1a1a1a]">
         <Link href="/" className="text-lg text-[#888]">←</Link>
-        <span className="font-black text-purple-400">사주야</span>
+        <span className="font-black text-purple-400">사주궁</span>
       </div>
       <div className="flex flex-col items-center justify-center px-8 pt-16">
         <div className="text-7xl mb-6">💬</div>

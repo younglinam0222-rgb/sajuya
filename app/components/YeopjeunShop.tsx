@@ -75,7 +75,7 @@ export default function YeopjeunShop({ onClose, currentBalance = 0 }: YeopjeunSh
         body: JSON.stringify({
           orderId,
           amount: pkg.price,
-          orderName: `사주야 엽전 ${pkg.coins + pkg.bonus}냥`,
+          orderName: `사주궁 엽전 ${pkg.coins + pkg.bonus}냥`,
           packageId: pkg.id,
         }),
       })

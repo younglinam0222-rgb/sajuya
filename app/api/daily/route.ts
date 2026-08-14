@@ -124,7 +124,7 @@ ${voice}
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 1500,
-      system: '너는 사주야 서비스의 일일운세 캐릭터야. 반드시 순수 JSON만 출력. 마크다운 코드블록 절대 금지.',
+      system: '너는 사주궁 서비스의 일일운세 캐릭터야. 반드시 순수 JSON만 출력. 마크다운 코드블록 절대 금지.',
       messages: [{ role: 'user', content: prompt }],
     })
 

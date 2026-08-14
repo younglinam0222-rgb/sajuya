@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { CHARACTERS } from '@/lib/characters'
 
+// ✅ 수정: Vercel 서버리스 함수 기본 실행시간(10초)이 Claude 병렬 호출(8192 토큰 x2)보다
+// 짧아서 중간에 함수가 강제 종료됨 → 클라이언트는 응답을 영영 못 받고 "분석 중" 화면에 멈춤.
+// 실행시간을 늘려서 이 문제를 해결.
+export const maxDuration = 120
+export const runtime = 'nodejs'
+
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
 // ─── 만세력 계산 ───────────────────────────────────
@@ -195,7 +201,7 @@ D. 공감 → 경고 → 비유 → 팩폭
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, year, month, day, hour, gender, characterId, occupation, questionIntent, partnerInfo } = await req.json()
+    const { name, year, month, day, hour, gender, characterId, occupation, maritalStatus, questionIntent, partnerInfo } = await req.json()
 
     const character = CHARACTERS[characterId] ?? CHARACTERS['doRyeong']
     const genderStr = gender === 'male' ? '남성' : '여성'
@@ -223,18 +229,26 @@ export async function POST(req: NextRequest) {
 
     const sajuInfo = `
 [이 사람 사주 정보]
-이름: ${name} / 생년월일: ${year}년 ${month}월 ${day}일 / 성별: ${genderStr} / 직업: ${occupation ?? '일반인'}
+이름: ${name} / 생년월일: ${year}년 ${month}월 ${day}일 / 성별: ${genderStr} / 결혼 상태: ${maritalStatus ?? '미상'} / 직업: ${occupation ?? '일반인'}
 현재 나이: ${currentAge}세 (${currentYear}년 기준) ← 반드시 이 나이 기준으로만 분석할 것. 이미 지난 시기 얘기 절대 금지.
 태어난 시간: ${manse.hourStr}
 띠: ${manse.animal}띠
 사주 기운: ${elementDesc}
 핵심 기운(일간): ${manse.dayPillar.stem}(${manse.dayPillar.stemKr}) — ${manse.dayPillar.stemElement} 기운
 연주: ${manse.yearPillar.stem}${manse.yearPillar.branch} / 월주: ${manse.monthPillar.stem}${manse.monthPillar.branch} / 일주: ${manse.dayPillar.stem}${manse.dayPillar.branch} / 시주: ${manse.hourPillar ? manse.hourPillar.stem+manse.hourPillar.branch : '미상'}${partnerDesc}
+
+[결혼 상태 반영 규칙 — 반드시 지킬 것]
+- 결혼 상태가 '기혼'이면: 연애운 얘기 절대 금지. 대신 배우자와의 관계, 부부 궁합, 결혼생활 흐름, 가정 내 재물/소통 문제로 풀어라. "이상형", "썸", "소개팅" 같은 미혼 대상 표현 금지.
+- 결혼 상태가 '미혼'이면: 배우자/부부 얘기 대신 연애 스타일, 어떤 사람이 잘 맞는지, 결혼 시기·인연 들어오는 흐름으로 풀어라.
+- 결혼 상태가 '이혼/사별'이면: 과거형으로 단정 짓지 말고, 현재 시점 새로운 인연이나 안정에 대한 흐름 위주로 조심스럽게 풀어라.
+- 돈/재물, 직업/진로, 건강, 인생 전반 주제에서도 기혼이면 배우자·가정과 엮어서, 미혼이면 개인 중심으로 자연스럽게 반영해라.
 `
 
     const intentGuide: Record<string, string> = {
       '돈/재물':   '이 사람이 돈이 잘 모이는 타입인지, 어디서 새는지, 어떻게 하면 돈이 더 들어오는지 알려줘',
-      '연애/결혼': '이 사람이 연애할 때 어떤 스타일인지, 어떤 사람이랑 잘 맞는지, 지금 연애운이 어떤지 알려줘',
+      '연애/결혼': maritalStatus === '기혼'
+        ? '이 부부가 서로 어떻게 다른지, 갈등이 생기면 왜 생기는지, 관계를 어떻게 풀어가면 좋은지 알려줘'
+        : '이 사람이 연애할 때 어떤 스타일인지, 어떤 사람이랑 잘 맞는지, 지금 연애운이 어떤지 알려줘',
       '직업/진로': '이 사람한테 맞는 일이 뭔지, 지금 방향이 맞는지, 언제 기회가 오는지 알려줘',
       '인생 전반': '이 사람 사주에서 가장 특징적인 게 뭔지, 어떤 인생 흐름인지, 지금 어떤 시기인지 알려줘',
       '건강':      '이 사람이 어디가 약한지, 뭘 조심해야 하는지, 어떻게 관리하면 좋은지 알려줘',
@@ -256,7 +270,7 @@ ${styleRules}
 
 판결문 1번~6번과 전체 strategy를 작성해.
 각 판결문은 반드시 500자 이상. 내용 없으면 실격.
-1~12번 전부 is_free: true (무료 공개 — 런칭 프로모션).
+1~3번은 is_free: true (무료 공개), 4~6번은 is_free: false (결제 후 공개 — 내용은 똑같이 충실하게 써라, 무료/유료로 퀄리티 차등 두지 마라).
 
 반드시 아래 JSON만 출력. 마크다운 없이.
 
@@ -265,9 +279,9 @@ ${styleRules}
     {"id":"1","title":"소름 돋는 상황 묘사 제목","teaser":"읽으면 클릭하고 싶은 한 줄 훅","is_free":true,"content":"500자 이상 판결문. 공감+비유+팩폭+행동팁 포함. 문단 사이 빈줄.\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
     {"id":"2","title":"제목","teaser":"한 줄 훅","is_free":true,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
     {"id":"3","title":"제목","teaser":"한 줄 훅","is_free":true,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
-    {"id":"4","title":"제목","teaser":"한 줄 훅","is_free":true,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
-    {"id":"5","title":"제목","teaser":"한 줄 훅","is_free":true,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
-    {"id":"6","title":"제목","teaser":"한 줄 훅","is_free":true,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"}
+    {"id":"4","title":"제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
+    {"id":"5","title":"제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
+    {"id":"6","title":"제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"}
   ],
   "strategy": {
     "overview": "이 사람 사주 전체 핵심 3~4문장. 쉬운 말로. 읽으면 고개 끄덕이는 내용.",
@@ -293,18 +307,18 @@ ${sajuInfo}
 ${styleRules}
 
 판결문 7번~12번을 작성해. 앞의 1~6번과 주제가 겹치지 않게 새로운 각도로 파고들어.
-각 판결문은 반드시 500자 이상. 전부 is_free: true (무료 공개 — 런칭 프로모션).
+각 판결문은 반드시 500자 이상. 전부 is_free: false (결제 후 공개 — 내용은 무료 판결문과 똑같이 충실하게 써라).
 
 반드시 아래 JSON만 출력. 마크다운 없이.
 
 {
   "titles": [
-    {"id":"7","title":"소름 돋는 상황 묘사 제목","teaser":"한 줄 훅","is_free":true,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
-    {"id":"8","title":"제목","teaser":"한 줄 훅","is_free":true,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
-    {"id":"9","title":"제목","teaser":"한 줄 훅","is_free":true,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
-    {"id":"10","title":"제목","teaser":"한 줄 훅","is_free":true,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
-    {"id":"11","title":"제목","teaser":"한 줄 훅","is_free":true,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
-    {"id":"12","title":"제목","teaser":"한 줄 훅","is_free":true,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"}
+    {"id":"7","title":"소름 돋는 상황 묘사 제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
+    {"id":"8","title":"제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
+    {"id":"9","title":"제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
+    {"id":"10","title":"제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
+    {"id":"11","title":"제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
+    {"id":"12","title":"제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"}
   ]
 }
 `
@@ -334,13 +348,13 @@ ${styleRules}
     try {
       parsed1 = JSON.parse(clean(raw1))
     } catch {
-      console.error('[사주야] 1번 JSON 파싱 실패 (앞 300자):', raw1.slice(0, 300))
+      console.error('[사주궁] 1번 JSON 파싱 실패 (앞 300자):', raw1.slice(0, 300))
       throw new Error('1번 응답 파싱 실패')
     }
     try {
       parsed2 = JSON.parse(clean(raw2))
     } catch {
-      console.error('[사주야] 2번 JSON 파싱 실패 (앞 300자):', raw2.slice(0, 300))
+      console.error('[사주궁] 2번 JSON 파싱 실패 (앞 300자):', raw2.slice(0, 300))
       throw new Error('2번 응답 파싱 실패')
     }
 
@@ -353,7 +367,7 @@ ${styleRules}
       disclaimer: '본 풀이는 엔터테인먼트 및 참고 목적이며, 중요한 결정은 전문가와 상담하세요.',
     }
 
-    console.log(`[사주야] 판결문 ${combined.titles.length}개 생성 완료 / 1번:${r1.usage.output_tokens}tok / 2번:${r2.usage.output_tokens}tok`)
+    console.log(`[사주궁] 판결문 ${combined.titles.length}개 생성 완료 / 1번:${r1.usage.output_tokens}tok / 2번:${r2.usage.output_tokens}tok`)
 
     const encoder = new TextEncoder()
     const readable = new ReadableStream({
@@ -382,7 +396,27 @@ ${styleRules}
     })
 
   } catch (e) {
-    console.error('[사주야] 서버 오류:', e)
-    return NextResponse.json({ error: '서버 오류가 발생했습니다.' }, { status: 500 })
+    console.error('[사주궁] 서버 오류:', e)
+    // ✅ 수정: 일반 JSON을 반환하면 클라이언트가 SSE 포맷(`data: ...`)이 아니라고 판단해
+    // 아무 처리도 못 하고 "분석 중" 화면에 멈춰있게 됨.
+    // 클라이언트가 알아볼 수 있도록 동일한 SSE 스트림 포맷으로 에러 이벤트를 보내준다.
+    const encoder = new TextEncoder()
+    const errorStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(
+          `data: ${JSON.stringify({ type: 'error', message: '분석 중 오류가 발생했습니다. 다시 시도해주세요.' })}\n\n`
+        ))
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+        controller.close()
+      },
+    })
+    return new NextResponse(errorStream, {
+      status: 200, // 스트림은 200으로 열고 내용으로 에러를 전달 (fetch가 body를 읽을 수 있도록)
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
+    })
   }
 }

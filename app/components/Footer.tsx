@@ -15,7 +15,7 @@ export default function Footer() {
           의료·법률·재정 판단을 대체하지 않으며, 만 14세 이상 이용 가능합니다.<br />
           문의: sajuya.help@gmail.com
         </p>
-        <p className="text-center text-[10px] text-gray-800 mt-2">© 2025 사주야</p>
+        <p className="text-center text-[10px] text-gray-800 mt-2">© 2025 사주궁</p>
       </div>
     </footer>
   )

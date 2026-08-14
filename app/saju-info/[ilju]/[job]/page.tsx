@@ -33,7 +33,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const job = OCCUPATIONS[params.job as OccupationId]
   if (!job) return {}
 
-  const title = `${ilju}일주 ${job.label} 사주 완전분석 | 사주야`
+  const title = `${ilju}일주 ${job.label} 사주 완전분석 | 사주궁`
   const desc = `${ilju}일주 ${job.label}의 재물운, 직업운, 연애운을 AI가 분석합니다. ${job.label} 특화 맞춤 사주풀이 무료 제공.`
 
   return {
@@ -100,7 +100,7 @@ export default function IljuJobPage({ params }: PageProps) {
     general: {
       career: `${ilju}일주는 ${iljuInfo.trait}을 가진 일주입니다. 어떤 직종이든 이 기운을 살리는 방향으로 나아가면 자연스러운 성장이 따라옵니다.`,
       money: `${ilju}일주의 재물운은 꾸준함에서 나옵니다. 한 방을 노리기보다 안정적인 자산 증식 전략이 이 일주에 맞는 방향입니다.`,
-      advice: `${ilju}일주의 고유한 기운인 ${iljuInfo.trait}을 삶의 여러 방면에서 발휘해 보세요. 사주야에서 더 자세한 풀이를 확인할 수 있습니다.`,
+      advice: `${ilju}일주의 고유한 기운인 ${iljuInfo.trait}을 삶의 여러 방면에서 발휘해 보세요. 사주궁에서 더 자세한 풀이를 확인할 수 있습니다.`,
     },
   }
 
@@ -116,7 +116,7 @@ export default function IljuJobPage({ params }: PageProps) {
 
       {/* 헤더 */}
       <div style={{ marginBottom: '24px' }}>
-        <Link href="/" style={{ color: '#a78bfa', fontSize: '13px', textDecoration: 'none' }}>← 사주야 홈</Link>
+        <Link href="/" style={{ color: '#a78bfa', fontSize: '13px', textDecoration: 'none' }}>← 사주궁 홈</Link>
         <h1 style={{ fontSize: '26px', fontWeight: 900, marginTop: '12px', lineHeight: 1.3 }}>
           {ilju}일주 {job.emoji} {job.label}<br />
           <span style={{ color: '#a78bfa' }}>사주 완전분석</span>
@@ -154,7 +154,7 @@ export default function IljuJobPage({ params }: PageProps) {
         📢 광고 영역 · Google AdSense
       </div>
 
-      {/* CTA - 사주야로 상세 풀이 */}
+      {/* CTA - 사주궁로 상세 풀이 */}
       <div style={{ background: 'linear-gradient(135deg,#1a0030,#2d1060)', borderRadius: '16px', padding: '20px', textAlign: 'center', border: '1.5px solid rgba(124,58,237,.4)', marginBottom: '20px' }}>
         <div style={{ fontSize: '16px', fontWeight: 900, marginBottom: '6px' }}>🔮 {form_name_placeholder}님의 사주를 직접 풀이받으세요</div>
         <div style={{ fontSize: '12px', color: '#888', marginBottom: '14px' }}>백할매가 {job.label} 맞춤 팩폭 풀이를 해드립니다</div>
