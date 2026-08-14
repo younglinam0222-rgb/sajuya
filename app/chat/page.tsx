@@ -26,7 +26,7 @@ export default function Page() {
             <span className="text-2xl">🏔️</span>
             <div>
               <div className="text-sm font-bold text-white">사주 풀이</div>
-              <div className="text-xs text-[#555]">백할매가 팩폭으로 알려줌 · 990원</div>
+              <div className="text-xs text-[#555]">백할매가 팩폭으로 알려줌 · 1900원</div>
             </div>
             <span className="ml-auto text-[#555] text-xs">›</span>
           </Link>

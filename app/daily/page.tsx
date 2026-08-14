@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useSession } from 'next-auth/react'
 
 // ─── 타입 ─────────────────────────────────────────────
 interface DailyResult {
@@ -230,6 +231,7 @@ function LoadingScreen({ name, character }: { name: string; character: typeof CH
 
 // ─── 메인 ─────────────────────────────────────────────
 export default function DailyPage() {
+  const { data: session, status } = useSession()
   const [stage, setStage]       = useState<'input'|'loading'|'result'>('input')
   const [result, setResult]     = useState<Partial<DailyResult>>({})
   const [manse, setManse]       = useState<ManseData | null>(null)
@@ -238,7 +240,41 @@ export default function DailyPage() {
   const [form, setForm] = useState({
     name: '', year: '1990', month: '1', day: '1', hour: '', gender: 'female',
   })
+  const [checkingCache, setCheckingCache] = useState(false)
   const todayStr = getTodayKST()
+
+  // ✅ 추가: 로그인된 사용자면 오늘자 캐시가 있는지 먼저 확인.
+  // 있으면 폼 없이 바로 결과 화면으로, 없으면 마지막 입력 프로필로 폼을 채워줌.
+  // 비로그인 사용자는 이 로직 자체가 실행 안 되므로 기존처럼 매번 새로 입력·생성.
+  useEffect(() => {
+    if (status !== 'authenticated') return
+    setCheckingCache(true)
+    fetch('/api/daily')
+      .then(res => res.json())
+      .then(data => {
+        if (data.cached) {
+          const char = CHARACTERS.find(c => c.id === data.cached.characterId) ?? CHARACTERS[0]
+          setSelectedChar(char)
+          setManse(data.cached.manse)
+          setResult(data.cached.result)
+          setStage('result')
+        } else if (data.birthProfile) {
+          const p = data.birthProfile
+          setForm(f => ({
+            ...f,
+            name: p.name ?? f.name, year: p.year ?? f.year, month: p.month ?? f.month,
+            day: p.day ?? f.day, hour: p.hour ?? f.hour, gender: p.gender ?? f.gender,
+          }))
+          if (p.calType) setCalType(p.calType)
+          if (p.characterId) {
+            const char = CHARACTERS.find(c => c.id === p.characterId)
+            if (char) setSelectedChar(char)
+          }
+        }
+      })
+      .catch(() => {})
+      .finally(() => setCheckingCache(false))
+  }, [status])
 
   const handleSubmit = async () => {
     if (!form.name) return
@@ -289,6 +325,15 @@ export default function DailyPage() {
   }
 
   if (stage === 'loading') return <LoadingScreen name={form.name} character={selectedChar} />
+
+  // ✅ 추가: 로그인 사용자의 오늘자 캐시 확인 중 잠깐 뜨는 화면 (깜빡임 방지)
+  if (checkingCache && stage === 'input') {
+    return (
+      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center text-gray-500 text-sm">
+        오늘의 운세 불러오는 중...
+      </div>
+    )
+  }
 
   // ── 결과 화면 ──────────────────────────────────────
   if (stage === 'result') {

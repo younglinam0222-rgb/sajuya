@@ -4,7 +4,6 @@ import { useSession, signIn } from 'next-auth/react'
 import Link from 'next/link'
 import { useState } from 'react'
 import YeopjeunShop from '@/app/components/YeopjeunShop'
-import { Sparkles, HeartHandshake, Waves, CalendarCheck, CalendarRange, Star, Coins } from 'lucide-react'
 
 const CHAR_IMG: Record<string, string> = {
   baekhalma: '/characters/baekhalma.png',
@@ -26,8 +25,8 @@ interface MenuItem {
 }
 
 const MENUS: MenuItem[] = [
-  { href: '/saju', label: '사주 풀이', desc: '생년월일시로 보는 종합 사주', emoji: '🔮', badge: '990원', badgeColor: '#F59E0B', paid: true },
-  { href: '/gunghap', label: '궁합 해설', desc: '두 사람의 사주 궁합 분석', emoji: '💞', badge: '990원', badgeColor: '#F59E0B', paid: true },
+  { href: '/saju', label: '사주 풀이', desc: '생년월일시로 보는 종합 사주', emoji: '🔮', badge: '1900원', badgeColor: '#F59E0B', paid: true },
+  { href: '/gunghap', label: '궁합 해설', desc: '두 사람의 사주 궁합 분석', emoji: '💞', badge: '1900원', badgeColor: '#F59E0B', paid: true },
   { href: '/daeun', label: '대운 해설', desc: '10년 주기 큰 흐름', emoji: '🌊', badge: '일부무료', badgeColor: '#10B981', paid: false },
   { href: '/taekil', label: '택 · 일', desc: '좋은 날짜 골라줌', emoji: '📅', badge: '일부무료', badgeColor: '#10B981', paid: false },
   { href: '/yearly', label: '연도별 운세', desc: '특정 연도 운세 분석', emoji: '📆', badge: '일부무료', badgeColor: '#10B981', paid: false },
@@ -177,22 +176,18 @@ export default function HomePage() {
         {/* 서비스 안내 */}
         <div className="px-4 mb-6">
           <div className="rounded-2xl p-4 bg-[#111118] border border-gray-800">
-            <p className="text-sm font-bold mb-3 flex items-center gap-1.5">
-              <Sparkles size={16} className="text-purple-400" /> 사주궁에서 할 수 있는 것들
-            </p>
+            <p className="text-sm font-bold mb-3">🔮 사주궁에서 할 수 있는 것들</p>
             <div className="space-y-2.5">
               {[
-                { Icon: Coins,          color: '#F59E0B', title: '990원 사주 풀이', desc: '타고난 성격, 재물운, 직업운까지 직설로 분석' },
-                { Icon: HeartHandshake, color: '#EC4899', title: '궁합', desc: '꼭 커플만 궁합 보란 법 있나요?' },
-                { Icon: Waves,          color: '#10B981', title: '대운 풀이', desc: '10년 단위 인생의 큰 흐름 해설' },
-                { Icon: CalendarRange,  color: '#10B981', title: '연도별 운세', desc: '올해 총운, 월별 운세를 한눈에' },
-                { Icon: Star,           color: '#3B82F6', title: '오늘의 운세 — 무료', desc: '매일 무료로 확인하는 일일운세' },
-                { Icon: CalendarCheck,  color: '#10B981', title: '택일', desc: '이사, 결혼, 개업 등 좋은 날짜 추천' },
+                { icon: '🪙', title: '1900원 사주 풀이', desc: '타고난 성격, 재물운, 직업운까지 직설로 분석' },
+                { icon: '💞', title: '궁합', desc: '꼭 커플만 궁합 보란 법 있나요?' },
+                { icon: '🌊', title: '대운 풀이', desc: '10년 단위 인생의 큰 흐름 해설' },
+                { icon: '📆', title: '연도별 운세', desc: '올해 총운, 월별 운세를 한눈에' },
+                { icon: '⭐', title: '오늘의 운세 — 무료', desc: '매일 무료로 확인하는 일일운세' },
+                { icon: '📅', title: '택일', desc: '이사, 결혼, 개업 등 좋은 날짜 추천' },
               ].map(item => (
                 <div key={item.title} className="flex items-start gap-2.5">
-                  <span className="flex-shrink-0 w-6 h-6 rounded-lg flex items-center justify-center mt-0.5" style={{ background: `${item.color}20` }}>
-                    <item.Icon size={13} color={item.color} strokeWidth={2.25} />
-                  </span>
+                  <span className="text-base flex-shrink-0">{item.icon}</span>
                   <div>
                     <p className="text-xs font-bold text-white">{item.title}</p>
                     <p className="text-xs text-gray-500">{item.desc}</p>
@@ -231,7 +226,7 @@ export default function HomePage() {
           <div className="rounded-2xl p-4 bg-[#111118] border border-gray-800 flex items-center justify-between">
             <div className="text-center">
               <p className="text-2xl font-black text-yellow-400">🪙 1냥</p>
-              <p className="text-xs text-gray-500">= 990원</p>
+              <p className="text-xs text-gray-500">= 1900원</p>
             </div>
             <p className="text-gray-600 text-lg">=</p>
             <div className="text-center">

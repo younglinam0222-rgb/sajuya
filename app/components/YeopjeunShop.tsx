@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { NYANG_PRICE, UNLOCK_PRICE } from '@/lib/pricing'
 
 interface Package {
   id: string
@@ -14,40 +15,26 @@ interface Package {
   desc: string
 }
 
+// ✅ 리빌딩: 4단계(1/3/5/10냥) → 2단계로 단순화
+// 낱개는 부담 없이, 3냥 패키지는 확실히 이득으로 보이게 해서 결제 유도
 const PACKAGES: Package[] = [
   {
     id: 'one',
     name: '한 냥',
     coins: 1,
     bonus: 0,
-    price: 990,
+    price: NYANG_PRICE,
     desc: '사주 풀이 1회',
   },
   {
     id: 'three',
-    name: '세 냥',
-    coins: 3,
-    bonus: 1,
-    price: 2970,
-    desc: '3냥 + 1냥 보너스',
-  },
-  {
-    id: 'five',
-    name: '다섯 냥',
-    coins: 5,
-    bonus: 2,
-    price: 4950,
-    desc: '5냥 + 2냥 보너스',
-  },
-  {
-    id: 'ten',
-    name: '열 냥',
+    name: '3냥 패키지',
     tag: 'BEST',
-    coins: 10,
-    bonus: 4,
-    price: 9900,
+    coins: 3,
+    bonus: 0,
+    price: UNLOCK_PRICE,
     highlight: true,
-    desc: '10냥 + 4냥 보너스',
+    desc: `사주 풀이 3회 · 낱개보다 ${(NYANG_PRICE * 3 - UNLOCK_PRICE).toLocaleString()}원 저렴`,
   },
 ]
 
@@ -119,7 +106,7 @@ export default function YeopjeunShop({ onClose, currentBalance = 0 }: YeopjeunSh
           <div className="mt-3 flex items-center gap-3 p-3 rounded-2xl bg-[#1a1025]/80 border border-purple-900/30">
             <div className="text-center flex-1">
               <p className="text-yellow-400 font-black text-lg">🪙 1냥</p>
-              <p className="text-gray-500 text-xs">= 990원</p>
+              <p className="text-gray-500 text-xs">= {NYANG_PRICE.toLocaleString()}원</p>
             </div>
             <div className="text-gray-700">↔</div>
             <div className="text-center flex-1">
@@ -179,12 +166,6 @@ export default function YeopjeunShop({ onClose, currentBalance = 0 }: YeopjeunSh
                           {pkg.tag}
                         </span>
                       )}
-                      {pkg.bonus > 0 && (
-                        <span className="text-xs px-1.5 py-0.5 rounded-full text-green-400 font-medium"
-                          style={{ background: '#10B98120' }}>
-                          +{pkg.bonus}냥 보너스
-                        </span>
-                      )}
                     </div>
                     <p className="text-xs text-gray-500 mt-0.5">{pkg.desc}</p>
                   </div>
@@ -192,9 +173,9 @@ export default function YeopjeunShop({ onClose, currentBalance = 0 }: YeopjeunSh
                   {/* 가격 */}
                   <div className="text-right flex-shrink-0 flex flex-col items-end gap-0.5">
                     <p className="font-black text-white text-sm">{pkg.price.toLocaleString()}원</p>
-                    {pkg.bonus > 0 && (
+                    {pkg.coins * NYANG_PRICE > pkg.price && (
                       <p className="text-xs text-gray-600 line-through">
-                        {(total * 990).toLocaleString()}원
+                        {(pkg.coins * NYANG_PRICE).toLocaleString()}원
                       </p>
                     )}
                   </div>

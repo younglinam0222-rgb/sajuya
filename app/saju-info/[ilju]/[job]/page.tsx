@@ -160,7 +160,7 @@ export default function IljuJobPage({ params }: PageProps) {
         <div style={{ fontSize: '12px', color: '#888', marginBottom: '14px' }}>백할매가 {job.label} 맞춤 팩폭 풀이를 해드립니다</div>
         <Link href={`/?occupation=${params.job}`}
           style={{ display: 'inline-block', background: '#7c3aed', color: '#fff', padding: '12px 28px', borderRadius: '12px', fontWeight: 700, textDecoration: 'none', fontSize: '14px' }}>
-          🪙 990원으로 내 사주 보기
+          🪙 1900원으로 내 사주 보기
         </Link>
       </div>
 

@@ -1,7 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/app/api/auth/[...nextauth]/route'
+import { createServerSupabase } from '@/lib/supabase'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
+
+// 한국 시간(KST) 기준 오늘 날짜 (YYYY-MM-DD)
+function getTodayDateKST() {
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }))
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+// ✅ 추가: 로그인한 유저의 "오늘자 캐시된 일일운세"와 "마지막 입력 프로필"을 조회
+// 로그인 안 한 사용자는 이 라우트를 호출하지 않으므로 기존 무료 이용 흐름은 그대로 유지됨
+export async function GET() {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ cached: null, birthProfile: null })
+    }
+    const userId = (session.user as { id?: string }).id
+    if (!userId) return NextResponse.json({ cached: null, birthProfile: null })
+
+    const supabase = createServerSupabase()
+    const today = getTodayDateKST()
+
+    const [{ data: cached }, { data: userRow }] = await Promise.all([
+      supabase.from('daily_readings').select('*').eq('user_id', userId).eq('reading_date', today).maybeSingle(),
+      supabase.from('users').select('birth_profile').eq('id', userId).maybeSingle(),
+    ])
+
+    return NextResponse.json({
+      cached: cached ? { manse: cached.manse_data, result: cached.result, characterId: cached.character_id } : null,
+      birthProfile: userRow?.birth_profile ?? null,
+    })
+  } catch (e) {
+    console.error('[사주궁] 일일운세 조회 오류:', e)
+    return NextResponse.json({ cached: null, birthProfile: null })
+  }
+}
 
 const STEMS    = ['甲','乙','丙','丁','戊','己','庚','辛','壬','癸']
 const BRANCHES = ['子','丑','寅','卯','辰','巳','午','未','申','酉','戌','亥']
@@ -70,6 +111,9 @@ const CHARACTER_VOICE: Record<string, string> = {
 export async function POST(req: NextRequest) {
   try {
     const { name, year, month, day, hour, gender, characterId, calType } = await req.json()
+    // ✅ 추가: 로그인 여부 확인 (비로그인이어도 기존처럼 그대로 무료 이용 가능, 저장만 안 됨)
+    const session = await getServerSession(authOptions)
+    const userId = (session?.user as { id?: string } | undefined)?.id
 
     const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }))
     const todayStr  = `${now.getFullYear()}년 ${now.getMonth()+1}월 ${now.getDate()}일`
@@ -135,6 +179,30 @@ ${voice}
 
     const parsed = JSON.parse(clean.slice(s, e + 1))
     console.log('[일일운세] 생성 완료:', response.usage.output_tokens, 'tok')
+
+    // ✅ 추가: 로그인 사용자면 오늘자 결과 + 마지막 입력 프로필을 저장 (다음 방문 시 재사용)
+    if (userId) {
+      try {
+        const supabase = createServerSupabase()
+        const today = getTodayDateKST()
+        const manseWithToday = { ...manse, todayPillar }
+        await Promise.all([
+          supabase.from('daily_readings').upsert({
+            user_id: userId,
+            reading_date: today,
+            character_id: characterId,
+            manse_data: manseWithToday,
+            result: parsed,
+          }, { onConflict: 'user_id,reading_date' }),
+          supabase.from('users').update({
+            birth_profile: { name, year, month, day, hour, gender, calType, characterId },
+          }).eq('id', userId),
+        ])
+      } catch (saveErr) {
+        // 저장 실패해도 결과 조회 자체는 그대로 진행 (저장은 부가 기능)
+        console.error('[사주궁] 일일운세 저장 실패:', saveErr)
+      }
+    }
 
     // ── SSE로 만세력 + 결과 전송 ────────────────────────
     const encoder = new TextEncoder()

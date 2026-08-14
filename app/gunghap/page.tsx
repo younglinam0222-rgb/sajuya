@@ -252,7 +252,7 @@ export default function GunghapPage() {
           <Link href="/" className="text-gray-400 text-xl">←</Link>
           <div>
             <h1 className="text-xl font-bold">💞 궁합 해설</h1>
-            <p className="text-gray-500 text-xs mt-0.5">구미호 선생의 궁합 분석 · 990원</p>
+            <p className="text-gray-500 text-xs mt-0.5">구미호 선생의 궁합 분석 · 1900원</p>
           </div>
         </div>
 

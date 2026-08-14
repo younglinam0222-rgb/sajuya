@@ -17,6 +17,7 @@ export default function PayPage() {
   const [ready, setReady] = useState(false)
   const [paying, setPaying] = useState(false)
   const [error, setError] = useState('')
+  const [agreed, setAgreed] = useState(false)
 
   useEffect(() => {
     if (status !== 'authenticated') return
@@ -50,7 +51,7 @@ export default function PayPage() {
   }, [status, (session?.user as { id?: string })?.id])
 
   const handlePay = async () => {
-    if (!widgetsRef.current) return
+    if (!widgetsRef.current || !agreed) return
     setPaying(true)
     setError('')
     try {
@@ -121,12 +122,29 @@ export default function PayPage() {
         <div id="toss-payment-method" />
         <div id="toss-agreement" className="mt-3" />
 
+        {/* ✅ 추가: 청약철회 제한 사전 고지 + 명시적 동의 체크박스
+            전자상거래법상 "제공 개시 시 청약철회 불가"를 주장하려면
+            결제 전에 이용자가 명확히 인지·동의했다는 기록이 중요함 */}
+        <label className="flex items-start gap-2.5 mt-4 px-3.5 py-3 rounded-2xl bg-[#111118] border border-gray-800 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={agreed}
+            onChange={e => setAgreed(e.target.checked)}
+            className="mt-0.5 w-4 h-4 accent-purple-500 flex-shrink-0"
+          />
+          <span className="text-xs text-gray-400 leading-relaxed">
+            결제와 동시에 판결문(디지털 콘텐츠)이 즉시 제공되며, 콘텐츠 제공이 개시되면
+            「전자상거래법」 제17조 2항 5호에 따라 청약철회(환불)가 제한된다는 점을 확인했습니다.
+            <Link href="/terms" target="_blank" className="text-purple-400 underline ml-1">환불정책 보기</Link>
+          </span>
+        </label>
+
         <button
           onClick={handlePay}
-          disabled={!ready || paying}
-          className="w-full mt-4 py-4 rounded-2xl font-bold text-base text-white disabled:opacity-40 transition-all active:scale-95"
+          disabled={!ready || paying || !agreed}
+          className="w-full mt-3 py-4 rounded-2xl font-bold text-base text-white disabled:opacity-40 transition-all active:scale-95"
           style={{ background: 'linear-gradient(135deg, #7c3aed, #a78bfa)' }}>
-          {paying ? '결제 처리 중...' : `${UNLOCK_PRICE.toLocaleString()}원 결제하기`}
+          {paying ? '결제 처리 중...' : !agreed ? '위 내용에 동의해주세요' : `${UNLOCK_PRICE.toLocaleString()}원 결제하기`}
         </button>
       </div>
     </div>
