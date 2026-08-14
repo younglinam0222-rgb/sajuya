@@ -2,10 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { CHARACTERS } from '@/lib/characters'
 
-// ✅ 수정: Vercel 서버리스 함수 기본 실행시간(10초)이 Claude 병렬 호출(8192 토큰 x2)보다
-// 짧아서 중간에 함수가 강제 종료됨 → 클라이언트는 응답을 영영 못 받고 "분석 중" 화면에 멈춤.
-// 실행시간을 늘려서 이 문제를 해결.
-export const maxDuration = 120
+// ✅ 수정(재발): 120초로도 부족해서 타임아웃 발생 (Vercel Runtime Timeout Error, 504)
+// 결혼상태 반영 등 프롬프트 지시사항이 늘어나며 Claude 생성 시간이 길어짐 → 300초로 상향
+export const maxDuration = 300
 export const runtime = 'nodejs'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
