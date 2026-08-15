@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { CHARACTERS } from '@/lib/characters'
+import { correctToTrueSolarTime } from '@/lib/solarTime'
 
 // ✅ 수정(재발): 120초로도 부족해서 타임아웃 발생 (Vercel Runtime Timeout Error, 504)
 // 결혼상태 반영 등 프롬프트 지시사항이 늘어나며 Claude 생성 시간이 길어짐 → 300초로 상향
@@ -60,19 +61,32 @@ const HOUR_NAMES: Record<number, string> = {
   15:'신시(申時)', 16:'신시(申時)', 17:'유시(酉時)', 18:'유시(酉時)',
   19:'술시(戌時)', 20:'술시(戌時)', 21:'해시(亥時)', 22:'해시(亥時)',
 }
-function calcManse(year: number, month: number, day: number, hourMinute: string) {
-  const yp = calcYearPillar(year)
-  const mp = calcMonthPillar(year, month)
-  const dp = calcDayPillar(year, month, day)
+function calcManse(year: number, month: number, day: number, hourMinute: string, longitude?: number) {
+  // ✅ 신규: 출생지(경도) 선택 입력 시 진태양시로 보정 후 계산.
+  // 안 넣으면 기존과 완전히 동일하게 표준시 그대로 사용 (선택사항, 필수 아님).
+  let y = year, mo = month, d = day, hm = hourMinute
+  let solarTimeCorrection: ReturnType<typeof correctToTrueSolarTime> | null = null
+  if (longitude && hourMinute) {
+    solarTimeCorrection = correctToTrueSolarTime(year, month, day, hourMinute, longitude)
+    y = solarTimeCorrection.correctedYear
+    mo = solarTimeCorrection.correctedMonth
+    d = solarTimeCorrection.correctedDay
+    hm = solarTimeCorrection.correctedHourMinute
+  }
+
+  const yp = calcYearPillar(y)
+  const mp = calcMonthPillar(y, mo)
+  const dp = calcDayPillar(y, mo, d)
   const dayStemIdx = dp.stemIdx
   let hp = null, hourStr = '시간 미상'
-  if (hourMinute) {
-    const parts = hourMinute.split(':')
+  if (hm) {
+    const parts = hm.split(':')
     const h = parseInt(parts[0])
     const m = parts[1] ? parseInt(parts[1]) : 0
     if (!isNaN(h) && h >= 0 && h <= 23) {
       hp = calcHourPillar(h, dayStemIdx)
       hourStr = `${String(h).padStart(2,'0')}시 ${String(m).padStart(2,'0')}분 (${HOUR_NAMES[h] ?? ''})`
+      if (solarTimeCorrection) hourStr += ` [진태양시 보정 ${solarTimeCorrection.correctionMinutes >= 0 ? '+' : ''}${solarTimeCorrection.correctionMinutes}분 적용]`
     }
   }
   const elements: Record<string, number> = { '木':0, '火':0, '土':0, '金':0, '水':0 }
@@ -89,6 +103,7 @@ function calcManse(year: number, month: number, day: number, hourMinute: string)
     elementCount: elements,
     animal: ANIMALS[yp.branchIdx],
     hourStr,
+    solarTimeCorrection,
   }
 }
 
@@ -200,14 +215,14 @@ D. 공감 → 경고 → 비유 → 팩폭
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, year, month, day, hour, gender, characterId, occupation, maritalStatus, questionIntent, partnerInfo } = await req.json()
+    const { name, year, month, day, hour, gender, characterId, occupation, maritalStatus, questionIntent, partnerInfo, longitude } = await req.json()
 
     const character = CHARACTERS[characterId] ?? CHARACTERS['doRyeong']
     const genderStr = gender === 'male' ? '남성' : '여성'
     const voiceGuide = CHARACTER_VOICE[characterId] ?? CHARACTER_VOICE['doRyeong']
     const styleRules = getStyleRules()
 
-    const manse = calcManse(parseInt(year), parseInt(month), parseInt(day), hour ?? '')
+    const manse = calcManse(parseInt(year), parseInt(month), parseInt(day), hour ?? '', typeof longitude === 'number' ? longitude : undefined)
 
     // 현재 나이 계산
     const currentYear = new Date().getFullYear()
@@ -256,7 +271,9 @@ export async function POST(req: NextRequest) {
 
     const systemPrompt = `너는 ${character.name}이야. 사주를 쉽고 재미있게 풀어주는 캐릭터. 한자나 어려운 명리 용어는 절대 쓰지 않고, 20-30대가 바로 이해할 수 있는 말로만 설명해. 반드시 순수 JSON만 출력. 마크다운 코드블록(\`\`\`) 절대 금지. 설명 텍스트 없이 JSON만.`
 
-    const prompt1 = `
+    // ✅ 신규: 6개씩 2호출 → 3개씩 4호출로 쪼갬. Promise.all은 "제일 늦게 끝나는 호출"이
+    // 전체 시간을 결정하는데, 호출당 담당량을 절반으로 줄이면 그만큼 대기시간도 절반이 됨.
+    const makeJudgmentPrompt = (ids: number[], isFreeIds: number[]) => `
 ${voiceGuide}
 ${sajuInfo}
 
@@ -267,27 +284,21 @@ ${sajuInfo}
 
 ${styleRules}
 
-판결문 1번~6번을 작성해.
+판결문 ${ids.join('번, ')}번을 작성해. 서로 겹치지 않게 각각 새로운 각도로 파고들어.
 각 판결문은 반드시 500자 이상. 내용 없으면 실격.
-1~3번은 is_free: true (무료 공개), 4~6번은 is_free: false (결제 후 공개 — 내용은 똑같이 충실하게 써라, 무료/유료로 퀄리티 차등 두지 마라).
 
 반드시 아래 JSON만 출력. 마크다운 없이.
 
 {
   "titles": [
-    {"id":"1","title":"소름 돋는 상황 묘사 제목","teaser":"읽으면 클릭하고 싶은 한 줄 훅","is_free":true,"content":"500자 이상 판결문. 공감+비유+팩폭+행동팁 포함. 문단 사이 빈줄.\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
-    {"id":"2","title":"제목","teaser":"한 줄 훅","is_free":true,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
-    {"id":"3","title":"제목","teaser":"한 줄 훅","is_free":true,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
-    {"id":"4","title":"제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
-    {"id":"5","title":"제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
-    {"id":"6","title":"제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"}
+${ids.map(id => `    {"id":"${id}","title":"소름 돋는 상황 묘사 제목","teaser":"읽으면 클릭하고 싶은 한 줄 훅","is_free":${isFreeIds.includes(id)},"content":"500자 이상 판결문. 공감+비유+팩폭+행동팁 포함. 문단 사이 빈줄.\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"}`).join(',\n')}
   ]
 }
 `
 
-    // ✅ 신규: strategy(대운 전략)를 prompt1에서 분리해 별도 호출로.
-    // prompt1이 판결문 6개+strategy를 한 번에 요구하다 보니 8192 토큰 한도를 넘겨서
-    // JSON이 중간에 잘리는 "1번 응답 파싱 실패" 오류가 종종 발생했음.
+    // ✅ 신규: strategy(대운 전략)를 판결문에서 분리해 별도 호출로.
+    // 판결문 여러 개 + strategy를 한 번에 요구하다 보니 8192 토큰 한도를 넘겨서
+    // JSON이 중간에 잘리는 "응답 파싱 실패" 오류가 종종 발생했음.
     const prompt3 = `
 ${voiceGuide}
 ${sajuInfo}
@@ -309,47 +320,16 @@ ${lifecycleRows}
 }
 `
 
-    const prompt2 = `
-${voiceGuide}
-${sajuInfo}
+    const FREE_IDS = [1, 2, 3]
+    const idGroups = [[1,2,3], [4,5,6], [7,8,9], [10,11,12]]
 
-[현재 상황] 이 사람은 지금 ${currentAge}세야. 분석할 때 이미 지난 나이대는 넘어가고, 지금과 앞으로의 시기에 집중해서 써.
-
-[궁금한 것]: ${questionIntent}
-→ ${intentInstruction}
-
-${styleRules}
-
-판결문 7번~12번을 작성해. 앞의 1~6번과 주제가 겹치지 않게 새로운 각도로 파고들어.
-각 판결문은 반드시 500자 이상. 전부 is_free: false (결제 후 공개 — 내용은 무료 판결문과 똑같이 충실하게 써라).
-
-반드시 아래 JSON만 출력. 마크다운 없이.
-
-{
-  "titles": [
-    {"id":"7","title":"소름 돋는 상황 묘사 제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
-    {"id":"8","title":"제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
-    {"id":"9","title":"제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
-    {"id":"10","title":"제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
-    {"id":"11","title":"제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
-    {"id":"12","title":"제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"}
-  ]
-}
-`
-
-    const [r1, r2, r3] = await Promise.all([
-      client.messages.create({
+    const [r1, r2, r3, r4, r5] = await Promise.all([
+      ...idGroups.map(ids => client.messages.create({
         model: 'claude-sonnet-4-6',
-        max_tokens: 8192,
+        max_tokens: 4096,
         system: systemPrompt,
-        messages: [{ role: 'user', content: prompt1 }],
-      }),
-      client.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 8192,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: prompt2 }],
-      }),
+        messages: [{ role: 'user', content: makeJudgmentPrompt(ids, FREE_IDS) }],
+      })),
       client.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 2048,
@@ -358,44 +338,40 @@ ${styleRules}
       }),
     ])
 
-    const raw1 = r1.content[0].type === 'text' ? r1.content[0].text : ''
-    const raw2 = r2.content[0].type === 'text' ? r2.content[0].text : ''
-    const raw3 = r3.content[0].type === 'text' ? r3.content[0].text : ''
+    const judgmentResponses = [r1, r2, r3, r4]
     const clean = (s: string) => s.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
 
-    let parsed1: { titles: unknown[] }
-    let parsed2: { titles: unknown[] }
-    let parsed3: Record<string, unknown>
+    const allTitles: unknown[] = []
+    judgmentResponses.forEach((r, i) => {
+      const raw = r.content[0].type === 'text' ? r.content[0].text : ''
+      try {
+        const parsed = JSON.parse(clean(raw))
+        if (Array.isArray(parsed.titles)) allTitles.push(...parsed.titles)
+      } catch {
+        console.error(`[사주궁] ${i + 1}번 그룹(${idGroups[i].join(',')}) JSON 파싱 실패 (앞 300자):`, raw.slice(0, 300))
+        throw new Error(`${i + 1}번 그룹 응답 파싱 실패`)
+      }
+    })
 
-    try {
-      parsed1 = JSON.parse(clean(raw1))
-    } catch {
-      console.error('[사주궁] 1번 JSON 파싱 실패 (앞 300자):', raw1.slice(0, 300))
-      throw new Error('1번 응답 파싱 실패')
-    }
-    try {
-      parsed2 = JSON.parse(clean(raw2))
-    } catch {
-      console.error('[사주궁] 2번 JSON 파싱 실패 (앞 300자):', raw2.slice(0, 300))
-      throw new Error('2번 응답 파싱 실패')
-    }
-    try {
-      parsed3 = JSON.parse(clean(raw3))
-    } catch {
-      console.error('[사주궁] 3번(전략) JSON 파싱 실패 (앞 300자):', raw3.slice(0, 300))
-      throw new Error('3번 응답 파싱 실패')
+    let parsed3: Record<string, unknown>
+    {
+      const raw3 = r5.content[0].type === 'text' ? r5.content[0].text : ''
+      try {
+        parsed3 = JSON.parse(clean(raw3))
+      } catch {
+        console.error('[사주궁] 전략 JSON 파싱 실패 (앞 300자):', raw3.slice(0, 300))
+        throw new Error('전략 응답 파싱 실패')
+      }
     }
 
     const combined = {
-      titles: [
-        ...(Array.isArray(parsed1.titles) ? parsed1.titles : []),
-        ...(Array.isArray(parsed2.titles) ? parsed2.titles : []),
-      ],
+      titles: allTitles,
       strategy: parsed3,
       disclaimer: '본 풀이는 엔터테인먼트 및 참고 목적이며, 중요한 결정은 전문가와 상담하세요.',
     }
 
-    console.log(`[사주궁] 판결문 ${combined.titles.length}개 생성 완료 / 1번:${r1.usage.output_tokens}tok / 2번:${r2.usage.output_tokens}tok / 3번(전략):${r3.usage.output_tokens}tok`)
+    const allUsage = [r1, r2, r3, r4].map(r => r.usage.output_tokens).join('/')
+    console.log(`[사주궁] 판결문 ${combined.titles.length}개 생성 완료 / 그룹별 출력토큰: ${allUsage} / 전략:${r5.usage.output_tokens}tok`)
 
     const encoder = new TextEncoder()
     const readable = new ReadableStream({
