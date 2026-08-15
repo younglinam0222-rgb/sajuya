@@ -267,7 +267,7 @@ ${sajuInfo}
 
 ${styleRules}
 
-판결문 1번~6번과 전체 strategy를 작성해.
+판결문 1번~6번을 작성해.
 각 판결문은 반드시 500자 이상. 내용 없으면 실격.
 1~3번은 is_free: true (무료 공개), 4~6번은 is_free: false (결제 후 공개 — 내용은 똑같이 충실하게 써라, 무료/유료로 퀄리티 차등 두지 마라).
 
@@ -281,16 +281,31 @@ ${styleRules}
     {"id":"4","title":"제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
     {"id":"5","title":"제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"},
     {"id":"6","title":"제목","teaser":"한 줄 훅","is_free":false,"content":"500자 이상 판결문\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"}
-  ],
-  "strategy": {
-    "overview": "이 사람 사주 전체 핵심 3~4문장. 쉬운 말로. 읽으면 고개 끄덕이는 내용.",
-    "golden_period": "전성기가 언제고 지금 뭘 해야 하는지 2~3문장. 구체적인 나이 포함.",
-    "lifecycle": [
+  ]
+}
+`
+
+    // ✅ 신규: strategy(대운 전략)를 prompt1에서 분리해 별도 호출로.
+    // prompt1이 판결문 6개+strategy를 한 번에 요구하다 보니 8192 토큰 한도를 넘겨서
+    // JSON이 중간에 잘리는 "1번 응답 파싱 실패" 오류가 종종 발생했음.
+    const prompt3 = `
+${voiceGuide}
+${sajuInfo}
+
+[현재 상황] 이 사람은 지금 ${currentAge}세야.
+
+이 사람의 인생 전략(대운 흐름)을 작성해. 판결문이 아니라 전체 인생 로드맵이야.
+
+반드시 아래 JSON만 출력. 마크다운 없이.
+
+{
+  "overview": "이 사람 사주 전체 핵심 3~4문장. 쉬운 말로. 읽으면 고개 끄덕이는 내용.",
+  "golden_period": "전성기가 언제고 지금 뭘 해야 하는지 2~3문장. 구체적인 나이 포함.",
+  "lifecycle": [
 ${lifecycleRows}
-    ],
-    "peak_guide": "전성기 활용법 3~4문장. 지금 당장 할 수 있는 것 위주로.",
-    "warning": "가장 조심해야 할 것 2문장. 무섭지 않게, 근데 진지하게."
-  }
+  ],
+  "peak_guide": "전성기 활용법 3~4문장. 지금 당장 할 수 있는 것 위주로.",
+  "warning": "가장 조심해야 할 것 2문장. 무섭지 않게, 근데 진지하게."
 }
 `
 
@@ -322,7 +337,7 @@ ${styleRules}
 }
 `
 
-    const [r1, r2] = await Promise.all([
+    const [r1, r2, r3] = await Promise.all([
       client.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 8192,
@@ -335,14 +350,22 @@ ${styleRules}
         system: systemPrompt,
         messages: [{ role: 'user', content: prompt2 }],
       }),
+      client.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2048,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: prompt3 }],
+      }),
     ])
 
     const raw1 = r1.content[0].type === 'text' ? r1.content[0].text : ''
     const raw2 = r2.content[0].type === 'text' ? r2.content[0].text : ''
+    const raw3 = r3.content[0].type === 'text' ? r3.content[0].text : ''
     const clean = (s: string) => s.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
 
-    let parsed1: { titles: unknown[]; strategy: unknown }
+    let parsed1: { titles: unknown[] }
     let parsed2: { titles: unknown[] }
+    let parsed3: Record<string, unknown>
 
     try {
       parsed1 = JSON.parse(clean(raw1))
@@ -356,17 +379,23 @@ ${styleRules}
       console.error('[사주궁] 2번 JSON 파싱 실패 (앞 300자):', raw2.slice(0, 300))
       throw new Error('2번 응답 파싱 실패')
     }
+    try {
+      parsed3 = JSON.parse(clean(raw3))
+    } catch {
+      console.error('[사주궁] 3번(전략) JSON 파싱 실패 (앞 300자):', raw3.slice(0, 300))
+      throw new Error('3번 응답 파싱 실패')
+    }
 
     const combined = {
       titles: [
         ...(Array.isArray(parsed1.titles) ? parsed1.titles : []),
         ...(Array.isArray(parsed2.titles) ? parsed2.titles : []),
       ],
-      strategy: parsed1.strategy,
+      strategy: parsed3,
       disclaimer: '본 풀이는 엔터테인먼트 및 참고 목적이며, 중요한 결정은 전문가와 상담하세요.',
     }
 
-    console.log(`[사주궁] 판결문 ${combined.titles.length}개 생성 완료 / 1번:${r1.usage.output_tokens}tok / 2번:${r2.usage.output_tokens}tok`)
+    console.log(`[사주궁] 판결문 ${combined.titles.length}개 생성 완료 / 1번:${r1.usage.output_tokens}tok / 2번:${r2.usage.output_tokens}tok / 3번(전략):${r3.usage.output_tokens}tok`)
 
     const encoder = new TextEncoder()
     const readable = new ReadableStream({
