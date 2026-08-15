@@ -8,7 +8,7 @@ export const EARTHLY_BRANCHES = ['자','축','인','묘','진','사','오','미'
 export const ZODIAC_ANIMALS = ['쥐','소','호랑이','토끼','용','뱀','말','양','원숭이','닭','개','돼지'] as const
 
 export const STEM_ELEMENT: Record<string, string> = {
-  '갑':'木','을':'木','병':'火','정':'Fire','무':'土',
+  '갑':'木','을':'木','병':'火','정':'火','무':'土',
   '기':'土','경':'金','신':'金','임':'水','계':'水'
 }
 // 오행 올바른 매핑
@@ -18,7 +18,7 @@ const SE: Record<string, string> = {
 }
 export const BRANCH_ELEMENT: Record<string, string> = {
   '자':'水','축':'土','인':'木','묘':'木','진':'土','사':'火',
-  '오':'Fire','미':'土','신':'金','유':'金','술':'土','해':'水'
+  '오':'火','미':'土','신':'金','유':'金','술':'土','해':'水'
 }
 const BE: Record<string, string> = {
   '자':'水','축':'土','인':'木','묘':'木','진':'土','사':'火',
@@ -119,7 +119,7 @@ export function calculateSaju(
   let sy = year, sm = month, sd = day
   if (isLunar) {
     try {
-      const lunar = Lunar.fromYmd(year, month, day)
+      const lunar = Lunar.Lunar.fromYmd(year, month, day)
       const solar = lunar.getSolar()
       sy = solar.getYear(); sm = solar.getMonth(); sd = solar.getDay()
     } catch {}
