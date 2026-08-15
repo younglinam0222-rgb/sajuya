@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { CHARACTERS } from '@/lib/characters'
 import { correctToTrueSolarTime } from '@/lib/solarTime'
+// @ts-ignore — lunar-javascript는 공식 타입 정의가 없음
+import LunarJS from 'lunar-javascript'
 
 // ✅ 수정(재발): 120초로도 부족해서 타임아웃 발생 (Vercel Runtime Timeout Error, 504)
 // 결혼상태 반영 등 프롬프트 지시사항이 늘어나며 Claude 생성 시간이 길어짐 → 300초로 상향
@@ -27,31 +29,32 @@ function getSipsinBranch(dayStemIdx: number, branchIdx: number) {
   const mainStemMap = [9,5,0,1,4,3,2,5,6,7,4,8]
   return SIPSIN[((mainStemMap[branchIdx] - dayStemIdx + 10) % 10)]
 }
-function calcYearPillar(year: number) {
-  const idx = ((year - 4) % 60 + 60) % 60
-  const si = idx % 10, bi = idx % 12
-  return { stem: STEMS[si], branch: BRANCHES[bi], stemKr: STEM_KR[si], branchKr: BRANCH_KR[bi], stemElement: STEM_ELEMENT[si], branchElement: BRANCH_ELEMENT[bi], stemIdx: si, branchIdx: bi }
+function calcYearPillar(year: number, month: number, day: number) {
+  // ✅ 수정: 입춘(立春) 기준 반영 안 하던 버그 — 1월~2월 초(입춘 전) 출생자는
+  // 연주가 한 해 밀려서 잘못 나오고 있었음. lunar-javascript의 입춘 기준 계산으로 교체.
+  const lunar = LunarJS.Solar.fromYmd(year, month, day).getLunar()
+  return ganZhiToPillar(lunar.getYearInGanZhiByLiChun())
 }
-function calcMonthPillar(year: number, month: number) {
-  const yearStemIdx = ((year - 4) % 10 + 10) % 10
-  const bi = (month + 1) % 12
-  const stemBase = [0,2,4,6,8][Math.floor(yearStemIdx / 2)]
-  const si = (stemBase + (month - 1)) % 10
-  return { stem: STEMS[si], branch: BRANCHES[bi], stemKr: STEM_KR[si], branchKr: BRANCH_KR[bi], stemElement: STEM_ELEMENT[si], branchElement: BRANCH_ELEMENT[bi], stemIdx: si, branchIdx: bi }
+// ✅ 수정: 심각한 버그 발견 — 기존 월주/일주 계산이 자체 수식으로 짜여있었는데
+// 실제 검증(경쟁사 만세력 + 이미 설치돼있던 검증된 lunar-javascript 라이브러리 대조)
+// 결과 둘 다 틀린 것으로 확인됨. 월주는 절기(節氣) 경계를 반영 안 했고, 일주는 기준일
+// 계산이 어긋나 있었음. 자체 수식 대신 lunar-javascript로 전면 교체.
+function ganZhiToPillar(ganzhi: string) {
+  const stemChar = ganzhi[0], branchChar = ganzhi[1]
+  const si = STEMS.indexOf(stemChar), bi = BRANCHES.indexOf(branchChar)
+  return { stem: stemChar, branch: branchChar, stemKr: STEM_KR[si], branchKr: BRANCH_KR[bi], stemElement: STEM_ELEMENT[si], branchElement: BRANCH_ELEMENT[bi], stemIdx: si, branchIdx: bi }
+}
+function calcMonthPillar(year: number, month: number, day: number) {
+  const lunar = LunarJS.Solar.fromYmd(year, month, day).getLunar()
+  return ganZhiToPillar(lunar.getMonthInGanZhi())
 }
 function calcDayPillar(year: number, month: number, day: number) {
-  const base = new Date(1900, 0, 1)
-  const target = new Date(year, month - 1, day)
-  const diff = Math.floor((target.getTime() - base.getTime()) / 86400000)
-  const idx = ((diff % 60) + 60) % 60
-  const si = idx % 10, bi = idx % 12
-  return { stem: STEMS[si], branch: BRANCHES[bi], stemKr: STEM_KR[si], branchKr: BRANCH_KR[bi], stemElement: STEM_ELEMENT[si], branchElement: BRANCH_ELEMENT[bi], stemIdx: si, branchIdx: bi }
+  const lunar = LunarJS.Solar.fromYmd(year, month, day).getLunar()
+  return ganZhiToPillar(lunar.getDayInGanZhi())
 }
-function calcHourPillar(h: number, dayStemIdx: number) {
-  const bi = Math.floor(((h + 1) % 24) / 2)
-  const stemBase = [0,2,4,6,8][dayStemIdx % 5]
-  const si = (stemBase + bi) % 10
-  return { stem: STEMS[si], branch: BRANCHES[bi], stemKr: STEM_KR[si], branchKr: BRANCH_KR[bi], stemElement: STEM_ELEMENT[si], branchElement: BRANCH_ELEMENT[bi], stemIdx: si, branchIdx: bi }
+function calcHourPillar(year: number, month: number, day: number, h: number, m: number) {
+  const lunar = LunarJS.Solar.fromYmdHms(year, month, day, h, m, 0).getLunar()
+  return ganZhiToPillar(lunar.getTimeInGanZhi())
 }
 const HOUR_NAMES: Record<number, string> = {
   23:'자시(子時)', 0:'자시(子時)', 1:'축시(丑時)', 2:'축시(丑時)',
@@ -74,8 +77,8 @@ function calcManse(year: number, month: number, day: number, hourMinute: string,
     hm = solarTimeCorrection.correctedHourMinute
   }
 
-  const yp = calcYearPillar(y)
-  const mp = calcMonthPillar(y, mo)
+  const yp = calcYearPillar(y, mo, d)
+  const mp = calcMonthPillar(y, mo, d)
   const dp = calcDayPillar(y, mo, d)
   const dayStemIdx = dp.stemIdx
   let hp = null, hourStr = '시간 미상'
@@ -84,7 +87,7 @@ function calcManse(year: number, month: number, day: number, hourMinute: string,
     const h = parseInt(parts[0])
     const m = parts[1] ? parseInt(parts[1]) : 0
     if (!isNaN(h) && h >= 0 && h <= 23) {
-      hp = calcHourPillar(h, dayStemIdx)
+      hp = calcHourPillar(y, mo, d, h, m)
       hourStr = `${String(h).padStart(2,'0')}시 ${String(m).padStart(2,'0')}분 (${HOUR_NAMES[h] ?? ''})`
       if (solarTimeCorrection) hourStr += ` [진태양시 보정 ${solarTimeCorrection.correctionMinutes >= 0 ? '+' : ''}${solarTimeCorrection.correctionMinutes}분 적용]`
     }
