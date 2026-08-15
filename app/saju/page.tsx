@@ -169,18 +169,16 @@ function TitleCard({ item, charColor, idx }: { item: SajuTitle; charColor: strin
   return (
     <div className="rounded-2xl overflow-hidden border" style={{ borderColor: `${charColor}40`, background: '#111118' }}>
       <div className="p-4">
-        <div className="flex items-start gap-3">
-          <span className="text-xs font-bold px-2 py-1 rounded-full flex-shrink-0"
-            style={{ background: `${charColor}25`, color: charColor }}>{idx+1}</span>
-          <p className="font-bold text-base leading-snug text-white">{item.title}</p>
-        </div>
+        <span className="inline-block text-xs font-bold px-2 py-1 rounded-full mb-2"
+          style={{ background: `${charColor}25`, color: charColor }}>{idx+1}</span>
+        <p className="font-bold text-base leading-snug text-white">{item.title}</p>
         {item.content && (
-          <div className="text-gray-300 text-sm leading-relaxed mt-3">
+          <div className="text-gray-300 text-sm leading-relaxed mt-4">
             {item.content.split('\n').map((line, i) => (
               line.startsWith('⚠️')
                 ? <p key={i} className="mt-4 text-yellow-300 font-medium">{line}</p>
                 : line === ''
-                  ? <div key={i} className="h-2" />
+                  ? <div key={i} className="h-4" />
                   : <p key={i}>{line}</p>
             ))}
           </div>
