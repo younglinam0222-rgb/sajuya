@@ -3,6 +3,9 @@ import Anthropic from '@anthropic-ai/sdk'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/app/api/auth/[...nextauth]/route'
 import { createServerSupabase } from '@/lib/supabase'
+import { correctToTrueSolarTime } from '@/lib/solarTime'
+// @ts-ignore — lunar-javascript는 공식 타입 정의가 없음
+import LunarJS from 'lunar-javascript'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -52,45 +55,48 @@ const STEM_ELEMENT   = ['木','木','火','火','土','土','金','金','水','�
 const BRANCH_ELEMENT = ['水','土','木','木','土','火','火','土','金','金','土','水']
 const ANIMALS = ['쥐','소','호랑이','토끼','용','뱀','말','양','원숭이','닭','개','돼지']
 
-function calcYearPillar(year: number) {
-  const idx = ((year - 4) % 60 + 60) % 60
-  const si = idx % 10, bi = idx % 12
-  return { stem: STEMS[si], branch: BRANCHES[bi], stemKr: STEM_KR[si], branchKr: BRANCH_KR[bi], stemElement: STEM_ELEMENT[si], branchElement: BRANCH_ELEMENT[bi], stemIdx: si, branchIdx: bi }
+// ✅ 수정: saju/route.ts와 동일한 버그(월주/일주/연주 계산 오류) 발견돼서 동일하게 교체.
+// 자체 수식 대신 검증된 lunar-javascript 라이브러리 사용.
+function ganZhiToPillar(ganzhi: string) {
+  const stemChar = ganzhi[0], branchChar = ganzhi[1]
+  const si = STEMS.indexOf(stemChar), bi = BRANCHES.indexOf(branchChar)
+  return { stem: stemChar, branch: branchChar, stemKr: STEM_KR[si], branchKr: BRANCH_KR[bi], stemElement: STEM_ELEMENT[si], branchElement: BRANCH_ELEMENT[bi], stemIdx: si, branchIdx: bi }
 }
-function calcMonthPillar(year: number, month: number) {
-  const yearStemIdx = ((year - 4) % 10 + 10) % 10
-  const bi = (month + 1) % 12
-  const stemBase = [0,2,4,6,8][Math.floor(yearStemIdx / 2)]
-  const si = (stemBase + (month - 1)) % 10
-  return { stem: STEMS[si], branch: BRANCHES[bi], stemKr: STEM_KR[si], branchKr: BRANCH_KR[bi], stemElement: STEM_ELEMENT[si], branchElement: BRANCH_ELEMENT[bi], stemIdx: si, branchIdx: bi }
+function calcYearPillar(year: number, month: number, day: number) {
+  const lunar = LunarJS.Solar.fromYmd(year, month, day).getLunar()
+  return ganZhiToPillar(lunar.getYearInGanZhiByLiChun())
+}
+function calcMonthPillar(year: number, month: number, day: number) {
+  const lunar = LunarJS.Solar.fromYmd(year, month, day).getLunar()
+  return ganZhiToPillar(lunar.getMonthInGanZhi())
 }
 function calcDayPillar(year: number, month: number, day: number) {
-  const base   = new Date(1900, 0, 1)
-  const target = new Date(year, month - 1, day)
-  const diff   = Math.floor((target.getTime() - base.getTime()) / 86400000)
-  const idx    = ((diff % 60) + 60) % 60
-  const si = idx % 10, bi = idx % 12
-  return { stem: STEMS[si], branch: BRANCHES[bi], stemKr: STEM_KR[si], branchKr: BRANCH_KR[bi], stemElement: STEM_ELEMENT[si], branchElement: BRANCH_ELEMENT[bi], stemIdx: si, branchIdx: bi }
+  const lunar = LunarJS.Solar.fromYmd(year, month, day).getLunar()
+  return ganZhiToPillar(lunar.getDayInGanZhi())
 }
-function calcHourPillar(h: number, dayStemIdx: number) {
-  const bi = Math.floor(((h + 1) % 24) / 2)
-  const stemBase = [0,2,4,6,8][dayStemIdx % 5]
-  const si = (stemBase + bi) % 10
-  return { stem: STEMS[si], branch: BRANCHES[bi], stemKr: STEM_KR[si], branchKr: BRANCH_KR[bi], stemElement: STEM_ELEMENT[si], branchElement: BRANCH_ELEMENT[bi], stemIdx: si, branchIdx: bi }
+function calcHourPillar(year: number, month: number, day: number, h: number, m: number) {
+  const lunar = LunarJS.Solar.fromYmdHms(year, month, day, h, m, 0).getLunar()
+  return ganZhiToPillar(lunar.getTimeInGanZhi())
 }
 function calcTodayPillar() {
   const now = new Date()
   return calcDayPillar(now.getFullYear(), now.getMonth() + 1, now.getDate())
 }
-function calcManse(year: number, month: number, day: number, hourStr?: string) {
-  const yp = calcYearPillar(year)
-  const mp = calcMonthPillar(year, month)
-  const dp = calcDayPillar(year, month, day)
-  const dayStemIdx = dp.stemIdx
+function calcManse(year: number, month: number, day: number, hourStr?: string, longitude?: number) {
+  // ✅ 신규: 출생지(경도) 선택 입력 시 진태양시로 보정 (사주풀이 route.ts와 동일 로직)
+  let y = year, mo = month, d = day, hm = hourStr
+  if (longitude && hourStr) {
+    const c = correctToTrueSolarTime(year, month, day, hourStr, longitude)
+    y = c.correctedYear; mo = c.correctedMonth; d = c.correctedDay; hm = c.correctedHourMinute
+  }
+  const yp = calcYearPillar(y, mo, d)
+  const mp = calcMonthPillar(y, mo, d)
+  const dp = calcDayPillar(y, mo, d)
   let hp = null
-  if (hourStr) {
-    const h = parseInt(hourStr.split(':')[0])
-    if (!isNaN(h) && h >= 0 && h <= 23) hp = calcHourPillar(h, dayStemIdx)
+  if (hm) {
+    const h = parseInt(hm.split(':')[0])
+    const m = hm.split(':')[1] ? parseInt(hm.split(':')[1]) : 0
+    if (!isNaN(h) && h >= 0 && h <= 23) hp = calcHourPillar(y, mo, d, h, m)
   }
   const elements: Record<string, number> = { '木':0, '火':0, '土':0, '金':0, '水':0 }
   const pillars = [yp, mp, dp, ...(hp ? [hp] : [])]
@@ -110,7 +116,7 @@ const CHARACTER_VOICE: Record<string, string> = {
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, year, month, day, hour, gender, characterId, calType } = await req.json()
+    const { name, year, month, day, hour, gender, characterId, calType, longitude, birthPlace } = await req.json()
     // ✅ 추가: 로그인 여부 확인 (비로그인이어도 기존처럼 그대로 무료 이용 가능, 저장만 안 됨)
     const session = await getServerSession(authOptions)
     const userId = (session?.user as { id?: string } | undefined)?.id
@@ -121,7 +127,7 @@ export async function POST(req: NextRequest) {
     const calTypeStr = calType === 'lunar' ? '음력' : '양력'
     const age       = now.getFullYear() - parseInt(year) + 1
 
-    const manse      = calcManse(parseInt(year), parseInt(month), parseInt(day), hour)
+    const manse      = calcManse(parseInt(year), parseInt(month), parseInt(day), hour, typeof longitude === 'number' ? longitude : undefined)
     const todayPillar = calcTodayPillar()
 
     const elementNames: Record<string,string> = { '木':'나무', '火':'불', '土':'땅', '金':'금속', '水':'물' }
@@ -195,7 +201,7 @@ ${voice}
             result: parsed,
           }, { onConflict: 'user_id,reading_date' }),
           supabase.from('users').update({
-            birth_profile: { name, year, month, day, hour, gender, calType, characterId },
+            birth_profile: { name, year, month, day, hour, gender, calType, characterId, birthPlace },
           }).eq('id', userId),
         ])
       } catch (saveErr) {
