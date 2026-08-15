@@ -197,6 +197,7 @@ export default function SajuPage() {
   const [manse, setManse] = useState<ManseData | null>(null)
   const [selectedChar, setSelectedChar] = useState(CHARACTERS[0])
   const [calType, setCalType] = useState<'solar'|'lunar'>('solar')
+  const [isCustomJob, setIsCustomJob] = useState(false)
   const [form, setForm] = useState({
     name: '', year: '1990', month: '1', day: '1',
     hour: '', gender: 'female', occupation: '직장인', maritalStatus: '미혼', questionIntent: '인생 전반',
@@ -611,15 +612,32 @@ export default function SajuPage() {
             <label className="text-xs text-gray-400 mb-1.5 block">직업</label>
             <div className="flex flex-wrap gap-2">
               {OCCUPATIONS.map(o => (
-                <button key={o} onClick={() => setForm(f => ({ ...f, occupation: o }))}
+                <button key={o} onClick={() => { setIsCustomJob(false); setForm(f => ({ ...f, occupation: o })) }}
                   className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
-                  style={form.occupation === o
+                  style={!isCustomJob && form.occupation === o
                     ? { background: selectedChar.color, color: 'white' }
                     : { background: '#1F2937', color: '#9CA3AF', border: '1px solid #374151' }}>
                   {o}
                 </button>
               ))}
+              <button onClick={() => { setIsCustomJob(true); setForm(f => ({ ...f, occupation: '' })) }}
+                className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
+                style={isCustomJob
+                  ? { background: selectedChar.color, color: 'white' }
+                  : { background: '#1F2937', color: '#9CA3AF', border: '1px solid #374151' }}>
+                기타
+              </button>
             </div>
+            {isCustomJob && (
+              <input
+                type="text"
+                value={form.occupation}
+                onChange={e => setForm(f => ({ ...f, occupation: e.target.value }))}
+                placeholder="예: 의사, 작곡가, IT개발자, 크리에이터, BJ..."
+                maxLength={20}
+                className="mt-2 w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none"
+              />
+            )}
           </div>
         </div>
 
