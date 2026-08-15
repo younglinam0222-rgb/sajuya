@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useSession, signIn } from 'next-auth/react'
+import TimeNumberInput from '@/app/components/TimeNumberInput'
+import { KOREA_REGIONS } from '@/lib/solarTime'
 
 interface SajuTitle {
   id: string; title: string; teaser: string; is_free: boolean; content: string
@@ -71,7 +73,8 @@ function ManseTable({ manse, charColor }: { manse: ManseData; charColor: string 
       <div className="grid grid-cols-4 text-center border-b border-gray-800">
         {pillars.map(({ label, p }) => (
           <div key={label} className="py-2" style={{ background: p ? ELEMENT_BG[p.stemElement]||'#111118' : '#111118' }}>
-            <div className="text-2xl font-black" style={{ color: p ? ELEMENT_COLORS[p.stemElement]||'#fff' : '#333' }}>{p ? p.stem : '?'}</div>
+            <div className="text-2xl font-black leading-none" style={{ color: p ? ELEMENT_COLORS[p.stemElement]||'#fff' : '#333' }}>{p ? p.stem : '?'}</div>
+            <div className="text-[10px] text-gray-400 font-bold mt-0.5">{p?.stemKr ?? ''}</div>
             <div className="text-[9px] text-gray-500 mt-0.5">{p?.stemElement}</div>
             <div className="text-[9px] text-gray-500">{p?.sipsinStem}</div>
           </div>
@@ -80,7 +83,8 @@ function ManseTable({ manse, charColor }: { manse: ManseData; charColor: string 
       <div className="grid grid-cols-4 text-center border-b border-gray-800">
         {pillars.map(({ label, p }) => (
           <div key={label} className="py-2" style={{ background: p ? ELEMENT_BG[p.branchElement]||'#111118' : '#111118' }}>
-            <div className="text-2xl font-black" style={{ color: p ? ELEMENT_COLORS[p.branchElement]||'#fff' : '#333' }}>{p ? p.branch : '?'}</div>
+            <div className="text-2xl font-black leading-none" style={{ color: p ? ELEMENT_COLORS[p.branchElement]||'#fff' : '#333' }}>{p ? p.branch : '?'}</div>
+            <div className="text-[10px] text-gray-400 font-bold mt-0.5">{p?.branchKr ?? ''}</div>
             <div className="text-[9px] text-gray-500 mt-0.5">{p?.branchElement}</div>
             <div className="text-[9px] text-gray-500">{p?.sipsinBranch}</div>
           </div>
@@ -112,7 +116,7 @@ function LoadingScreen({ name, character, saving }: { name: string; character: t
   return (
     <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center text-white px-4">
       <div className="w-24 h-24 rounded-full overflow-hidden mb-6 border-2" style={{ borderColor: character.color }}>
-        <img src={character.img} alt={character.name} className="w-full h-full object-cover object-top" />
+        <img src={character.img} alt={character.name} className="w-full h-full object-cover object-top animate-breathe" />
       </div>
       <h2 className="text-xl font-bold mb-1">{saving ? '풀이 저장 중...' : `${name}님의 사주 분석 중`}</h2>
       <p className="text-gray-500 text-sm mb-8">{saving ? '잠시만 기다려주세요' : `${character.name}이(가) 보고 있어요`}</p>
@@ -198,6 +202,7 @@ export default function SajuPage() {
   const [form, setForm] = useState({
     name: '', year: '1990', month: '1', day: '1',
     hour: '', gender: 'female', occupation: '직장인', maritalStatus: '미혼', questionIntent: '인생 전반',
+    birthPlace: '',
   })
   const [partnerForm, setPartnerForm] = useState({
     name: '', year: '1990', month: '1', day: '1', hour: '', gender: 'male',
@@ -209,10 +214,34 @@ export default function SajuPage() {
 
   const isRomance = form.questionIntent === '연애/결혼'
 
+  // ✅ 신규: 오늘의 운세(/daily) 등에서 "전체 사주 풀이 보기" 버튼으로 넘어올 때
+  // URL 쿼리(?name=...&year=...)로 입력값을 미리 채워줌 (전환 마찰 감소)
+  // useSearchParams 훅 대신 window.location으로 읽어서 정적 프리렌더링 이슈(Suspense 필요) 회피
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (!params.has('name')) return
+    setForm(f => ({
+      ...f,
+      name: params.get('name') ?? f.name,
+      year: params.get('year') ?? f.year,
+      month: params.get('month') ?? f.month,
+      day: params.get('day') ?? f.day,
+      hour: params.get('hour') ?? f.hour,
+      gender: params.get('gender') ?? f.gender,
+    }))
+    const cal = params.get('calType')
+    if (cal === 'lunar' || cal === 'solar') setCalType(cal)
+  }, [])
+
   const handleSubmit = async () => {
     if (!form.name) return
-    // ✅ 추가: 혹시 모를 우회 방지 — 로그인 안 된 상태면 제출 자체를 막음
-    if (status !== 'authenticated') {
+    // ✅ 수정: 버그 발견 — status !== 'authenticated'로 막아놨었는데, next-auth는
+    // 탭 전환/포커스 복귀 시 세션을 잠깐 재검증하면서 status가 순간적으로 'loading'으로
+    // 바뀔 수 있음. 그 타이밍에 버튼을 누르면 이 조건에 걸려서 "조용히 아무것도 안 일어나는"
+    // 것처럼 보였을 가능성이 큼(화면 위쪽에 작은 에러 배너만 뜨고 눈에 안 띄었을 수 있음).
+    // 실제로 로그인이 안 된 경우만 막도록 조건을 좁힘.
+    if (status === 'unauthenticated') {
       setErrorMsg('로그인 후 이용할 수 있어요.')
       return
     }
@@ -224,12 +253,14 @@ export default function SajuPage() {
     finalManseRef.current  = null
 
     try {
+      const selectedRegion = KOREA_REGIONS.find(r => r.name === form.birthPlace)
       const res = await fetch('/api/saju', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form, calType, characterId: selectedChar.id,
           partnerInfo: isRomance ? partnerForm : undefined,
+          longitude: selectedRegion?.longitude,
         }),
       })
       // ✅ 수정: body가 없으면 그냥 return 해서 '분석 중' 화면에 영원히 멈춰있던 버그.
@@ -536,11 +567,19 @@ export default function SajuPage() {
             <label className="text-xs text-gray-400 mb-1.5 block">
               태어난 시간 <span className="text-gray-600">(선택 · 정확할수록 좋아요)</span>
             </label>
-            <input type="time" value={form.hour}
-              onChange={e => setForm(f => ({ ...f, hour: e.target.value }))}
-              className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none"
-              style={{ colorScheme: 'dark' }} />
+            <TimeNumberInput value={form.hour} onChange={v => setForm(f => ({ ...f, hour: v }))} />
             <p className="text-xs text-gray-600 mt-1">모르면 비워두세요</p>
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 mb-1.5 block">
+              태어난 지역 <span className="text-gray-600">(선택 · 시주 정확도 up)</span>
+            </label>
+            <select value={form.birthPlace} onChange={e => setForm(f => ({ ...f, birthPlace: e.target.value }))}
+              className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none">
+              <option value="">선택 안 함 (표준시로 계산)</option>
+              {KOREA_REGIONS.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
+            </select>
+            <p className="text-xs text-gray-600 mt-1">한국 표준시는 태어난 곳마다 실제 시간과 몇 분씩 차이가 나요. 안 넣어도 무방합니다</p>
           </div>
           <div>
             <label className="text-xs text-gray-400 mb-1.5 block">성별</label>
@@ -618,10 +657,7 @@ export default function SajuPage() {
             </div>
             <div>
               <label className="text-xs text-gray-400 mb-1.5 block">상대방 태어난 시간 <span className="text-gray-600">(선택)</span></label>
-              <input type="time" value={partnerForm.hour}
-                onChange={e => setPartnerForm(f => ({ ...f, hour: e.target.value }))}
-                className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none"
-                style={{ colorScheme: 'dark' }} />
+              <TimeNumberInput value={partnerForm.hour} onChange={v => setPartnerForm(f => ({ ...f, hour: v }))} />
             </div>
             <div>
               <label className="text-xs text-gray-400 mb-1.5 block">상대방 성별</label>
