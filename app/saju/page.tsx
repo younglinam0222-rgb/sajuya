@@ -90,6 +90,31 @@ function ManseTable({ manse, charColor }: { manse: ManseData; charColor: string 
           </div>
         ))}
       </div>
+      {/* ✅ 신규: 지장간 / 12운성 / 공망 / 납음오행 — 사주톡 스타일 원국표 상세정보 */}
+      <div className="px-3 pt-2 text-[9px] font-bold text-gray-600 bg-[#0a0a0a]">지장간</div>
+      <div className="grid grid-cols-4 text-center border-b border-gray-800 bg-[#0a0a0a] pb-1.5">
+        {pillars.map(({ label, p }) => (
+          <div key={label} className="text-[9px] text-gray-400">{p?.hideGan ?? '-'}</div>
+        ))}
+      </div>
+      <div className="px-3 pt-2 text-[9px] font-bold text-gray-600">12운성</div>
+      <div className="grid grid-cols-4 text-center border-b border-gray-800 pb-1.5">
+        {pillars.map(({ label, p }) => (
+          <div key={label} className="text-[9px] text-gray-400">{p?.twelveUnseong ?? '-'}</div>
+        ))}
+      </div>
+      <div className="px-3 pt-2 text-[9px] font-bold text-gray-600 bg-[#0a0a0a]">공망</div>
+      <div className="grid grid-cols-4 text-center border-b border-gray-800 bg-[#0a0a0a] pb-1.5">
+        {pillars.map(({ label, p }) => (
+          <div key={label} className="text-[9px] text-gray-400">{p?.gongMang ?? '-'}</div>
+        ))}
+      </div>
+      <div className="px-3 pt-2 text-[9px] font-bold text-gray-600">납음오행</div>
+      <div className="grid grid-cols-4 text-center border-b border-gray-800 pb-1.5">
+        {pillars.map(({ label, p }) => (
+          <div key={label} className="text-[9px] text-gray-400">{p?.naYin ?? '-'}</div>
+        ))}
+      </div>
       <div className="grid grid-cols-5 text-center bg-[#0d0d0d]">
         {(['木','火','土','金','水'] as const).map(el => (
           <div key={el} className="py-1.5 border-r border-gray-800 last:border-r-0">
@@ -158,6 +183,39 @@ function LifecycleChart({ data }: { data: LifecycleItem[] }) {
             <span className="text-xs" style={{ color: SEASON_COLORS[d.season]??'#fff' }}>{SEASON_ICONS[d.season]} {d.season}</span>
             <span className="text-xs text-gray-400">{d.desc}</span>
           </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ✅ 신규: 사주 용어풀이 부록 — 모든 사용자에게 동일하게 재사용되는 고정 콘텐츠라 API 비용 없이
+// 결과물 체감 분량을 늘려줌 (사주대가 등 "170장 프리미엄" 부류 상품의 부록 구성을 벤치마킹)
+const GLOSSARY_ITEMS: { title: string; body: string }[] = [
+  { title: '오행이란?', body: '木(나무)·火(불)·土(흙)·金(쇠)·水(물), 세상 모든 걸 이 다섯 기운으로 나눈 거야. 사주팔자 여덟 글자도 다 이 오행 중 하나씩 속해 있고, 어떤 기운이 많고 적은지 보면 그 사람 타고난 성향이 보여. 예를 들어 火가 많으면 열정적이고 급한 편, 水가 많으면 차분하고 생각이 깊은 편이야.' },
+  { title: '천간·지지란?', body: '만세력의 8글자는 천간 4개(위쪽 줄)와 지지 4개(아래쪽 줄)로 나뉘어. 천간은 甲乙丙丁戊己庚辛壬癸 10개, 지지는 子丑寅卯辰巳午未申酉戌亥 12개야. 천간은 겉으로 드러나는 성격, 지지는 실제 삶 속에서 부딪히는 환경·현실을 나타낸다고 보면 이해가 쉬워.' },
+  { title: '십성이란?', body: '나(일간)를 기준으로 다른 글자들이 나랑 어떤 관계인지 10가지로 분류한 거야. 비견·겁재는 나와 같은 편(형제·경쟁자), 식신·상관은 내가 표현하는 힘(재능·끼), 편재·정재는 내가 다루는 돈, 편관·정관은 나를 압박하는 규율·조직, 편인·정인은 나를 도와주는 배경·학문을 뜻해. 이 조합으로 재물운, 직업운, 인간관계 스타일이 갈려.' },
+  { title: '지장간이란?', body: '지지(땅) 속에 숨어있는 천간 기운이야. 겉으로 보이는 글자 하나로는 다 설명 안 되는 그 사람의 숨은 성향이나 속마음을 지장간에서 읽어. 보통 2~3개 글자가 들어있고, 그중 가장 마지막에 나온 게 그 지지의 본심(정기)에 가까워.' },
+  { title: '12운성이란?', body: '내 기운이 사계절처럼 태어나고(장생), 자라고(관대), 왕성해지고(제왕), 쇠약해지고(사), 다시 숨는(절) 흐름 12단계야. 각 기둥이 지금 어느 단계에 있는지로 그 시기 에너지가 강한지 약한지를 판단해. 제왕·건록이면 힘이 넘치는 시기, 사·묘·절이면 한발 물러서서 재정비할 시기로 봐.' },
+  { title: '공망이란?', body: '태어난 날(일주) 기준으로 육십갑자를 10개씩 묶었을 때 짝이 안 맞아 "비어버리는" 두 글자야. 사주 여덟 글자 중에 이 공망 글자가 있으면, 그 자리(연=조상·초년, 월=부모형제, 일=배우자, 시=자식)와 관련된 일이 예상과 다르게 흘러가거나 허무하게 느껴질 수 있다고 봐.' },
+  { title: '납음오행이란?', body: '천간+지지 조합 60개(육십갑자)마다 붙는 고유한 오행 별명이야. 예를 들어 "노중화(炉中火)"는 화로 안의 불, "장류수(長流水)"는 끊임없이 흐르는 물처럼, 같은 오행이어도 성질이 다르다는 걸 은유적으로 표현한 거야. 그 사람 기운의 "질감"을 좀 더 입체적으로 보여주는 참고 지표야.' },
+]
+function GlossarySection() {
+  return (
+    <div className="mt-6">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-lg">📖</span>
+        <h2 className="font-bold text-base">부록 · 사주 용어풀이</h2>
+      </div>
+      <div className="rounded-2xl overflow-hidden border border-gray-800 divide-y divide-gray-800">
+        {GLOSSARY_ITEMS.map(g => (
+          <details key={g.title} className="group bg-[#111118] open:bg-[#0d0d0d]">
+            <summary className="px-4 py-3 text-sm font-bold text-gray-200 cursor-pointer flex items-center justify-between list-none">
+              {g.title}
+              <span className="text-gray-600 text-xs group-open:rotate-180 transition-transform">▾</span>
+            </summary>
+            <p className="px-4 pb-4 text-xs text-gray-400 leading-relaxed">{g.body}</p>
+          </details>
         ))}
       </div>
     </div>
@@ -457,6 +515,8 @@ export default function SajuPage() {
               )}
             </div>
           )}
+
+          <GlossarySection />
 
           {result.disclaimer && <p className="text-gray-600 text-xs text-center mt-6">{result.disclaimer}</p>}
           <button onClick={() => setStage('input')} className="w-full mt-4 py-3 rounded-2xl text-sm text-gray-400 border border-gray-800">다시 분석하기</button>
