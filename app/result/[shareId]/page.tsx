@@ -254,7 +254,8 @@ export default function ResultPage() {
           <div className="grid grid-cols-4 text-center" style={{ borderBottom: '1px solid #222' }}>
             {manjuPillars.map(({ label, pillar }) => (
               <div key={label} className="py-2.5" style={{ background: elementBg(pillar?.stemElement), borderRight: '1px solid #222' }}>
-                <div className="text-3xl font-black" style={{ color: elementColor(pillar?.stemElement) }}>{pillar?.stem ?? '?'}</div>
+                <div className="text-3xl font-black leading-none" style={{ color: elementColor(pillar?.stemElement) }}>{pillar?.stem ?? '?'}</div>
+                <div className="text-[10px] mt-0.5 font-bold" style={{ color: 'rgba(255,255,255,.55)' }}>{pillar?.stemKr ?? ''}</div>
                 <div className="text-[9px] mt-0.5" style={{ color: 'rgba(255,255,255,.4)' }}>{pillar?.stemElement}</div>
                 <div className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,.5)' }}>{pillar?.sipsinStem}</div>
               </div>
@@ -263,7 +264,8 @@ export default function ResultPage() {
           <div className="grid grid-cols-4 text-center" style={{ borderBottom: '1px solid #222' }}>
             {manjuPillars.map(({ label, pillar }) => (
               <div key={label} className="py-2.5" style={{ background: elementBg(pillar?.branchElement), borderRight: '1px solid #222' }}>
-                <div className="text-3xl font-black" style={{ color: elementColor(pillar?.branchElement) }}>{pillar?.branch ?? '?'}</div>
+                <div className="text-3xl font-black leading-none" style={{ color: elementColor(pillar?.branchElement) }}>{pillar?.branch ?? '?'}</div>
+                <div className="text-[10px] mt-0.5 font-bold" style={{ color: 'rgba(255,255,255,.55)' }}>{pillar?.branchKr ?? ''}</div>
                 <div className="text-[9px] mt-0.5" style={{ color: 'rgba(255,255,255,.4)' }}>{pillar?.branchElement}</div>
                 <div className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,.5)' }}>{pillar?.sipsinBranch}</div>
               </div>
