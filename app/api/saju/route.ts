@@ -120,7 +120,7 @@ function calcManse(year: number, month: number, day: number, hourMinute: string,
     hm = solarTimeCorrection.correctedHourMinute
   }
 
-  const ec = LunarJS.Solar.fromYmd(y, mo, d).getLunar().getEightChar()
+  const ec = (LunarJS.Solar.fromYmd(y, mo, d).getLunar() as any).getEightChar()
   const yp = calcYearPillar(ec)
   const mp = calcMonthPillar(ec)
   const dp = calcDayPillar(ec)
@@ -130,7 +130,7 @@ function calcManse(year: number, month: number, day: number, hourMinute: string,
     const h = parseInt(parts[0])
     const m = parts[1] ? parseInt(parts[1]) : 0
     if (!isNaN(h) && h >= 0 && h <= 23) {
-      const ecTime = LunarJS.Solar.fromYmdHms(y, mo, d, h, m, 0).getLunar().getEightChar()
+      const ecTime = (LunarJS.Solar.fromYmdHms(y, mo, d, h, m, 0).getLunar() as any).getEightChar()
       hp = calcHourPillar(ecTime)
       hourStr = `${String(h).padStart(2,'0')}시 ${String(m).padStart(2,'0')}분 (${HOUR_NAMES[h] ?? ''})`
       if (solarTimeCorrection) hourStr += ` [진태양시 보정 ${solarTimeCorrection.correctionMinutes >= 0 ? '+' : ''}${solarTimeCorrection.correctionMinutes}분 적용]`
