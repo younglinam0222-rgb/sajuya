@@ -300,21 +300,17 @@ export default function ResultPage() {
             {freeTitles.map((t, i) => (
               <div key={t.id} className="rounded-2xl overflow-hidden border" style={{ borderColor: `${charColor}40`, background: '#111' }}>
                 <div className="p-4">
-                  <div className="flex items-start gap-3">
-                    <span className="text-xs font-bold px-2 py-1 rounded-full flex-shrink-0"
-                      style={{ background: `${charColor}25`, color: charColor }}>무료 {i + 1}</span>
-                    <div>
-                      <p className="font-bold text-base leading-snug text-white">{t.title}</p>
-                      {t.teaser && <p className="text-xs text-gray-500 mt-0.5">{t.teaser}</p>}
-                    </div>
-                  </div>
+                  <span className="inline-block text-xs font-bold px-2 py-1 rounded-full mb-2"
+                    style={{ background: `${charColor}25`, color: charColor }}>무료 {i + 1}</span>
+                  <p className="font-bold text-base leading-snug text-white">{t.title}</p>
+                  {t.teaser && <p className="text-xs text-gray-500 mt-1">{t.teaser}</p>}
                   {t.content && (
-                    <div className="text-gray-300 text-sm leading-relaxed mt-3">
+                    <div className="text-gray-300 text-sm leading-relaxed mt-4">
                       {t.content.split('\n').map((line, j) =>
                         line.startsWith('⚠️')
                           ? <p key={j} className="mt-4 text-yellow-300 font-medium">{line}</p>
                           : line === ''
-                            ? <div key={j} className="h-2" />
+                            ? <div key={j} className="h-4" />
                             : <p key={j}>{line}</p>
                       )}
                     </div>
@@ -335,21 +331,17 @@ export default function ResultPage() {
                     {paidTitles.map((t, i) => (
                       <div key={t.id} className="rounded-2xl overflow-hidden border" style={{ borderColor: `${charColor}40`, background: '#111' }}>
                         <div className="p-4">
-                          <div className="flex items-start gap-3">
-                            <span className="text-xs font-bold px-2 py-1 rounded-full flex-shrink-0"
-                              style={{ background: `${charColor}25`, color: charColor }}>{i + freeTitles.length + 1}</span>
-                            <div>
-                              <p className="font-bold text-base leading-snug text-white">{t.title}</p>
-                              {t.teaser && <p className="text-xs text-gray-500 mt-0.5">{t.teaser}</p>}
-                            </div>
-                          </div>
+                          <span className="inline-block text-xs font-bold px-2 py-1 rounded-full mb-2"
+                            style={{ background: `${charColor}25`, color: charColor }}>{i + freeTitles.length + 1}</span>
+                          <p className="font-bold text-base leading-snug text-white">{t.title}</p>
+                          {t.teaser && <p className="text-xs text-gray-500 mt-1">{t.teaser}</p>}
                           {t.content && (
-                            <div className="text-gray-300 text-sm leading-relaxed mt-3">
+                            <div className="text-gray-300 text-sm leading-relaxed mt-4">
                               {t.content.split('\n').map((line, j) =>
                                 line.startsWith('⚠️')
                                   ? <p key={j} className="mt-4 text-yellow-300 font-medium">{line}</p>
                                   : line === ''
-                                    ? <div key={j} className="h-2" />
+                                    ? <div key={j} className="h-4" />
                                     : <p key={j}>{line}</p>
                               )}
                             </div>
@@ -367,16 +359,14 @@ export default function ResultPage() {
                     {paidTitles.map((t, i) => (
                       <div key={t.id} className="rounded-2xl overflow-hidden border border-gray-800 bg-[#111]">
                         <div className="p-4">
-                          <div className="flex items-start gap-3">
-                            <span className="text-xs font-bold px-2 py-1 rounded-full flex-shrink-0 bg-gray-800 text-gray-500">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-bold px-2 py-1 rounded-full bg-gray-800 text-gray-500">
                               {i + freeTitles.length + 1}
                             </span>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-bold text-base leading-snug text-white">{t.title}</p>
-                              {t.teaser && <p className="text-xs text-gray-600 mt-0.5">{t.teaser}</p>}
-                            </div>
-                            <span className="text-gray-600 flex-shrink-0 text-lg">🔒</span>
+                            <span className="text-gray-600 text-lg">🔒</span>
                           </div>
+                          <p className="font-bold text-base leading-snug text-white">{t.title}</p>
+                          {t.teaser && <p className="text-xs text-gray-600 mt-1">{t.teaser}</p>}
                           <div className="mt-3 h-14 rounded-xl overflow-hidden relative">
                             <div className="text-gray-600 text-sm leading-relaxed blur-sm select-none">
                               {t.content?.slice(0, 80) ?? '풀이 내용이 잠겨있어요.'}
