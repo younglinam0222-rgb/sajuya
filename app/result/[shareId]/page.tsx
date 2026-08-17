@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { UNLOCK_PRICE } from '@/lib/pricing'
 
 interface Section { id: string; emoji: string; title: string; body: string }
-interface SajuTitle { id: string; title: string; teaser: string; is_free: boolean; content: string }
+interface SajuTitle { id: string; category?: string; title: string; teaser: string; is_free: boolean; content: string }
 
 const CHARACTER_IMG: Record<string, string> = {
   baekhalma: '/characters/baekhalma.png',
@@ -300,8 +300,15 @@ export default function ResultPage() {
             {freeTitles.map((t, i) => (
               <div key={t.id} className="rounded-2xl overflow-hidden border" style={{ borderColor: `${charColor}40`, background: '#111' }}>
                 <div className="p-4">
-                  <span className="inline-block text-xs font-bold px-2 py-1 rounded-full mb-2"
-                    style={{ background: `${charColor}25`, color: charColor }}>무료 {i + 1}</span>
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <span className="inline-block text-xs font-bold px-2 py-1 rounded-full"
+                      style={{ background: `${charColor}25`, color: charColor }}>무료 {i + 1}</span>
+                    {t.category && (
+                      <span className="inline-block text-[10px] font-bold px-2 py-1 rounded-full bg-gray-800 text-gray-400">
+                        {t.category}
+                      </span>
+                    )}
+                  </div>
                   <p className="font-bold text-base leading-snug text-white">{t.title}</p>
                   {t.teaser && <p className="text-xs text-gray-500 mt-1">{t.teaser}</p>}
                   {t.content && (
@@ -331,8 +338,15 @@ export default function ResultPage() {
                     {paidTitles.map((t, i) => (
                       <div key={t.id} className="rounded-2xl overflow-hidden border" style={{ borderColor: `${charColor}40`, background: '#111' }}>
                         <div className="p-4">
-                          <span className="inline-block text-xs font-bold px-2 py-1 rounded-full mb-2"
-                            style={{ background: `${charColor}25`, color: charColor }}>{i + freeTitles.length + 1}</span>
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <span className="inline-block text-xs font-bold px-2 py-1 rounded-full"
+                              style={{ background: `${charColor}25`, color: charColor }}>{i + freeTitles.length + 1}</span>
+                            {t.category && (
+                              <span className="inline-block text-[10px] font-bold px-2 py-1 rounded-full bg-gray-800 text-gray-400">
+                                {t.category}
+                              </span>
+                            )}
+                          </div>
                           <p className="font-bold text-base leading-snug text-white">{t.title}</p>
                           {t.teaser && <p className="text-xs text-gray-500 mt-1">{t.teaser}</p>}
                           {t.content && (
@@ -360,9 +374,16 @@ export default function ResultPage() {
                       <div key={t.id} className="rounded-2xl overflow-hidden border border-gray-800 bg-[#111]">
                         <div className="p-4">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-bold px-2 py-1 rounded-full bg-gray-800 text-gray-500">
-                              {i + freeTitles.length + 1}
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-bold px-2 py-1 rounded-full bg-gray-800 text-gray-500">
+                                {i + freeTitles.length + 1}
+                              </span>
+                              {t.category && (
+                                <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-gray-800 text-gray-500">
+                                  {t.category}
+                                </span>
+                              )}
+                            </div>
                             <span className="text-gray-600 text-lg">🔒</span>
                           </div>
                           <p className="font-bold text-base leading-snug text-white">{t.title}</p>
