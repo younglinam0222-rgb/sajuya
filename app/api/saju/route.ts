@@ -20,84 +20,41 @@ const BRANCH_KR = ['자','축','인','묘','진','사','오','미','신','유','
 const STEM_ELEMENT = ['木','木','火','火','土','土','金','金','水','水']
 const BRANCH_ELEMENT = ['水','土','木','木','土','火','火','土','金','金','土','水']
 const ANIMALS = ['쥐','소','호랑이','토끼','용','뱀','말','양','원숭이','닭','개','돼지']
+const SIPSIN = ['비견','겁재','식신','상관','편재','정재','편관','정관','편인','정인']
 
-// ✅ 신규: 십성 한자(라이브러리 반환값) → 한글
-const SIPSIN_KR: Record<string, string> = {
-  '比肩':'비견', '劫财':'겁재', '食神':'식신', '伤官':'상관', '偏财':'편재',
-  '正财':'정재', '偏官':'편관', '正官':'정관', '偏印':'편인', '正印':'정인',
+function getSipsin(dayStemIdx: number, targetStemIdx: number) {
+  return SIPSIN[((targetStemIdx - dayStemIdx + 10) % 10)]
 }
-// ✅ 신규: 12운성 한자 → 한글
-const DISHI_KR: Record<string, string> = {
-  '长生':'장생', '沐浴':'목욕', '冠带':'관대', '临官':'건록', '帝旺':'제왕',
-  '衰':'쇠', '病':'병', '死':'사', '墓':'묘', '绝':'절', '胎':'태', '养':'양',
+function getSipsinBranch(dayStemIdx: number, branchIdx: number) {
+  const mainStemMap = [9,5,0,1,4,3,2,5,6,7,4,8]
+  return SIPSIN[((mainStemMap[branchIdx] - dayStemIdx + 10) % 10)]
 }
-// ✅ 신규: 육십갑자 납음오행 (2개 간지씩 한 이름을 공유 → 30개 그룹)
-// 순서는 갑자을축부터 시작하는 표준 육십갑자 순서와 동일
-const NAYIN_KR = [
-  '해중금','노중화','대림목','노방토','검봉금','산두화','간하수','성두토','백랍금','양류목',
-  '천중수','옥상토','벽력화','송백목','장류수','사중금','산하화','평지목','벽상토','금박금',
-  '복등화','천하수','대역토','차천금','상자목','대계수','사중토','천상화','석류목','대해수',
-]
-function getGanZhiIndex(stemIdx: number, branchIdx: number): number {
-  for (let i = 0; i < 60; i++) {
-    if (i % 10 === stemIdx && i % 12 === branchIdx) return i
-  }
-  return 0
+function calcYearPillar(year: number, month: number, day: number) {
+  // ✅ 수정: 입춘(立春) 기준 반영 안 하던 버그 — 1월~2월 초(입춘 전) 출생자는
+  // 연주가 한 해 밀려서 잘못 나오고 있었음. lunar-javascript의 입춘 기준 계산으로 교체.
+  const lunar = LunarJS.Solar.fromYmd(year, month, day).getLunar()
+  return ganZhiToPillar(lunar.getYearInGanZhiByLiChun())
 }
-function getNaYinKr(stemIdx: number, branchIdx: number): string {
-  return NAYIN_KR[Math.floor(getGanZhiIndex(stemIdx, branchIdx) / 2)]
+// ✅ 수정: 심각한 버그 발견 — 기존 월주/일주 계산이 자체 수식으로 짜여있었는데
+// 실제 검증(경쟁사 만세력 + 이미 설치돼있던 검증된 lunar-javascript 라이브러리 대조)
+// 결과 둘 다 틀린 것으로 확인됨. 월주는 절기(節氣) 경계를 반영 안 했고, 일주는 기준일
+// 계산이 어긋나 있었음. 자체 수식 대신 lunar-javascript로 전면 교체.
+function ganZhiToPillar(ganzhi: string) {
+  const stemChar = ganzhi[0], branchChar = ganzhi[1]
+  const si = STEMS.indexOf(stemChar), bi = BRANCHES.indexOf(branchChar)
+  return { stem: stemChar, branch: branchChar, stemKr: STEM_KR[si], branchKr: BRANCH_KR[bi], stemElement: STEM_ELEMENT[si], branchElement: BRANCH_ELEMENT[bi], stemIdx: si, branchIdx: bi }
 }
-function hideGanToKr(chars: string[]): string {
-  return chars.map(c => { const i = STEMS.indexOf(c); return i >= 0 ? STEM_KR[i] : c }).join('')
+function calcMonthPillar(year: number, month: number, day: number) {
+  const lunar = LunarJS.Solar.fromYmd(year, month, day).getLunar()
+  return ganZhiToPillar(lunar.getMonthInGanZhi())
 }
-function xunKongToKr(zhi: string): string {
-  return zhi.split('').map(c => { const i = BRANCHES.indexOf(c); return i >= 0 ? BRANCH_KR[i] : c }).join('')
+function calcDayPillar(year: number, month: number, day: number) {
+  const lunar = LunarJS.Solar.fromYmd(year, month, day).getLunar()
+  return ganZhiToPillar(lunar.getDayInGanZhi())
 }
-function sipsinKr(hanja: string | null): string {
-  if (!hanja) return '비견' // 일간(본인) 자리는 관례상 비견으로 표기
-  return SIPSIN_KR[hanja] ?? hanja
-}
-
-// ✅ 수정: 심각한 버그 발견 — 기존 연주/월주/일주 계산이 자체 수식(또는 일부만 계산)으로
-// 짜여있었는데, 실제 검증(경쟁사 만세력 + lunar-javascript 라이브러리 대조) 결과 틀린 것으로
-// 확인됨. 연주는 입춘 기준 미반영, 월주는 절기 경계 미반영, 일주는 기준일 계산이 어긋나 있었음.
-// ✅ 신규(업그레이드): 십성도 연주는 '편인' 고정값, 월주/시주만 부분 계산 + 음간(乙丁己辛癸) 일간
-// 오류가 있었음. lunar-javascript의 EightChar 객체가 십성(4주 전체, 천간+지지)/지장간/12운성/
-// 공망을 이미 정확하게 계산해 제공하므로, 자체 수식 대신 EightChar 기반으로 전면 교체.
-function buildPillarDetail(
-  stem: string, branch: string,
-  shishenGan: string | null,
-  shishenZhiArr: string[],
-  hideGanArr: string[],
-  diShi: string,
-  xunKong: string,
-) {
-  const si = STEMS.indexOf(stem), bi = BRANCHES.indexOf(branch)
-  return {
-    stem, branch,
-    stemKr: STEM_KR[si], branchKr: BRANCH_KR[bi],
-    stemElement: STEM_ELEMENT[si], branchElement: BRANCH_ELEMENT[bi],
-    stemIdx: si, branchIdx: bi,
-    sipsinStem: sipsinKr(shishenGan),
-    // 지지 십성은 지장간 중 정기(正氣, 배열의 첫 번째)를 기준으로 표기 — 만세력 표기 관례
-    sipsinBranch: sipsinKr(shishenZhiArr[0] ?? null),
-    hideGan: hideGanToKr(hideGanArr),       // 지장간 (예: "무경병")
-    twelveUnseong: DISHI_KR[diShi] ?? diShi, // 12운성 (예: "건록")
-    naYin: getNaYinKr(si, bi),               // 납음오행 (예: "노중화")
-    gongMang: xunKongToKr(xunKong),          // 공망 (예: "술해")
-  }
-}
-function calcYearPillar(ec: any) {
-  return buildPillarDetail(ec.getYearGan(), ec.getYearZhi(), ec.getYearShiShenGan(), ec.getYearShiShenZhi(), ec.getYearHideGan(), ec.getYearDiShi(), ec.getYearXunKong())
-}
-function calcMonthPillar(ec: any) {
-  return buildPillarDetail(ec.getMonthGan(), ec.getMonthZhi(), ec.getMonthShiShenGan(), ec.getMonthShiShenZhi(), ec.getMonthHideGan(), ec.getMonthDiShi(), ec.getMonthXunKong())
-}
-function calcDayPillar(ec: any) {
-  return buildPillarDetail(ec.getDayGan(), ec.getDayZhi(), null, ec.getDayShiShenZhi(), ec.getDayHideGan(), ec.getDayDiShi(), ec.getDayXunKong())
-}
-function calcHourPillar(ecTime: any) {
-  return buildPillarDetail(ecTime.getTimeGan(), ecTime.getTimeZhi(), ecTime.getTimeShiShenGan(), ecTime.getTimeShiShenZhi(), ecTime.getTimeHideGan(), ecTime.getTimeDiShi(), ecTime.getTimeXunKong())
+function calcHourPillar(year: number, month: number, day: number, h: number, m: number) {
+  const lunar = LunarJS.Solar.fromYmdHms(year, month, day, h, m, 0).getLunar()
+  return ganZhiToPillar(lunar.getTimeInGanZhi())
 }
 const HOUR_NAMES: Record<number, string> = {
   23:'자시(子時)', 0:'자시(子時)', 1:'축시(丑時)', 2:'축시(丑時)',
@@ -120,18 +77,17 @@ function calcManse(year: number, month: number, day: number, hourMinute: string,
     hm = solarTimeCorrection.correctedHourMinute
   }
 
-  const ec = (LunarJS.Solar.fromYmd(y, mo, d).getLunar() as any).getEightChar()
-  const yp = calcYearPillar(ec)
-  const mp = calcMonthPillar(ec)
-  const dp = calcDayPillar(ec)
+  const yp = calcYearPillar(y, mo, d)
+  const mp = calcMonthPillar(y, mo, d)
+  const dp = calcDayPillar(y, mo, d)
+  const dayStemIdx = dp.stemIdx
   let hp = null, hourStr = '시간 미상'
   if (hm) {
     const parts = hm.split(':')
     const h = parseInt(parts[0])
     const m = parts[1] ? parseInt(parts[1]) : 0
     if (!isNaN(h) && h >= 0 && h <= 23) {
-      const ecTime = (LunarJS.Solar.fromYmdHms(y, mo, d, h, m, 0).getLunar() as any).getEightChar()
-      hp = calcHourPillar(ecTime)
+      hp = calcHourPillar(y, mo, d, h, m)
       hourStr = `${String(h).padStart(2,'0')}시 ${String(m).padStart(2,'0')}분 (${HOUR_NAMES[h] ?? ''})`
       if (solarTimeCorrection) hourStr += ` [진태양시 보정 ${solarTimeCorrection.correctionMinutes >= 0 ? '+' : ''}${solarTimeCorrection.correctionMinutes}분 적용]`
     }
@@ -143,10 +99,10 @@ function calcManse(year: number, month: number, day: number, hourMinute: string,
     if (p.branchElement) elements[p.branchElement] = (elements[p.branchElement]||0) + 1
   })
   return {
-    yearPillar: yp,
-    monthPillar: mp,
-    dayPillar: dp,
-    hourPillar: hp,
+    yearPillar:  { ...yp, sipsinStem: '편인', sipsinBranch: getSipsinBranch(dayStemIdx, yp.branchIdx) },
+    monthPillar: { ...mp, sipsinStem: getSipsin(dayStemIdx, mp.stemIdx), sipsinBranch: getSipsinBranch(dayStemIdx, mp.branchIdx) },
+    dayPillar:   { ...dp, sipsinStem: '일간', sipsinBranch: getSipsinBranch(dayStemIdx, dp.branchIdx) },
+    hourPillar:  hp ? { ...hp, sipsinStem: getSipsin(dayStemIdx, hp.stemIdx), sipsinBranch: getSipsinBranch(dayStemIdx, hp.branchIdx) } : null,
     elementCount: elements,
     animal: ANIMALS[yp.branchIdx],
     hourStr,
@@ -203,6 +159,31 @@ const CHARACTER_VOICE: Record<string, string> = {
 - 결론은 묵직하게, 과정은 이해하기 쉽게
 - 예시: "허허, 이 친구 보면 알겠어. 빨리빨리 가려고 하는데, 사실 이 사주는 천천히 쌓아야 터지는 타입이야"
 `,
+}
+
+// ─── 해석 근거 규칙 (다수 유파 합의 기반 — AI가 근거없이 지어내는 것 방지) ──
+// ⚠️ 수정: 단순히 "합의된 결론만 써라"라고만 하면, 이 사주처럼 오행 편중이
+// 뚜렷한 경우 4개 그룹 전부가 같은 결론(예: "목 과다·수 없음")으로 수렴해서
+// 12개 판결문이 실질적으로 3~4가지 얘기의 반복이 되는 부작용 발견됨.
+// → 그룹별로 "핵심 근거 도구"를 강제로 다르게 배정해서 이걸 막음.
+function getInterpretationRules(primaryTool: string, avoidTools: string) {
+  return `
+[해석 근거 규칙 — 문장 쓰기 전에 반드시 이 과정을 거칠 것]
+판결문을 쓰기 전에, 이 사주를 아래 네 가지 명리학 이론 관점에서 각각 속으로 따로 판단해봐:
+1. 자평진전(격국) 관점 — 이 사주의 격(格)이 무엇인지
+2. 적천수(용신) 관점 — 이 사주에 부족하거나 필요한 오행이 무엇인지
+3. 궁통보감(조후) 관점 — 태어난 계절 기준으로 필요한 기운이 무엇인지
+4. 사주첩경(한국 실전) 관점 — 실전에서 이 조합이 보통 어떻게 풀이되는지
+
+네 관점 중 최소 3개 이상이 공통으로 도달하는 결론만 판결문의 핵심 내용으로 써라.
+한 이론에서만 나오는 소수 의견, 애매하게 갈리는 해석은 핵심 판결문에 넣지 마라 — 대신 확실하게 겹치는 부분만 자신 있게 써라.
+이 사고 과정은 출력하지 마라. 결과 문장만 캐릭터 말투로 자연스럽게 써라.
+
+[이번 그룹의 핵심 근거 도구 — 반드시 지킬 것]
+이번에 쓸 판결문들은 반드시 "${primaryTool}"를 핵심 근거로 삼아서 설명해라.
+${avoidTools ? `"${avoidTools}"는 이미 다른 판결문에서 핵심 근거로 여러 번 쓰였을 가능성이 높으니, 이번 판결문에서는 그걸 메인으로 쓰지 말고 아주 짧게 스치듯만 언급해라(있어도 1문장 이하).` : ''}
+같은 사주라도 근거 도구가 다르면 전혀 다른 이야기가 나와야 정상이다 — "목 기운이 많다" 같은 오행 얘기로 12개 판결문이 전부 수렴하면 실격이다.
+`
 }
 
 // ─── 공통 스타일 룰 ────────────────────────────────
@@ -320,7 +301,7 @@ export async function POST(req: NextRequest) {
 
     // ✅ 신규: 6개씩 2호출 → 3개씩 4호출로 쪼갬. Promise.all은 "제일 늦게 끝나는 호출"이
     // 전체 시간을 결정하는데, 호출당 담당량을 절반으로 줄이면 그만큼 대기시간도 절반이 됨.
-    const makeJudgmentPrompt = (ids: number[], isFreeIds: number[]) => `
+    const makeJudgmentPrompt = (ids: number[], isFreeIds: number[], categoryHints: string[], primaryTool: string, avoidTools: string) => `
 ${voiceGuide}
 ${sajuInfo}
 
@@ -329,16 +310,22 @@ ${sajuInfo}
 [궁금한 것]: ${questionIntent}
 → ${intentInstruction}
 
+${getInterpretationRules(primaryTool, avoidTools)}
 ${styleRules}
 
 판결문 ${ids.join('번, ')}번을 작성해. 서로 겹치지 않게 각각 새로운 각도로 파고들어.
 각 판결문은 반드시 500자 이상. 내용 없으면 실격.
 
+[소제목(category) 규칙 — 반드시 지킬 것]
+각 판결문마다 이게 어떤 주제를 다루는지 짧은 소제목(2~5글자)을 붙여라.
+${ids.map((id, i) => `- ${id}번은 "${categoryHints[i]}" 카테고리로 써라.`).join('\n')}
+카테고리 이름은 위에 지정된 것과 똑같이 정확히 써라(예: "재물운"이면 "재물운"이라고, "돈운" 같은 변형 금지).
+
 반드시 아래 JSON만 출력. 마크다운 없이.
 
 {
   "titles": [
-${ids.map(id => `    {"id":"${id}","title":"소름 돋는 상황 묘사 제목","teaser":"읽으면 클릭하고 싶은 한 줄 훅","is_free":${isFreeIds.includes(id)},"content":"500자 이상 판결문. 공감+비유+팩폭+행동팁 포함. 문단 사이 빈줄.\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"}`).join(',\n')}
+${ids.map((id, i) => `    {"id":"${id}","category":"${categoryHints[i]}","title":"소름 돋는 상황 묘사 제목","teaser":"읽으면 클릭하고 싶은 한 줄 훅","is_free":${isFreeIds.includes(id)},"content":"500자 이상 판결문. 공감+비유+팩폭+행동팁 포함. 문단 사이 빈줄.\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"}`).join(',\n')}
   ]
 }
 `
@@ -351,6 +338,8 @@ ${voiceGuide}
 ${sajuInfo}
 
 [현재 상황] 이 사람은 지금 ${currentAge}세야.
+
+${getInterpretationRules('오행 균형과 십성 구조를 종합한 전체 흐름', '')}
 
 이 사람의 인생 전략(대운 흐름)을 작성해. 판결문이 아니라 전체 인생 로드맵이야.
 
@@ -369,13 +358,30 @@ ${lifecycleRows}
 
     const FREE_IDS = [1, 2, 3]
     const idGroups = [[1,2,3], [4,5,6], [7,8,9], [10,11,12]]
+    // ✅ 신규: 4개 그룹이 병렬로 따로 도는 구조라 서로 뭘 쓰는지 모름 → 카테고리 겹침 방지 위해
+    // 그룹별로 미리 다른 카테고리를 배정. 무료(1~3)엔 가장 대중적인 카테고리 배치.
+    const categoryGroups = [
+      ['성격', '재물운', '애정운'],
+      ['직업운', '건강운', '인간관계'],
+      ['대운', '인생흐름', '강점'],
+      ['올해 총운', '위기관리', '결혼운'],
+    ]
+    // ✅ 신규: 오행 편중이 뚜렷한 사주(예: 목4개·수0개)는 4개 그룹이 전부 같은
+    // "오행 불균형" 얘기로 수렴해서 12개가 3~4개 얘기 반복이 되는 문제 발견됨.
+    // 그룹별로 핵심 근거 도구를 강제로 다르게 배정해서 실제로 다른 이야기가 나오게 함.
+    const toolGroups = [
+      '오행 균형(목·화·토·금·수 과다·부족)',
+      '십성 구조(비겁·식상·재성·관성·인성의 조합과 힘)',
+      '신살과 특이 조합(지장간, 12운성 포함)',
+      '대운·세운의 시기별 흐름',
+    ]
 
     const [r1, r2, r3, r4, r5] = await Promise.all([
-      ...idGroups.map(ids => client.messages.create({
+      ...idGroups.map((ids, gi) => client.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 4096,
         system: systemPrompt,
-        messages: [{ role: 'user', content: makeJudgmentPrompt(ids, FREE_IDS) }],
+        messages: [{ role: 'user', content: makeJudgmentPrompt(ids, FREE_IDS, categoryGroups[gi], toolGroups[gi], gi === 0 ? '' : toolGroups[0]) }],
       })),
       client.messages.create({
         model: 'claude-sonnet-4-6',
