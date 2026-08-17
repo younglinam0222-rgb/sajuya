@@ -20,84 +20,41 @@ const BRANCH_KR = ['자','축','인','묘','진','사','오','미','신','유','
 const STEM_ELEMENT = ['木','木','火','火','土','土','金','金','水','水']
 const BRANCH_ELEMENT = ['水','土','木','木','土','火','火','土','金','金','土','水']
 const ANIMALS = ['쥐','소','호랑이','토끼','용','뱀','말','양','원숭이','닭','개','돼지']
+const SIPSIN = ['비견','겁재','식신','상관','편재','정재','편관','정관','편인','정인']
 
-// ✅ 신규: 십성 한자(라이브러리 반환값) → 한글
-const SIPSIN_KR: Record<string, string> = {
-  '比肩':'비견', '劫财':'겁재', '食神':'식신', '伤官':'상관', '偏财':'편재',
-  '正财':'정재', '偏官':'편관', '正官':'정관', '偏印':'편인', '正印':'정인',
+function getSipsin(dayStemIdx: number, targetStemIdx: number) {
+  return SIPSIN[((targetStemIdx - dayStemIdx + 10) % 10)]
 }
-// ✅ 신규: 12운성 한자 → 한글
-const DISHI_KR: Record<string, string> = {
-  '长生':'장생', '沐浴':'목욕', '冠带':'관대', '临官':'건록', '帝旺':'제왕',
-  '衰':'쇠', '病':'병', '死':'사', '墓':'묘', '绝':'절', '胎':'태', '养':'양',
+function getSipsinBranch(dayStemIdx: number, branchIdx: number) {
+  const mainStemMap = [9,5,0,1,4,3,2,5,6,7,4,8]
+  return SIPSIN[((mainStemMap[branchIdx] - dayStemIdx + 10) % 10)]
 }
-// ✅ 신규: 육십갑자 납음오행 (2개 간지씩 한 이름을 공유 → 30개 그룹)
-// 순서는 갑자을축부터 시작하는 표준 육십갑자 순서와 동일
-const NAYIN_KR = [
-  '해중금','노중화','대림목','노방토','검봉금','산두화','간하수','성두토','백랍금','양류목',
-  '천중수','옥상토','벽력화','송백목','장류수','사중금','산하화','평지목','벽상토','금박금',
-  '복등화','천하수','대역토','차천금','상자목','대계수','사중토','천상화','석류목','대해수',
-]
-function getGanZhiIndex(stemIdx: number, branchIdx: number): number {
-  for (let i = 0; i < 60; i++) {
-    if (i % 10 === stemIdx && i % 12 === branchIdx) return i
-  }
-  return 0
+function calcYearPillar(year: number, month: number, day: number) {
+  // ✅ 수정: 입춘(立春) 기준 반영 안 하던 버그 — 1월~2월 초(입춘 전) 출생자는
+  // 연주가 한 해 밀려서 잘못 나오고 있었음. lunar-javascript의 입춘 기준 계산으로 교체.
+  const lunar = LunarJS.Solar.fromYmd(year, month, day).getLunar()
+  return ganZhiToPillar(lunar.getYearInGanZhiByLiChun())
 }
-function getNaYinKr(stemIdx: number, branchIdx: number): string {
-  return NAYIN_KR[Math.floor(getGanZhiIndex(stemIdx, branchIdx) / 2)]
+// ✅ 수정: 심각한 버그 발견 — 기존 월주/일주 계산이 자체 수식으로 짜여있었는데
+// 실제 검증(경쟁사 만세력 + 이미 설치돼있던 검증된 lunar-javascript 라이브러리 대조)
+// 결과 둘 다 틀린 것으로 확인됨. 월주는 절기(節氣) 경계를 반영 안 했고, 일주는 기준일
+// 계산이 어긋나 있었음. 자체 수식 대신 lunar-javascript로 전면 교체.
+function ganZhiToPillar(ganzhi: string) {
+  const stemChar = ganzhi[0], branchChar = ganzhi[1]
+  const si = STEMS.indexOf(stemChar), bi = BRANCHES.indexOf(branchChar)
+  return { stem: stemChar, branch: branchChar, stemKr: STEM_KR[si], branchKr: BRANCH_KR[bi], stemElement: STEM_ELEMENT[si], branchElement: BRANCH_ELEMENT[bi], stemIdx: si, branchIdx: bi }
 }
-function hideGanToKr(chars: string[]): string {
-  return chars.map(c => { const i = STEMS.indexOf(c); return i >= 0 ? STEM_KR[i] : c }).join('')
+function calcMonthPillar(year: number, month: number, day: number) {
+  const lunar = LunarJS.Solar.fromYmd(year, month, day).getLunar()
+  return ganZhiToPillar(lunar.getMonthInGanZhi())
 }
-function xunKongToKr(zhi: string): string {
-  return zhi.split('').map(c => { const i = BRANCHES.indexOf(c); return i >= 0 ? BRANCH_KR[i] : c }).join('')
+function calcDayPillar(year: number, month: number, day: number) {
+  const lunar = LunarJS.Solar.fromYmd(year, month, day).getLunar()
+  return ganZhiToPillar(lunar.getDayInGanZhi())
 }
-function sipsinKr(hanja: string | null): string {
-  if (!hanja) return '비견' // 일간(본인) 자리는 관례상 비견으로 표기
-  return SIPSIN_KR[hanja] ?? hanja
-}
-
-// ✅ 수정: 심각한 버그 발견 — 기존 연주/월주/일주 계산이 자체 수식(또는 일부만 계산)으로
-// 짜여있었는데, 실제 검증(경쟁사 만세력 + lunar-javascript 라이브러리 대조) 결과 틀린 것으로
-// 확인됨. 연주는 입춘 기준 미반영, 월주는 절기 경계 미반영, 일주는 기준일 계산이 어긋나 있었음.
-// ✅ 신규(업그레이드): 십성도 연주는 '편인' 고정값, 월주/시주만 부분 계산 + 음간(乙丁己辛癸) 일간
-// 오류가 있었음. lunar-javascript의 EightChar 객체가 십성(4주 전체, 천간+지지)/지장간/12운성/
-// 공망을 이미 정확하게 계산해 제공하므로, 자체 수식 대신 EightChar 기반으로 전면 교체.
-function buildPillarDetail(
-  stem: string, branch: string,
-  shishenGan: string | null,
-  shishenZhiArr: string[],
-  hideGanArr: string[],
-  diShi: string,
-  xunKong: string,
-) {
-  const si = STEMS.indexOf(stem), bi = BRANCHES.indexOf(branch)
-  return {
-    stem, branch,
-    stemKr: STEM_KR[si], branchKr: BRANCH_KR[bi],
-    stemElement: STEM_ELEMENT[si], branchElement: BRANCH_ELEMENT[bi],
-    stemIdx: si, branchIdx: bi,
-    sipsinStem: sipsinKr(shishenGan),
-    // 지지 십성은 지장간 중 정기(正氣, 배열의 첫 번째)를 기준으로 표기 — 만세력 표기 관례
-    sipsinBranch: sipsinKr(shishenZhiArr[0] ?? null),
-    hideGan: hideGanToKr(hideGanArr),       // 지장간 (예: "무경병")
-    twelveUnseong: DISHI_KR[diShi] ?? diShi, // 12운성 (예: "건록")
-    naYin: getNaYinKr(si, bi),               // 납음오행 (예: "노중화")
-    gongMang: xunKongToKr(xunKong),          // 공망 (예: "술해")
-  }
-}
-function calcYearPillar(ec: any) {
-  return buildPillarDetail(ec.getYearGan(), ec.getYearZhi(), ec.getYearShiShenGan(), ec.getYearShiShenZhi(), ec.getYearHideGan(), ec.getYearDiShi(), ec.getYearXunKong())
-}
-function calcMonthPillar(ec: any) {
-  return buildPillarDetail(ec.getMonthGan(), ec.getMonthZhi(), ec.getMonthShiShenGan(), ec.getMonthShiShenZhi(), ec.getMonthHideGan(), ec.getMonthDiShi(), ec.getMonthXunKong())
-}
-function calcDayPillar(ec: any) {
-  return buildPillarDetail(ec.getDayGan(), ec.getDayZhi(), null, ec.getDayShiShenZhi(), ec.getDayHideGan(), ec.getDayDiShi(), ec.getDayXunKong())
-}
-function calcHourPillar(ecTime: any) {
-  return buildPillarDetail(ecTime.getTimeGan(), ecTime.getTimeZhi(), ecTime.getTimeShiShenGan(), ecTime.getTimeShiShenZhi(), ecTime.getTimeHideGan(), ecTime.getTimeDiShi(), ecTime.getTimeXunKong())
+function calcHourPillar(year: number, month: number, day: number, h: number, m: number) {
+  const lunar = LunarJS.Solar.fromYmdHms(year, month, day, h, m, 0).getLunar()
+  return ganZhiToPillar(lunar.getTimeInGanZhi())
 }
 const HOUR_NAMES: Record<number, string> = {
   23:'자시(子時)', 0:'자시(子時)', 1:'축시(丑時)', 2:'축시(丑時)',
@@ -120,18 +77,17 @@ function calcManse(year: number, month: number, day: number, hourMinute: string,
     hm = solarTimeCorrection.correctedHourMinute
   }
 
-  const ec = (LunarJS.Solar.fromYmd(y, mo, d).getLunar() as any).getEightChar()
-  const yp = calcYearPillar(ec)
-  const mp = calcMonthPillar(ec)
-  const dp = calcDayPillar(ec)
+  const yp = calcYearPillar(y, mo, d)
+  const mp = calcMonthPillar(y, mo, d)
+  const dp = calcDayPillar(y, mo, d)
+  const dayStemIdx = dp.stemIdx
   let hp = null, hourStr = '시간 미상'
   if (hm) {
     const parts = hm.split(':')
     const h = parseInt(parts[0])
     const m = parts[1] ? parseInt(parts[1]) : 0
     if (!isNaN(h) && h >= 0 && h <= 23) {
-      const ecTime = (LunarJS.Solar.fromYmdHms(y, mo, d, h, m, 0).getLunar() as any).getEightChar()
-      hp = calcHourPillar(ecTime)
+      hp = calcHourPillar(y, mo, d, h, m)
       hourStr = `${String(h).padStart(2,'0')}시 ${String(m).padStart(2,'0')}분 (${HOUR_NAMES[h] ?? ''})`
       if (solarTimeCorrection) hourStr += ` [진태양시 보정 ${solarTimeCorrection.correctionMinutes >= 0 ? '+' : ''}${solarTimeCorrection.correctionMinutes}분 적용]`
     }
@@ -143,10 +99,10 @@ function calcManse(year: number, month: number, day: number, hourMinute: string,
     if (p.branchElement) elements[p.branchElement] = (elements[p.branchElement]||0) + 1
   })
   return {
-    yearPillar: yp,
-    monthPillar: mp,
-    dayPillar: dp,
-    hourPillar: hp,
+    yearPillar:  { ...yp, sipsinStem: '편인', sipsinBranch: getSipsinBranch(dayStemIdx, yp.branchIdx) },
+    monthPillar: { ...mp, sipsinStem: getSipsin(dayStemIdx, mp.stemIdx), sipsinBranch: getSipsinBranch(dayStemIdx, mp.branchIdx) },
+    dayPillar:   { ...dp, sipsinStem: '일간', sipsinBranch: getSipsinBranch(dayStemIdx, dp.branchIdx) },
+    hourPillar:  hp ? { ...hp, sipsinStem: getSipsin(dayStemIdx, hp.stemIdx), sipsinBranch: getSipsinBranch(dayStemIdx, hp.branchIdx) } : null,
     elementCount: elements,
     animal: ANIMALS[yp.branchIdx],
     hourStr,
@@ -320,7 +276,7 @@ export async function POST(req: NextRequest) {
 
     // ✅ 신규: 6개씩 2호출 → 3개씩 4호출로 쪼갬. Promise.all은 "제일 늦게 끝나는 호출"이
     // 전체 시간을 결정하는데, 호출당 담당량을 절반으로 줄이면 그만큼 대기시간도 절반이 됨.
-    const makeJudgmentPrompt = (ids: number[], isFreeIds: number[]) => `
+    const makeJudgmentPrompt = (ids: number[], isFreeIds: number[], categoryHints: string[]) => `
 ${voiceGuide}
 ${sajuInfo}
 
@@ -334,11 +290,16 @@ ${styleRules}
 판결문 ${ids.join('번, ')}번을 작성해. 서로 겹치지 않게 각각 새로운 각도로 파고들어.
 각 판결문은 반드시 500자 이상. 내용 없으면 실격.
 
+[소제목(category) 규칙 — 반드시 지킬 것]
+각 판결문마다 이게 어떤 주제를 다루는지 짧은 소제목(2~5글자)을 붙여라.
+${ids.map((id, i) => `- ${id}번은 "${categoryHints[i]}" 카테고리로 써라.`).join('\n')}
+카테고리 이름은 위에 지정된 것과 똑같이 정확히 써라(예: "재물운"이면 "재물운"이라고, "돈운" 같은 변형 금지).
+
 반드시 아래 JSON만 출력. 마크다운 없이.
 
 {
   "titles": [
-${ids.map(id => `    {"id":"${id}","title":"소름 돋는 상황 묘사 제목","teaser":"읽으면 클릭하고 싶은 한 줄 훅","is_free":${isFreeIds.includes(id)},"content":"500자 이상 판결문. 공감+비유+팩폭+행동팁 포함. 문단 사이 빈줄.\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"}`).join(',\n')}
+${ids.map((id, i) => `    {"id":"${id}","category":"${categoryHints[i]}","title":"소름 돋는 상황 묘사 제목","teaser":"읽으면 클릭하고 싶은 한 줄 훅","is_free":${isFreeIds.includes(id)},"content":"500자 이상 판결문. 공감+비유+팩폭+행동팁 포함. 문단 사이 빈줄.\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"}`).join(',\n')}
   ]
 }
 `
@@ -369,13 +330,21 @@ ${lifecycleRows}
 
     const FREE_IDS = [1, 2, 3]
     const idGroups = [[1,2,3], [4,5,6], [7,8,9], [10,11,12]]
+    // ✅ 신규: 4개 그룹이 병렬로 따로 도는 구조라 서로 뭘 쓰는지 모름 → 카테고리 겹침 방지 위해
+    // 그룹별로 미리 다른 카테고리를 배정. 무료(1~3)엔 가장 대중적인 카테고리 배치.
+    const categoryGroups = [
+      ['성격', '재물운', '애정운'],
+      ['직업운', '건강운', '인간관계'],
+      ['대운', '인생흐름', '강점'],
+      ['올해 총운', '위기관리', '결혼운'],
+    ]
 
     const [r1, r2, r3, r4, r5] = await Promise.all([
-      ...idGroups.map(ids => client.messages.create({
+      ...idGroups.map((ids, gi) => client.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 4096,
         system: systemPrompt,
-        messages: [{ role: 'user', content: makeJudgmentPrompt(ids, FREE_IDS) }],
+        messages: [{ role: 'user', content: makeJudgmentPrompt(ids, FREE_IDS, categoryGroups[gi]) }],
       })),
       client.messages.create({
         model: 'claude-sonnet-4-6',
