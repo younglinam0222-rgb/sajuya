@@ -400,6 +400,8 @@ ${lifecycleRows}
         properties: {
           titles: {
             type: 'array' as const,
+            minItems: 3,
+            maxItems: 3,
             items: {
               type: 'object' as const,
               properties: {
@@ -471,17 +473,29 @@ ${getInterpretationRules('이 질문과 가장 직접적으로 관련된 명리 
 ${styleRules}
 
 이 사람의 질문에 사주를 근거로 직접 답하는 도구를 호출해. 질문과 상관없는 일반론 늘어놓지 말고, 정확히 이 질문에 대한 답을 해라.
+${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 들어있다 — 질문이 그 사람과의 관계·궁합에 관한 것이라면, 반드시 두 사람의 사주를 같이 놓고 궁합 관점에서 답해라.' : ''}
 `
 
     // ✅ 재시도는 이제 "형식 오류" 대비가 아니라 API 타임아웃/네트워크 등 진짜 예외 상황 대비 안전망.
-    async function callWithRetry(params: Anthropic.MessageCreateParamsNonStreaming, label: string, maxAttempts = 2) {
+    // ✅ 신규: minItems/maxItems는 AI에게 "이렇게 해라"는 가이드일 뿐, API가 강제로
+    // 막아주는 게 아님 — 실제로 3개 대신 더 적게 반환해도 에러 없이 통과되는 경우 발견됨
+    // (예: 4그룹 중 2개 그룹이 빈 배열 반환 → "판결문 6개 생성 완료"로 조용히 끝남).
+    // validate 콜백으로 결과 개수까지 검증해서, 틀리면 예외 처리 후 재시도하도록 보강.
+    async function callWithRetry(
+      params: Anthropic.MessageCreateParamsNonStreaming,
+      label: string,
+      maxAttempts = 2,
+      validate?: (result: Record<string, unknown>) => void,
+    ) {
       let lastErr: unknown = null
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
           const res = await client.messages.create(params)
           const toolUse = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
           if (!toolUse) throw new Error('도구 호출 결과 없음')
-          return toolUse.input as Record<string, unknown>
+          const result = toolUse.input as Record<string, unknown>
+          if (validate) validate(result)
+          return result
         } catch (e) {
           lastErr = e
           console.error(`[사주궁] ${label} 실패 (시도 ${attempt}/${maxAttempts}):`, e instanceof Error ? e.message : e)
@@ -500,7 +514,12 @@ ${styleRules}
         tools: [judgmentTool],
         tool_choice: { type: 'tool', name: 'submit_judgments' },
         messages: [{ role: 'user', content: makeJudgmentPrompt(ids, FREE_IDS, categoryGroups[gi], toolGroups[gi], gi === 0 ? '' : toolGroups[0]) }],
-      }, `${gi + 1}번 그룹(${ids.join(',')})`))),
+      }, `${gi + 1}번 그룹(${ids.join(',')})`, 2, (result) => {
+        const titles = result.titles
+        if (!Array.isArray(titles) || titles.length !== ids.length) {
+          throw new Error(`판결문 개수 불일치 — 기대: ${ids.length}개, 실제: ${Array.isArray(titles) ? titles.length : '배열 아님'}개`)
+        }
+      }))),
       callWithRetry({
         model: 'claude-sonnet-4-6',
         max_tokens: 3500,
