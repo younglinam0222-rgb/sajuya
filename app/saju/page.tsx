@@ -14,7 +14,7 @@ interface LifecycleItem {
   age: string; score: number; season: string; desc: string
 }
 interface Strategy {
-  overview: string; golden_period: string; lifecycle: LifecycleItem[]; peak_guide: string; warning: string
+  overview: string; golden_period: string; lifecycle: LifecycleItem[]; peak_guide: string; warning: string; final_word?: string
 }
 interface SajuResult {
   titles: SajuTitle[]; strategy: Strategy; disclaimer?: string
@@ -42,6 +42,14 @@ const SEASON_COLORS: Record<string, string> = { '봄':'#10B981','여름':'#F59E0
 const SEASON_ICONS:  Record<string, string> = { '봄':'🌱','여름':'☀️','가을':'🍂','겨울':'❄️' }
 const ELEMENT_COLORS: Record<string, string> = { '木':'#4ade80','火':'#f87171','土':'#fbbf24','金':'#d1d5db','水':'#60a5fa' }
 const ELEMENT_BG:    Record<string, string> = { '木':'rgba(34,197,94,.15)','火':'rgba(239,68,68,.15)','土':'rgba(234,179,8,.15)','金':'rgba(156,163,175,.15)','水':'rgba(96,165,250,.15)' }
+
+// ✅ 신규: 전략 결과 맨 아래에 캐릭터별로 다르게 붙는 마무리 한마디 라벨
+const FINAL_WORD_LABEL: Record<string, { icon: string; label: string }> = {
+  baekhalma: { icon: '🧓', label: '할매의 진심 한마디' },
+  doRyeong:  { icon: '🙏', label: '도령이 마지막으로 하고 싶은 말' },
+  gumiho:    { icon: '🦊', label: '선생님의 진심 어린 한마디' },
+  sinRyeong: { icon: '🙏', label: '신령님의 마지막 당부' },
+}
 
 const LOADING_TIPS = [
   '사주팔자 계산하는 중...',
@@ -463,6 +471,18 @@ export default function SajuPage() {
                   <p className="text-gray-300 text-sm leading-relaxed">{result.strategy.warning}</p>
                 </div>
               )}
+              {result.strategy.final_word && (() => {
+                const fw = FINAL_WORD_LABEL[selectedChar.id] ?? { icon: '💬', label: '마지막 한마디' }
+                return (
+                  <div className="rounded-2xl p-4 border" style={{ background: `${selectedChar.color}14`, borderColor: `${selectedChar.color}55` }}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span>{fw.icon}</span>
+                      <span className="font-bold text-sm" style={{ color: selectedChar.color }}>{fw.label}</span>
+                    </div>
+                    <p className="text-gray-200 text-sm leading-relaxed">{result.strategy.final_word}</p>
+                  </div>
+                )
+              })()}
             </div>
           )}
 
@@ -586,6 +606,14 @@ export default function SajuPage() {
               <option value="">선택 안 함 (표준시로 계산)</option>
               {KOREA_REGIONS.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
             </select>
+            {form.birthPlace && (() => {
+              const region = KOREA_REGIONS.find(r => r.name === form.birthPlace)
+              return region ? (
+                <p className="text-xs text-purple-300/70 mt-1.5 font-mono tracking-wide">
+                  📍 북위 {region.latitude.toFixed(2)}° · 동경 {region.longitude.toFixed(2)}°
+                </p>
+              ) : null
+            })()}
             <p className="text-xs text-gray-600 mt-1">한국 표준시는 태어난 곳마다 실제 시간과 몇 분씩 차이가 나요. 안 넣어도 무방합니다</p>
           </div>
           <div>
