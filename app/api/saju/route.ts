@@ -458,7 +458,7 @@ ${lifecycleRows}
       input_schema: {
         type: 'object' as const,
         properties: {
-          answer: { type: 'string' as const, description: '500자 이상. 이 사람의 질문에 사주 근거를 들어 직접 답해라. 공감+비유+팩폭+행동팁 포함, 문단 구분은 "첫째, ~ 둘째, ~" 형식 활용 가능. 확정짓지 말고 확률적으로("~할 가능성이 높아") 답해라.' },
+          answer: { type: 'string' as const, minLength: 100, description: '500자 이상. 이 사람의 질문에 사주 근거를 들어 직접 답해라. 공감+비유+팩폭+행동팁 포함, 문단 구분은 "첫째, ~ 둘째, ~" 형식 활용 가능. 확정짓지 말고 확률적으로("~할 가능성이 높아") 답해라. 절대 비워두거나 짧게 얼버무리지 마라 — 필수 항목이다.' },
         },
         required: ['answer'],
       },
@@ -542,13 +542,28 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
             tools: [personalAnswerTool],
             tool_choice: { type: 'tool', name: 'submit_personal_answer' },
             messages: [{ role: 'user', content: makePersonalPrompt(trimmedPersonalQ) }],
-          }, '개인질문')
+          }, '개인질문', 2, (result) => {
+            const ans = result.answer
+            if (typeof ans !== 'string' || ans.trim().length < 50) {
+              throw new Error(`족집게 질문 답변 누락 또는 너무 짧음 (${typeof ans === 'string' ? ans.length : 'undefined'}자)`)
+            }
+          })
         : Promise.resolve(null),
     ])
 
+    // ✅ 신규(핵심 수정): AI가 자체적으로 매기는 id는 신뢰하지 않고, 코드에서
+    // 그룹별 순번에 맞춰 강제로 덮어씀. 두 그룹이 실수로 같은 id를 매기면
+    // 화면에서 하나가 다른 하나에 겹쳐 사라지는 문제(12개→11개)가 있었음 —
+    // id를 코드가 직접 통제하면 이 클래스의 버그 자체가 원천 차단됨.
     const allTitles: unknown[] = []
-    parsedGroups.forEach((parsed: any) => {
-      if (Array.isArray(parsed.titles)) allTitles.push(...parsed.titles)
+    parsedGroups.forEach((parsed: any, gi: number) => {
+      const ids = idGroups[gi]
+      if (Array.isArray(parsed.titles)) {
+        parsed.titles.forEach((t: any, j: number) => {
+          const forcedId = ids[j]
+          allTitles.push({ ...t, id: String(forcedId), is_free: FREE_IDS.includes(forcedId) })
+        })
+      }
     })
 
     const combined = {
