@@ -203,6 +203,25 @@ function TitleCard({ item, charColor, idx }: { item: SajuTitle; charColor: strin
   )
 }
 
+// ✅ 신규: "인생 전략 분석" 섹션(전성기 활용법·조심할 시기)도 판결문 카드처럼
+// 항목별 줄바꿈 + 강조 색상이 먹히도록, 텍스트를 줄 단위로 쪼개서 렌더링하는 공용 헬퍼.
+function FormattedStrategyText({ text, highlightColor = '#fbbf24' }: { text: string; highlightColor?: string }) {
+  const lines = text.split('\n').filter(l => l.trim() !== '')
+  return (
+    <div className="text-gray-300 text-sm leading-relaxed space-y-2">
+      {lines.map((line, i) => {
+        const isNumbered = /^(첫째|둘째|셋째|넷째|다섯째|\d+[.)])/.test(line.trim())
+        const isWarning = line.trim().startsWith('⚠️')
+        return (isNumbered || isWarning) ? (
+          <p key={i} className="font-semibold" style={{ color: highlightColor }}>{line}</p>
+        ) : (
+          <p key={i}>{line}</p>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function SajuPage() {
   const router = useRouter()
   const { status } = useSession()
@@ -456,19 +475,19 @@ export default function SajuPage() {
               {result.strategy.golden_period && (
                 <div className="rounded-2xl p-4 bg-[#111118] border border-yellow-900/30">
                   <div className="flex items-center gap-2 mb-2"><span>🏆</span><span className="font-bold text-sm text-yellow-400">전성기는 언제?</span></div>
-                  <p className="text-gray-300 text-sm leading-relaxed">{result.strategy.golden_period}</p>
+                  <FormattedStrategyText text={result.strategy.golden_period} />
                 </div>
               )}
               {result.strategy.peak_guide && (
                 <div className="rounded-2xl p-4 bg-[#111118] border border-gray-800">
-                  <div className="flex items-center gap-2 mb-2"><span>🚀</span><span className="font-bold text-sm text-green-400">전성기 1000% 활용법</span></div>
-                  <p className="text-gray-300 text-sm leading-relaxed">{result.strategy.peak_guide}</p>
+                  <div className="flex items-center gap-2 mb-2"><span>🚀</span><span className="font-bold text-sm text-green-400">전성기 실전 전략</span></div>
+                  <FormattedStrategyText text={result.strategy.peak_guide} highlightColor="#4ade80" />
                 </div>
               )}
               {result.strategy.warning && (
-                <div className="rounded-2xl p-4 bg-[#111118] border border-red-900/30">
-                  <div className="flex items-center gap-2 mb-2"><span>⚠️</span><span className="font-bold text-sm text-red-400">조심할 시기</span></div>
-                  <p className="text-gray-300 text-sm leading-relaxed">{result.strategy.warning}</p>
+                <div className="rounded-2xl p-4 bg-[#111118] border border-yellow-700/40">
+                  <div className="flex items-center gap-2 mb-2"><span>⚠️</span><span className="font-bold text-sm text-yellow-400">조심할 시기</span></div>
+                  <FormattedStrategyText text={result.strategy.warning} highlightColor="#fbbf24" />
                 </div>
               )}
               {result.strategy.final_word && (() => {
