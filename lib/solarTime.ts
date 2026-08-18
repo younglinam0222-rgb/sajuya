@@ -3,23 +3,24 @@
 // "진짜 시간"(진태양시)과는 수십 분 차이가 날 수 있음. 시주(태어난 시간 기준 기둥)가
 // 경계에 걸린 사람은 이 보정으로 결과가 달라질 수 있어서 선택 입력으로 제공.
 
-// 시/도 단위 대표 경도 (동경, °E) — 정밀한 시/군/구 단위까지는 불필요
-export const KOREA_REGIONS: { name: string; longitude: number }[] = [
-  { name: '서울/경기', longitude: 127.00 },
-  { name: '인천', longitude: 126.70 },
-  { name: '강원', longitude: 127.73 },
-  { name: '충북', longitude: 127.49 },
-  { name: '충남', longitude: 126.66 },
-  { name: '대전/세종', longitude: 127.35 },
-  { name: '전북', longitude: 127.15 },
-  { name: '전남', longitude: 126.48 },
-  { name: '광주', longitude: 126.85 },
-  { name: '경북', longitude: 128.73 },
-  { name: '대구', longitude: 128.60 },
-  { name: '경남', longitude: 128.68 },
-  { name: '부산', longitude: 129.08 },
-  { name: '울산', longitude: 129.31 },
-  { name: '제주', longitude: 126.53 },
+// 시/도 단위 대표 경도(동경, °E) · 위도(북위, °N) — 정밀한 시/군/구 단위까지는 불필요.
+// 위도는 시주 계산(진태양시 보정)에는 안 쓰이고, 선택 화면에 좌표를 보여주는 용도.
+export const KOREA_REGIONS: { name: string; longitude: number; latitude: number }[] = [
+  { name: '서울/경기', longitude: 127.00, latitude: 37.57 },
+  { name: '인천',      longitude: 126.70, latitude: 37.46 },
+  { name: '강원',      longitude: 127.73, latitude: 37.75 },
+  { name: '충북',      longitude: 127.49, latitude: 36.64 },
+  { name: '충남',      longitude: 126.66, latitude: 36.48 },
+  { name: '대전/세종', longitude: 127.35, latitude: 36.35 },
+  { name: '전북',      longitude: 127.15, latitude: 35.82 },
+  { name: '전남',      longitude: 126.48, latitude: 34.82 },
+  { name: '광주',      longitude: 126.85, latitude: 35.16 },
+  { name: '경북',      longitude: 128.73, latitude: 36.58 },
+  { name: '대구',      longitude: 128.60, latitude: 35.87 },
+  { name: '경남',      longitude: 128.68, latitude: 35.24 },
+  { name: '부산',      longitude: 129.08, latitude: 35.18 },
+  { name: '울산',      longitude: 129.31, latitude: 35.54 },
+  { name: '제주',      longitude: 126.53, latitude: 33.50 },
 ]
 
 // 균시차(Equation of Time) 근사값 — 분 단위. 지구 공전궤도가 타원이라 생기는 오차.
