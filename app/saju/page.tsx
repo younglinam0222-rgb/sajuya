@@ -27,8 +27,8 @@ interface ManseData {
 const YEARS = Array.from({ length: 80 }, (_, i) => 2005 - i)
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1)
 const DAYS = Array.from({ length: 31 }, (_, i) => i + 1)
-const OCCUPATIONS = ['직장인', '사업가', '학생', '주부', '프리랜서']
-const MARITAL_STATUSES = ['미혼', '기혼', '이혼/사별']
+const OCCUPATIONS = ['직장인', '사업가', '학생', '주부', '프리랜서', '기타']
+const MARITAL_STATUSES = ['미혼(솔로)', '연애중', '기혼', '이혼/사별']
 const QUESTION_INTENTS = ['인생 전반', '돈/재물', '연애/결혼', '직업/진로', '건강']
 
 const CHARACTERS = [
@@ -206,12 +206,14 @@ export default function SajuPage() {
   const [calType, setCalType] = useState<'solar'|'lunar'>('solar')
   const [form, setForm] = useState({
     name: '', year: '1990', month: '1', day: '1',
-    hour: '', gender: 'female', occupation: '직장인', maritalStatus: '미혼', questionIntent: '인생 전반',
+    hour: '', gender: 'female', occupation: '직장인', maritalStatus: '미혼(솔로)', questionIntent: '인생 전반',
     birthPlace: '',
   })
   const [partnerForm, setPartnerForm] = useState({
     name: '', year: '1990', month: '1', day: '1', hour: '', gender: 'male',
   })
+  // ✅ 신규: 직업 '기타(직접입력)' — 목록에 없는 직업은 자유롭게 타이핑
+  const [showCustomOcc, setShowCustomOcc] = useState(false)
 
   // ✅ 수정: ref로 저장 시 stale 클로저 방지
   const finalResultRef = useRef<Partial<SajuResult>>({})
@@ -263,7 +265,7 @@ export default function SajuPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...form, calType, characterId: selectedChar.id,
+          ...form, occupation: form.occupation || '일반인', calType, characterId: selectedChar.id,
           partnerInfo: isRomance ? partnerForm : undefined,
           longitude: selectedRegion?.longitude,
         }),
@@ -602,7 +604,7 @@ export default function SajuPage() {
           </div>
           <div>
             <label className="text-xs text-gray-400 mb-1.5 block">결혼 상태</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {MARITAL_STATUSES.map(m => (
                 <button key={m} onClick={() => setForm(f => ({ ...f, maritalStatus: m }))}
                   className="py-2.5 rounded-xl text-sm font-medium transition-all"
@@ -618,15 +620,24 @@ export default function SajuPage() {
             <label className="text-xs text-gray-400 mb-1.5 block">직업</label>
             <div className="flex flex-wrap gap-2">
               {OCCUPATIONS.map(o => (
-                <button key={o} onClick={() => setForm(f => ({ ...f, occupation: o }))}
+                <button key={o} onClick={() => {
+                    if (o === '기타') { setShowCustomOcc(true); setForm(f => ({ ...f, occupation: '' })) }
+                    else { setShowCustomOcc(false); setForm(f => ({ ...f, occupation: o })) }
+                  }}
                   className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
-                  style={form.occupation === o
+                  style={(o === '기타' ? showCustomOcc : (!showCustomOcc && form.occupation === o))
                     ? { background: selectedChar.color, color: 'white' }
                     : { background: '#1F2937', color: '#9CA3AF', border: '1px solid #374151' }}>
-                  {o}
+                  {o === '기타' ? '기타(직접입력)' : o}
                 </button>
               ))}
             </div>
+            {showCustomOcc && (
+              <input type="text" placeholder="직업을 직접 입력해주세요 (예: 요리사, 공무원)"
+                value={form.occupation}
+                onChange={e => setForm(f => ({ ...f, occupation: e.target.value }))}
+                className="w-full mt-2 bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none" />
+            )}
           </div>
         </div>
 
