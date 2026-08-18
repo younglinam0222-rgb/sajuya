@@ -7,6 +7,16 @@ interface TimeNumberInputProps {
   onChange: (value: string) => void
 }
 
+// ✅ 신규: 12지지 시진(자시~해시)은 전통 용어라 낯설어하는 사람이 많아서,
+// "새벽/아침/점심·오후/저녁·밤" 4개로 더 쉽게 고를 수 있는 큰 카테고리를 추가.
+// 시간을 아예 모르는 사람이 "그래도 대략 이때쯤이었다" 정도는 고를 수 있게 하는 게 목적.
+const BROAD_PRESETS: { label: string; h: number; range: string }[] = [
+  { label: '🌙 새벽', h: 3,  range: '00~06시' },
+  { label: '☀️ 아침', h: 9,  range: '06~12시' },
+  { label: '🌤️ 점심·오후', h: 15, range: '12~18시' },
+  { label: '🌆 저녁·밤', h: 21, range: '18~24시' },
+]
+
 // ✅ 신규: 12지지 시진 빠른 선택칩 — 정확한 시간을 모르는 사람은 탭 한 번으로,
 // 정확히 아는 사람은 아래 드롭다운으로. 둘 다 같은 h/m 상태를 쓰므로 서로 안 겹침.
 const SIJIN_PRESETS: { label: string; h: number }[] = [
@@ -67,7 +77,18 @@ export default function TimeNumberInput({ value, onChange }: TimeNumberInputProp
             className="text-xs text-gray-600 underline flex-shrink-0">지우기</button>
         )}
       </div>
-      <div className="flex flex-wrap gap-1.5 mt-2">
+      <div>
+        <p className="text-[10px] text-gray-500 mb-1">💭 시간을 전혀 모르면 — 대략 이때쯤이었다 싶은 것만 골라도 돼요</p>
+        <div className="flex flex-wrap gap-1.5">
+          {BROAD_PRESETS.map(p => (
+            <button key={p.label} type="button" onClick={() => handlePreset(p.h)}
+              className="px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-gray-900 border border-gray-700 text-gray-300 active:bg-gray-800">
+              {p.label} <span className="text-gray-600">({p.range})</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-1.5 mt-3">
         {SIJIN_PRESETS.map(p => (
           <button key={p.label} type="button" onClick={() => handlePreset(p.h)}
             className="px-2 py-1 rounded-lg text-[10px] font-medium bg-gray-900 border border-gray-800 text-gray-500 active:bg-gray-800">
@@ -75,7 +96,7 @@ export default function TimeNumberInput({ value, onChange }: TimeNumberInputProp
           </button>
         ))}
       </div>
-      <p className="text-[10px] text-gray-600 mt-1">시간을 정확히 아시면 위 드롭다운에서 직접 선택, 대략적인 시간대만 아시면 아래 시진 버튼을 눌러주세요.</p>
+      <p className="text-[10px] text-gray-600 mt-1">시간을 정확히 아시면 위 드롭다운에서 직접 선택, 어느 정도 아시면 12시진 버튼을, 전혀 모르시면 맨 위 큰 카테고리를 눌러주세요.</p>
     </div>
   )
 }
