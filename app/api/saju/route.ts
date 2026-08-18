@@ -426,8 +426,8 @@ ${lifecycleRows}
       input_schema: {
         type: 'object' as const,
         properties: {
-          overview: { type: 'string' as const, description: '이 사람 사주 전체 핵심 3~4문장, 쉬운 말로' },
-          golden_period: { type: 'string' as const, description: '전성기가 언제고 왜 그 시기인지 5~7문장, 구체적 나이·시기·기운·준비할 것 포함' },
+          overview: { type: 'string' as const, minLength: 30, description: '이 사람 사주 전체 핵심 3~4문장, 쉬운 말로' },
+          golden_period: { type: 'string' as const, minLength: 80, description: '전성기가 언제고 왜 그 시기인지 5~7문장, 구체적 나이·시기·기운·준비할 것 포함' },
           lifecycle: {
             type: 'array' as const,
             items: {
@@ -441,9 +441,9 @@ ${lifecycleRows}
               required: ['age', 'score', 'season', 'desc'],
             },
           },
-          peak_guide: { type: 'string' as const, description: '전성기 활용법. "첫째, ~ \\n\\n둘째, ~ \\n\\n셋째, ~" 형식으로, 항목마다 반드시 \\n\\n(빈 줄)로 구분해서 각 항목이 2~3문장씩 되도록 풍부하게 써라.' },
-          warning: { type: 'string' as const, description: '가장 조심해야 할 것들. "⚠️ 첫째, ~ \\n\\n⚠️ 둘째, ~" 형식으로, 2~3개 항목을 \\n\\n으로 구분해서 각각 1~2문장씩 써라.' },
-          final_word: { type: 'string' as const, description: '캐릭터가 마지막으로 건네는 진심 어린 한마디 3~4문장, 감정과 응원 위주, 반말' },
+          peak_guide: { type: 'string' as const, minLength: 100, description: '전성기 활용법. "첫째, ~ \\n\\n둘째, ~ \\n\\n셋째, ~" 형식으로, 항목마다 반드시 \\n\\n(빈 줄)로 구분해서 각 항목이 2~3문장씩 되도록 풍부하게 써라.' },
+          warning: { type: 'string' as const, minLength: 40, description: '가장 조심해야 할 것들. "⚠️ 첫째, ~ \\n\\n⚠️ 둘째, ~" 형식으로, 2~3개 항목을 \\n\\n으로 구분해서 각각 1~2문장씩 써라.' },
+          final_word: { type: 'string' as const, minLength: 30, description: '캐릭터가 마지막으로 건네는 진심 어린 한마디 3~4문장, 감정과 응원 위주, 반말. 절대 비워두거나 생략하지 마라 — 필수 항목이다.' },
         },
         required: ['overview', 'golden_period', 'lifecycle', 'peak_guide', 'warning', 'final_word'],
       },
@@ -527,7 +527,12 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
         tools: [strategyTool],
         tool_choice: { type: 'tool', name: 'submit_strategy' },
         messages: [{ role: 'user', content: prompt3 }],
-      }, '전략'),
+      }, '전략', 2, (result) => {
+        const fw = result.final_word
+        if (typeof fw !== 'string' || fw.trim().length < 20) {
+          throw new Error(`final_word 누락 또는 너무 짧음 (${typeof fw === 'string' ? fw.length : 'undefined'}자)`)
+        }
+      }),
       trimmedPersonalQ
         ? callWithRetry({
             model: 'claude-sonnet-4-6',
