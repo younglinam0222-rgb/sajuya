@@ -236,7 +236,7 @@ D. 공감 → 경고 → 비유 → 팩폭
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, year, month, day, hour, gender, characterId, occupation, maritalStatus, questionIntent, partnerInfo, longitude } = await req.json()
+    const { name, year, month, day, hour, gender, characterId, occupation, maritalStatus, questionIntent, partnerInfo, longitude, personalQuestion } = await req.json()
 
     const character = CHARACTERS[characterId] ?? CHARACTERS['doRyeong']
     const genderStr = gender === 'male' ? '남성' : '여성'
@@ -447,6 +447,32 @@ ${lifecycleRows}
       },
     }
 
+    // ✅ 신규: 사용자가 자유 입력으로 남긴 "콕 집어 궁금한 거"에 전용으로 답하는 도구.
+    // personalQuestion이 비어있으면 이 호출 자체를 안 하도록 아래 Promise.all에서 조건부 처리.
+    const personalAnswerTool = {
+      name: 'submit_personal_answer',
+      description: '사용자가 직접 남긴 개인 질문에 대한 답변을 제출한다.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          answer: { type: 'string' as const, description: '500자 이상. 이 사람의 질문에 사주 근거를 들어 직접 답해라. 공감+비유+팩폭+행동팁 포함, 문단 구분은 "첫째, ~ 둘째, ~" 형식 활용 가능. 확정짓지 말고 확률적으로("~할 가능성이 높아") 답해라.' },
+        },
+        required: ['answer'],
+      },
+    }
+    const makePersonalPrompt = (q: string) => `
+${voiceGuide}
+${sajuInfo}
+
+[이 사람이 직접 남긴 질문 — 이것에 집중해서 답해라]
+"${q}"
+
+${getInterpretationRules('이 질문과 가장 직접적으로 관련된 명리 요소(질문 내용에 맞춰 오행/십성/신살/대운 중 적절한 것)', '')}
+${styleRules}
+
+이 사람의 질문에 사주를 근거로 직접 답하는 도구를 호출해. 질문과 상관없는 일반론 늘어놓지 말고, 정확히 이 질문에 대한 답을 해라.
+`
+
     // ✅ 재시도는 이제 "형식 오류" 대비가 아니라 API 타임아웃/네트워크 등 진짜 예외 상황 대비 안전망.
     async function callWithRetry(params: Anthropic.MessageCreateParamsNonStreaming, label: string, maxAttempts = 2) {
       let lastErr: unknown = null
@@ -464,7 +490,9 @@ ${lifecycleRows}
       throw new Error(`${label} 생성 실패 (재시도 ${maxAttempts}회 모두 실패): ${lastErr instanceof Error ? lastErr.message : lastErr}`)
     }
 
-    const [parsedGroups, parsed3] = await Promise.all([
+    const trimmedPersonalQ = typeof personalQuestion === 'string' ? personalQuestion.trim().slice(0, 200) : ''
+
+    const [parsedGroups, parsed3, personalAnswerParsed] = await Promise.all([
       Promise.all(idGroups.map((ids, gi) => callWithRetry({
         model: 'claude-sonnet-4-6',
         max_tokens: 6000,
@@ -481,6 +509,16 @@ ${lifecycleRows}
         tool_choice: { type: 'tool', name: 'submit_strategy' },
         messages: [{ role: 'user', content: prompt3 }],
       }, '전략'),
+      trimmedPersonalQ
+        ? callWithRetry({
+            model: 'claude-sonnet-4-6',
+            max_tokens: 2000,
+            system: systemPrompt,
+            tools: [personalAnswerTool],
+            tool_choice: { type: 'tool', name: 'submit_personal_answer' },
+            messages: [{ role: 'user', content: makePersonalPrompt(trimmedPersonalQ) }],
+          }, '개인질문')
+        : Promise.resolve(null),
     ])
 
     const allTitles: unknown[] = []
@@ -491,6 +529,9 @@ ${lifecycleRows}
     const combined = {
       titles: allTitles,
       strategy: parsed3,
+      personalAnswer: trimmedPersonalQ && personalAnswerParsed
+        ? { question: trimmedPersonalQ, answer: (personalAnswerParsed as any).answer }
+        : undefined,
       disclaimer: '본 풀이는 엔터테인먼트 및 참고 목적이며, 중요한 결정은 전문가와 상담하세요.',
     }
 
