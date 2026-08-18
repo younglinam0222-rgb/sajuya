@@ -249,6 +249,32 @@ export async function POST(req: NextRequest) {
     const currentYear = new Date().getFullYear()
     const currentAge = currentYear - parseInt(year) + 1
 
+    // ✅ 신규: "몇 년도 상반기/하반기"처럼 구체적인 시기를 짚어줄 수 있도록,
+    // 올해·내년의 실제 세운(연간지)과 상/하반기 대표 월주까지 미리 계산해서 프롬프트에 넣음.
+    // 계산은 정확한 명리학 공식(lunar-javascript)이고, AI는 이 값을 인용해서 문장만 만듦.
+    const dayStemIdx = manse.dayPillar.stemIdx
+    const buildSeunInfo = (y: number) => {
+      const yp = calcYearPillar(y, 6, 15)
+      const firstHalf = calcMonthPillar(y, 4, 15)   // 상반기 대표(음력 절기 기준 월주)
+      const secondHalf = calcMonthPillar(y, 10, 15) // 하반기 대표
+      return {
+        year: y,
+        ganzhi: `${yp.stem}${yp.branch}`,
+        sipsin: getSipsin(dayStemIdx, yp.stemIdx),
+        firstHalfGanzhi: `${firstHalf.stem}${firstHalf.branch}`,
+        firstHalfSipsin: getSipsin(dayStemIdx, firstHalf.stemIdx),
+        secondHalfGanzhi: `${secondHalf.stem}${secondHalf.branch}`,
+        secondHalfSipsin: getSipsin(dayStemIdx, secondHalf.stemIdx),
+      }
+    }
+    const thisYearSeun = buildSeunInfo(currentYear)
+    const nextYearSeun = buildSeunInfo(currentYear + 1)
+    const seunInfo = `
+[올해·내년 세운(歲運) — 실제 계산값, 정확히 인용할 것]
+${thisYearSeun.year}년(올해): 연간지 ${thisYearSeun.ganzhi} (십성: ${thisYearSeun.sipsin}) / 상반기 월기운 ${thisYearSeun.firstHalfGanzhi}(${thisYearSeun.firstHalfSipsin}) / 하반기 월기운 ${thisYearSeun.secondHalfGanzhi}(${thisYearSeun.secondHalfSipsin})
+${nextYearSeun.year}년(내년): 연간지 ${nextYearSeun.ganzhi} (십성: ${nextYearSeun.sipsin}) / 상반기 월기운 ${nextYearSeun.firstHalfGanzhi}(${nextYearSeun.firstHalfSipsin}) / 하반기 월기운 ${nextYearSeun.secondHalfGanzhi}(${nextYearSeun.secondHalfSipsin})
+`
+
     // lifecycle 구간 동적 생성 (나이에 맞게)
     const lifecycleRows = buildLifecycleTemplate(currentAge)
 
@@ -270,6 +296,11 @@ export async function POST(req: NextRequest) {
 띠: ${manse.animal}띠
 사주 기운: ${elementDesc}
 핵심 기운(일간): ${manse.dayPillar.stem}(${manse.dayPillar.stemKr}) — ${manse.dayPillar.stemElement} 기운
+${seunInfo}
+[시기 언급 규칙 — 반드시 지킬 것]
+"올해", "내년", "조만간" 같은 막연한 말 대신, 위에 계산된 실제 연도와 상반기/하반기를 구체적으로 짚어서 말해라.
+예: "2027년 상반기쯤 큰 기회가 올 가능성이 높아" (○) / "언젠가 좋은 일이 생길 거야" (✗ 너무 막연함)
+단, 확정짓듯 말하지 말고 "~할 가능성이 높아", "~일 수 있어" 처럼 확률적으로 말해라. 특정 사건(합격, 이별, 사고 등)을 "반드시 일어난다"고 단정하지 마라.
 연주: ${manse.yearPillar.stem}${manse.yearPillar.branch} / 월주: ${manse.monthPillar.stem}${manse.monthPillar.branch} / 일주: ${manse.dayPillar.stem}${manse.dayPillar.branch} / 시주: ${manse.hourPillar ? manse.hourPillar.stem+manse.hourPillar.branch : '미상'}${partnerDesc}
 
 [결혼 상태 반영 규칙 — 반드시 지킬 것]
@@ -294,7 +325,7 @@ export async function POST(req: NextRequest) {
     }
     const intentInstruction = intentGuide[questionIntent] ?? '이 사람 사주에서 가장 중요한 걸 찾아서 알려줘'
 
-    const systemPrompt = `너는 ${character.name}이야. 사주를 쉽고 재미있게 풀어주는 캐릭터. 한자나 어려운 명리 용어는 절대 쓰지 않고, 20-30대가 바로 이해할 수 있는 말로만 설명해. 반드시 순수 JSON만 출력. 마크다운 코드블록(\`\`\`) 절대 금지. 설명 텍스트 없이 JSON만. 판단 과정이나 "생각해보면" 같은 사고 흐름을 JSON 밖에 절대 쓰지 마라 — 응답의 첫 글자는 반드시 { 여야 하고 마지막 글자는 반드시 } 여야 한다.`
+    const systemPrompt = `너는 ${character.name}이야. 사주를 쉽고 재미있게 풀어주는 캐릭터. 한자나 어려운 명리 용어는 절대 쓰지 않고, 20-30대가 바로 이해할 수 있는 말로만 설명해. 반드시 제공된 도구(tool)를 호출해서 결과를 제출해라 — 그 외의 텍스트 설명은 필요 없다.`
 
     // ✅ 신규: 6개씩 2호출 → 3개씩 4호출로 쪼갬. Promise.all은 "제일 늦게 끝나는 호출"이
     // 전체 시간을 결정하는데, 호출당 담당량을 절반으로 줄이면 그만큼 대기시간도 절반이 됨.
@@ -318,13 +349,7 @@ ${styleRules}
 ${ids.map((id, i) => `- ${id}번은 "${categoryHints[i]}" 카테고리로 써라.`).join('\n')}
 카테고리 이름은 위에 지정된 것과 똑같이 정확히 써라(예: "재물운"이면 "재물운"이라고, "돈운" 같은 변형 금지).
 
-반드시 아래 JSON만 출력. 마크다운 없이.
-
-{
-  "titles": [
-${ids.map((id, i) => `    {"id":"${id}","category":"${categoryHints[i]}","title":"소름 돋는 상황 묘사 제목","teaser":"읽으면 클릭하고 싶은 한 줄 훅","is_free":${isFreeIds.includes(id)},"content":"500자 이상 판결문. 공감+비유+팩폭+행동팁 포함. 문단 사이 빈줄.\\n\\n⚠️ 조심할 것들: 구체적으로 2~3가지"}`).join(',\n')}
-  ]
-}
+반드시 위에서 지정한 카테고리대로, 판결문 ${ids.join('번, ')}번 내용을 만들어서 도구를 호출해.
 `
 
     // ✅ 신규: strategy(대운 전략)를 판결문에서 분리해 별도 호출로.
@@ -338,20 +363,10 @@ ${sajuInfo}
 
 ${getInterpretationRules('오행 균형과 십성 구조를 종합한 전체 흐름', '')}
 
-이 사람의 인생 전략(대운 흐름)을 작성해. 판결문이 아니라 전체 인생 로드맵이야.
+이 사람의 인생 전략(대운 흐름)을 작성해서 도구를 호출해. 판결문이 아니라 전체 인생 로드맵이야.
 
-반드시 아래 JSON만 출력. 마크다운 없이.
-
-{
-  "overview": "이 사람 사주 전체 핵심 3~4문장. 쉬운 말로. 읽으면 고개 끄덕이는 내용.",
-  "golden_period": "전성기가 언제고 왜 그 시기인지 5~7문장으로 풍부하게. 구체적인 나이·시기 포함, 그 시기에 어떤 기운이 들어오는지, 지금부터 뭘 준비해야 그 전성기를 제대로 맞이하는지까지 구체적으로.",
-  "lifecycle": [
+[lifecycle 배열은 반드시 이 나이대들로 채워]
 ${lifecycleRows}
-  ],
-  "peak_guide": "전성기 활용법 5~7문장으로 풍부하게. '첫째, 둘째, 셋째' 처럼 항목을 나눠서 각각 구체적인 행동까지 제시. 지금 당장 할 수 있는 것 위주로, 두루뭉술한 말 대신 실제로 뭘 하면 되는지 명확하게.",
-  "warning": "가장 조심해야 할 것 2문장. 무섭지 않게, 근데 진지하게.",
-  "final_word": "지금까지의 분석을 다 본 이 사람한테, 캐릭터가 마지막으로 건네는 진심 어린 한마디. 분석이 아니라 감정과 응원 위주로 3~4문장. 캐릭터 특유의 말투와 정(情)이 진하게 묻어나야 함. 반말 유지."
-}
 `
 
     const FREE_IDS = [1, 2, 3]
@@ -374,55 +389,104 @@ ${lifecycleRows}
       '대운·세운의 시기별 흐름',
     ]
 
-    const [r1, r2, r3, r4, r5] = await Promise.all([
-      ...idGroups.map((ids, gi) => client.messages.create({
+    // ✅ 신규(핵심 안정화): 텍스트로 "JSON처럼 써줘"라고 부탁하는 대신, Anthropic의
+    // Tool Use로 출력 형식을 API 차원에서 강제함. AI가 형식을 "어길 수 있는" 여지 자체를
+    // 없애는 근본적인 해결책 — 재시도(안전망)는 남겨두되, 이제 진짜 예외 상황(네트워크 등)에만 걸림.
+    const judgmentTool = {
+      name: 'submit_judgments',
+      description: '작성한 사주 판결문들을 제출한다.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          titles: {
+            type: 'array' as const,
+            items: {
+              type: 'object' as const,
+              properties: {
+                id: { type: 'string' as const },
+                category: { type: 'string' as const, description: '지정된 카테고리명 그대로' },
+                title: { type: 'string' as const, description: '읽자마자 "어 내 얘기잖아" 싶은 소름 돋는 상황 묘사 제목' },
+                teaser: { type: 'string' as const, description: '클릭하고 싶어지는 한 줄 훅' },
+                is_free: { type: 'boolean' as const },
+                content: { type: 'string' as const, description: '500자 이상. 공감+비유+팩폭+행동팁 포함, 문단 사이 빈줄(\\n\\n). 마지막에 "⚠️ 조심할 것들: " 로 시작하는 구체적 2~3가지' },
+              },
+              required: ['id', 'category', 'title', 'teaser', 'is_free', 'content'],
+            },
+          },
+        },
+        required: ['titles'],
+      },
+    }
+
+    const strategyTool = {
+      name: 'submit_strategy',
+      description: '작성한 인생 전략을 제출한다.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          overview: { type: 'string' as const, description: '이 사람 사주 전체 핵심 3~4문장, 쉬운 말로' },
+          golden_period: { type: 'string' as const, description: '전성기가 언제고 왜 그 시기인지 5~7문장, 구체적 나이·시기·기운·준비할 것 포함' },
+          lifecycle: {
+            type: 'array' as const,
+            items: {
+              type: 'object' as const,
+              properties: {
+                age: { type: 'string' as const },
+                score: { type: 'number' as const },
+                season: { type: 'string' as const, description: '봄/여름/가을/겨울 중 하나' },
+                desc: { type: 'string' as const, description: '이 시기 핵심 한 줄' },
+              },
+              required: ['age', 'score', 'season', 'desc'],
+            },
+          },
+          peak_guide: { type: 'string' as const, description: '전성기 활용법 5~7문장, 첫째·둘째·셋째로 나눠 구체적 행동까지' },
+          warning: { type: 'string' as const, description: '가장 조심해야 할 것 2문장' },
+          final_word: { type: 'string' as const, description: '캐릭터가 마지막으로 건네는 진심 어린 한마디 3~4문장, 감정과 응원 위주, 반말' },
+        },
+        required: ['overview', 'golden_period', 'lifecycle', 'peak_guide', 'warning', 'final_word'],
+      },
+    }
+
+    // ✅ 재시도는 이제 "형식 오류" 대비가 아니라 API 타임아웃/네트워크 등 진짜 예외 상황 대비 안전망.
+    async function callWithRetry(params: Anthropic.MessageCreateParamsNonStreaming, label: string, maxAttempts = 2) {
+      let lastErr: unknown = null
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          const res = await client.messages.create(params)
+          const toolUse = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
+          if (!toolUse) throw new Error('도구 호출 결과 없음')
+          return toolUse.input as Record<string, unknown>
+        } catch (e) {
+          lastErr = e
+          console.error(`[사주궁] ${label} 실패 (시도 ${attempt}/${maxAttempts}):`, e instanceof Error ? e.message : e)
+        }
+      }
+      throw new Error(`${label} 생성 실패 (재시도 ${maxAttempts}회 모두 실패): ${lastErr instanceof Error ? lastErr.message : lastErr}`)
+    }
+
+    const [parsedGroups, parsed3] = await Promise.all([
+      Promise.all(idGroups.map((ids, gi) => callWithRetry({
         model: 'claude-sonnet-4-6',
         max_tokens: 6000,
         system: systemPrompt,
+        tools: [judgmentTool],
+        tool_choice: { type: 'tool', name: 'submit_judgments' },
         messages: [{ role: 'user', content: makeJudgmentPrompt(ids, FREE_IDS, categoryGroups[gi], toolGroups[gi], gi === 0 ? '' : toolGroups[0]) }],
-      })),
-      client.messages.create({
+      }, `${gi + 1}번 그룹(${ids.join(',')})`))),
+      callWithRetry({
         model: 'claude-sonnet-4-6',
         max_tokens: 3500,
         system: systemPrompt,
+        tools: [strategyTool],
+        tool_choice: { type: 'tool', name: 'submit_strategy' },
         messages: [{ role: 'user', content: prompt3 }],
-      }),
+      }, '전략'),
     ])
 
-    const judgmentResponses = [r1, r2, r3, r4]
-    // ✅ 수정: 프롬프트 지시문이 늘어나며 가끔 AI가 JSON 앞뒤에 다른 말을 섞어 내보내는
-    // 경우가 생겨 파싱이 깨지는 문제 발견. ```json 코드블록 제거뿐 아니라, 첫 '{'부터
-    // 마지막 '}'까지만 잘라내서 앞뒤 잡소리가 있어도 JSON만 안전하게 추출하도록 보강.
-    const clean = (s: string) => {
-      let t = s.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
-      const start = t.indexOf('{')
-      const end = t.lastIndexOf('}')
-      if (start !== -1 && end !== -1 && end > start) t = t.slice(start, end + 1)
-      return t
-    }
-
     const allTitles: unknown[] = []
-    judgmentResponses.forEach((r, i) => {
-      const raw = r.content[0].type === 'text' ? r.content[0].text : ''
-      try {
-        const parsed = JSON.parse(clean(raw))
-        if (Array.isArray(parsed.titles)) allTitles.push(...parsed.titles)
-      } catch {
-        console.error(`[사주궁] ${i + 1}번 그룹(${idGroups[i].join(',')}) JSON 파싱 실패 (앞 300자):`, raw.slice(0, 300))
-        throw new Error(`${i + 1}번 그룹 응답 파싱 실패`)
-      }
+    parsedGroups.forEach((parsed: any) => {
+      if (Array.isArray(parsed.titles)) allTitles.push(...parsed.titles)
     })
-
-    let parsed3: Record<string, unknown>
-    {
-      const raw3 = r5.content[0].type === 'text' ? r5.content[0].text : ''
-      try {
-        parsed3 = JSON.parse(clean(raw3))
-      } catch {
-        console.error('[사주궁] 전략 JSON 파싱 실패 (앞 300자):', raw3.slice(0, 300))
-        throw new Error('전략 응답 파싱 실패')
-      }
-    }
 
     const combined = {
       titles: allTitles,
@@ -430,8 +494,7 @@ ${lifecycleRows}
       disclaimer: '본 풀이는 엔터테인먼트 및 참고 목적이며, 중요한 결정은 전문가와 상담하세요.',
     }
 
-    const allUsage = [r1, r2, r3, r4].map(r => r.usage.output_tokens).join('/')
-    console.log(`[사주궁] 판결문 ${combined.titles.length}개 생성 완료 / 그룹별 출력토큰: ${allUsage} / 전략:${r5.usage.output_tokens}tok`)
+    console.log(`[사주궁] 판결문 ${combined.titles.length}개 생성 완료`)
 
     const encoder = new TextEncoder()
     const readable = new ReadableStream({
