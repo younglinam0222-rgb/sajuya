@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import SessionProviderWrapper from '@/components/SessionProviderWrapper'
+import KakaoInit from '@/components/KakaoInit'
 
 export const metadata: Metadata = {
   title: '사주궁 — 당신의 운명을 읽다',
@@ -38,6 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ko">
       <body style={{ margin: 0, padding: 0, background: '#0a0a0a' }}>
+        <KakaoInit />
         <SessionProviderWrapper>
           {children}
         </SessionProviderWrapper>
