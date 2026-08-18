@@ -17,7 +17,7 @@ interface Strategy {
   overview: string; golden_period: string; lifecycle: LifecycleItem[]; peak_guide: string; warning: string; final_word?: string
 }
 interface SajuResult {
-  titles: SajuTitle[]; strategy: Strategy; disclaimer?: string
+  titles: SajuTitle[]; strategy: Strategy; disclaimer?: string; personalAnswer?: { question: string; answer: string }
 }
 interface ManseData {
   yearPillar: any; monthPillar: any; dayPillar: any; hourPillar: any
@@ -205,13 +205,16 @@ function TitleCard({ item, charColor, idx }: { item: SajuTitle; charColor: strin
 
 // ✅ 신규: "인생 전략 분석" 섹션(전성기 활용법·조심할 시기)도 판결문 카드처럼
 // 항목별 줄바꿈 + 강조 색상이 먹히도록, 텍스트를 줄 단위로 쪼개서 렌더링하는 공용 헬퍼.
+// ⚠️ 수정: AI가 응답에 실제 줄바꿈(\n)을 안 넣어주는 경우가 있어서, 줄바꿈 유무와
+// 상관없이 "첫째/둘째/셋째/⚠️" 앞에서 강제로 문단을 끊도록 정규식으로 보강.
 function FormattedStrategyText({ text, highlightColor = '#fbbf24' }: { text: string; highlightColor?: string }) {
-  const lines = text.split('\n').filter(l => l.trim() !== '')
+  const normalized = text.replace(/\s*(첫째,|둘째,|셋째,|넷째,|다섯째,|⚠️)/g, '\n$1').trim()
+  const lines = normalized.split('\n').map(l => l.trim()).filter(l => l !== '')
   return (
-    <div className="text-gray-300 text-sm leading-relaxed space-y-2">
+    <div className="text-gray-300 text-sm leading-relaxed space-y-3">
       {lines.map((line, i) => {
-        const isNumbered = /^(첫째|둘째|셋째|넷째|다섯째|\d+[.)])/.test(line.trim())
-        const isWarning = line.trim().startsWith('⚠️')
+        const isNumbered = /^(첫째|둘째|셋째|넷째|다섯째|\d+[.)])/.test(line)
+        const isWarning = line.startsWith('⚠️')
         return (isNumbered || isWarning) ? (
           <p key={i} className="font-semibold" style={{ color: highlightColor }}>{line}</p>
         ) : (
@@ -233,7 +236,7 @@ export default function SajuPage() {
   const [calType, setCalType] = useState<'solar'|'lunar'>('solar')
   const [form, setForm] = useState({
     name: '', year: '1990', month: '1', day: '1',
-    hour: '', gender: 'female', occupation: '직장인', maritalStatus: '미혼(솔로)', questionIntent: '인생 전반',
+    hour: '', gender: 'female', occupation: '직장인', maritalStatus: '미혼(솔로)', questionIntent: '인생 전반', personalQuestion: '',
     birthPlace: '',
   })
   const [partnerForm, setPartnerForm] = useState({
@@ -451,6 +454,18 @@ export default function SajuPage() {
 
           {manse && <ManseTable manse={manse} charColor={selectedChar.color} />}
 
+          {result.personalAnswer && (
+            <div className="mb-4 rounded-2xl p-4 border-2" style={{ background: `${selectedChar.color}18`, borderColor: selectedChar.color }}>
+              <div className="flex items-center gap-2 mb-2">
+                <span>🔮</span>
+                <span className="font-bold text-sm" style={{ color: selectedChar.color }}>
+                  족집게 질문 — &ldquo;{result.personalAnswer.question}&rdquo;
+                </span>
+              </div>
+              <FormattedStrategyText text={result.personalAnswer.answer} highlightColor={selectedChar.color} />
+            </div>
+          )}
+
           <div className="mb-2">
             <p className="text-xs text-gray-500 mb-2 font-medium">✨ 판결 {allTitles.length}가지</p>
             <div className="space-y-3">
@@ -570,6 +585,22 @@ export default function SajuPage() {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* ✅ 신규: 직접 궁금한 거 자유 입력 (선택) — 채워지면 결과 맨 위에 전용 답변 카드로 표시 */}
+        <div className="mb-4">
+          <label className="text-xs text-gray-400 mb-2 block">
+            🔮 족집게 질문 <span className="text-gray-600">(선택)</span>
+          </label>
+          <textarea
+            value={form.personalQuestion}
+            onChange={e => setForm(f => ({ ...f, personalQuestion: e.target.value }))}
+            placeholder="예: 지금 회사 계속 다녀도 될까요? / 그 사람이랑 다시 잘될 수 있을까요?"
+            rows={2}
+            maxLength={200}
+            className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none resize-none"
+          />
+          <p className="text-xs text-gray-600 mt-1">비워두면 위에서 고른 주제로만 풀이해드려요</p>
         </div>
 
         {/* 내 정보 */}
