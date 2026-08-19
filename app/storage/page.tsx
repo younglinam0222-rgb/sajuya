@@ -94,7 +94,13 @@ export default function StoragePage() {
               </button>
 
               {showLogout && (
-                <div className="absolute right-0 top-10 bg-[#1a1a2e] border border-gray-700 rounded-2xl p-2 z-50 min-w-[120px]">
+                <div className="absolute right-0 top-10 bg-[#1a1a2e] border border-gray-700 rounded-2xl p-2 z-50 min-w-[180px]">
+                  {/* ✅ 신규: 네이버 로그인 검수용 — 이메일 정보가 실제로 화면에
+                      쓰이고 있다는 걸 증명하기 위해 계정 정보 표시 */}
+                  <div className="px-3 py-2 text-xs text-gray-500 border-b border-gray-800 mb-1">
+                    <p className="text-gray-300 font-medium truncate">{session.user?.name}님</p>
+                    <p className="truncate">{session.user?.email}</p>
+                  </div>
                   <button
                     onClick={() => signOut({ callbackUrl: '/' })}
                     className="w-full px-3 py-2 text-sm text-red-400 hover:bg-gray-800 rounded-xl text-left">
