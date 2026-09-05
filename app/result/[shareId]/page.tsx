@@ -337,12 +337,22 @@ export default function ResultPage() {
         </div>
       )}
 
-      {personalAnswer && (
+      {(personalAnswer || (typeof formInfo?.personalQuestion === 'string' && formInfo.personalQuestion.trim())) && (
         <div className="mx-4 mt-4 rounded-2xl p-4 border" style={{ borderColor: charColor, background: `${charColor}18` }}>
-          <div className="font-bold text-sm mb-2" style={{ color: charColor }}>
-            족집게 질문 — “{sanitizeText(personalAnswer.question)}”
-          </div>
-          <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line">{sanitizeText(personalAnswer.answer)}</p>
+          <div className="font-bold text-sm mb-2" style={{ color: charColor }}>족집게 질문</div>
+          <p className="text-sm text-white font-medium mb-3">
+            “{sanitizeText(personalAnswer?.question || formInfo?.personalQuestion || '')}”
+          </p>
+          {personalAnswer?.answer ? (
+            <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line">{sanitizeText(personalAnswer.answer)}</p>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-red-300">족집게 답변을 불러오지 못했어요.</p>
+              <Link href="/saju" className="block w-full py-2.5 rounded-xl text-sm font-bold text-center text-white" style={{ background: charColor }}>
+                다시 생성하기
+              </Link>
+            </div>
+          )}
         </div>
       )}
 

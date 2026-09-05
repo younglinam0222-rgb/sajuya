@@ -803,20 +803,31 @@ export default function SajuPage() {
             <div className="mb-4 rounded-2xl p-4 border-2" style={{ background: `${selectedChar.color}18`, borderColor: selectedChar.color }}>
               <div className="flex items-center gap-2 mb-2">
                 <span>🔮</span>
-                <span className="font-bold text-sm" style={{ color: selectedChar.color }}>
-                  족집게 질문 — &ldquo;{sanitizeText(result.personalAnswer?.question || form.personalQuestion)}&rdquo;
-                </span>
+                <span className="font-bold text-sm" style={{ color: selectedChar.color }}>족집게 질문</span>
               </div>
+              <p className="text-sm text-white font-medium mb-3">
+                “{sanitizeText(result.personalAnswer?.question || form.personalQuestion)}”
+              </p>
               {result.personalAnswer?.answer ? (
                 <FormattedStrategyText text={result.personalAnswer.answer} highlightColor={selectedChar.color} />
               ) : (
-                <p className="text-sm text-gray-400">
-                  {generating
-                    ? '질문에 대한 답변을 작성하는 중...'
-                    : failedParts.some(p => p.part === 'personal')
-                      ? '족집게 답변 생성에 실패했어요. 아래 버튼으로 이 항목만 다시 생성할 수 있어요.'
-                      : '족집게 답변이 아직 도착하지 않았어요.'}
-                </p>
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-400">
+                    {generating
+                      ? '질문에 대한 답변을 작성하는 중...'
+                      : failedParts.some(p => p.part === 'personal')
+                        ? '족집게 답변 생성에 실패했어요.'
+                        : '족집게 답변이 아직 도착하지 않았어요.'}
+                  </p>
+                  {!generating && (
+                    <button
+                      onClick={() => handleSubmit('retry')}
+                      className="w-full py-2.5 rounded-xl text-sm font-bold text-white"
+                      style={{ background: selectedChar.color }}>
+                      이 질문만 다시 생성
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -860,7 +871,7 @@ export default function SajuPage() {
               )}
               {result.strategy.peak_guide && (
                 <div className="rounded-2xl p-4 bg-[#111118] border border-gray-800">
-                  <div className="flex items-center gap-2 mb-2"><span>🚀</span><span className="font-bold text-sm text-green-400">전성기 실전 전략</span></div>
+                  <div className="flex items-center gap-2 mb-2"><span>🚀</span><span className="font-bold text-sm text-green-400">전성기 활용법</span></div>
                   <FormattedStrategyText text={result.strategy.peak_guide} highlightColor="#4ade80" />
                 </div>
               )}
