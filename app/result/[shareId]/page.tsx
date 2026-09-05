@@ -536,7 +536,7 @@ export default function ResultPage() {
               )}
               {strategy.peak_guide && (
                 <div className="rounded-2xl p-4 bg-[#111] border border-gray-800">
-                  <div className="flex items-center gap-2 mb-2"><span>🚀</span><span className="font-bold text-sm text-green-400">전성기 1000% 활용법</span></div>
+                  <div className="flex items-center gap-2 mb-2"><span>🚀</span><span className="font-bold text-sm text-green-400">전성기 활용법</span></div>
                   <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line">{sanitizeText(strategy.peak_guide)}</p>
                 </div>
               )}

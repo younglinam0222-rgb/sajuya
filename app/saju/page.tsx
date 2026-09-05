@@ -469,7 +469,11 @@ export default function SajuPage() {
 
     setGenStatus('generating')
     setStage(mode === 'retry' && (finalManseRef.current || titlesByIdRef.current.size > 0) ? 'result' : 'loading')
-    clientLog('submit', { mode })
+    clientLog('submit', {
+      mode,
+      hasPersonalQuestion: form.personalQuestion.trim().length > 0,
+      personalQuestionChars: form.personalQuestion.trim().length,
+    })
 
     const reportNow = currentAssessment()
     const retry = mode === 'retry'

@@ -492,6 +492,13 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
 `
 
     const trimmedPersonalQ = typeof personalQuestion === 'string' ? personalQuestion.trim().slice(0, 200) : ''
+    console.log(JSON.stringify({
+      tag: '사주궁:personal',
+      phase: 'request',
+      requestId,
+      hasPersonalQuestion: trimmedPersonalQ.length > 0,
+      personalQuestionChars: trimmedPersonalQ.length,
+    }))
     const retryAll = !retry || typeof retry !== 'object'
     const retryGroups: number[] = retryAll
       ? [0, 1, 2, 3]
@@ -738,6 +745,12 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
                     answer: sanitizeText(result.answer),
                   },
                 })
+                console.log(JSON.stringify({
+                  tag: '사주궁:personal',
+                  phase: 'event_sent',
+                  requestId,
+                  answerChars: typeof result.answer === 'string' ? result.answer.length : 0,
+                }))
               } catch (e) {
                 if (workAbort.signal.aborted) return
                 const kind = classifyError(e)
