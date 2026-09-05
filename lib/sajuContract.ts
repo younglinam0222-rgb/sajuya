@@ -1,13 +1,22 @@
 export const GROUP_IDS = [
-  [1, 2, 3],
-  [4, 5, 6],
-  [7, 8, 9],
-  [10, 11, 12],
+  [1, 2],
+  [3, 4],
+  [5, 6],
+  [7, 8],
+  [9, 10],
+  [11, 12],
 ] as const
 
 export const REQUIRED_TITLE_IDS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'] as const
 
-export const REQUIRED_GROUP_INDEXES = [0, 1, 2, 3] as const
+export const REQUIRED_GROUP_INDEXES = [0, 1, 2, 3, 4, 5] as const
+export const LAST_GROUP_INDEX = 5
+
+export function groupIndexForId(id: string | number): number | null {
+  const n = Number(id)
+  if (!Number.isInteger(n) || n < 1 || n > 12) return null
+  return Math.floor((n - 1) / 2)
+}
 
 export type SajuTitleLike = {
   id?: unknown
@@ -22,12 +31,6 @@ export type SajuStrategyLike = {
   peak_guide?: unknown
   warning?: unknown
   final_word?: unknown
-}
-
-export function groupIndexForId(id: string | number): number | null {
-  const n = Number(id)
-  if (!Number.isInteger(n) || n < 1 || n > 12) return null
-  return Math.floor((n - 1) / 3)
 }
 
 export function isValidTitle(item: unknown): item is SajuTitleLike {
@@ -119,7 +122,7 @@ export function assessCompletion(input: {
     }
   }
   const missingIds = REQUIRED_TITLE_IDS.filter(id => !isValidTitle(byId.get(id)))
-  const received = [...new Set(input.receivedGroupIndexes)].filter(g => g >= 0 && g <= 3).sort((a, b) => a - b)
+  const received = [...new Set(input.receivedGroupIndexes)].filter(g => g >= 0 && g <= LAST_GROUP_INDEX).sort((a, b) => a - b)
   const missingGroups = REQUIRED_GROUP_INDEXES.filter(g => !received.includes(g))
   const strategyOk = isValidStrategy(input.strategy)
   const personalOk = !input.requestedPersonal || isValidPersonal(input.personal)

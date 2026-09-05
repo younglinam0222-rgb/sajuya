@@ -3,7 +3,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { randomUUID } from 'crypto'
 import { CHARACTERS } from '@/lib/characters'
 import { correctToTrueSolarTime } from '@/lib/solarTime'
-import { GROUP_IDS } from '@/lib/sajuContract'
+import { GROUP_IDS, LAST_GROUP_INDEX } from '@/lib/sajuContract'
 import { sanitizeJudgmentTitles, sanitizeStrategy, sanitizeText } from '@/lib/sajuSanitize'
 // @ts-ignore — lunar-javascript는 공식 타입 정의가 없음
 import LunarJS from 'lunar-javascript'
@@ -204,7 +204,7 @@ function getStyleRules() {
 "버는 힘은 좋은데, 모으는 재주가 약해."
 "통장은 늘 바쁜데, 잔고는 늘 한가해."
 
-[문장 공식 — 판결문마다 최소 5개 이상 섞어서]
+[문장 공식 — 판결문마다 최소 3개 이상 섞어서]
 1. "~가 아니라, ~다"
 2. "지금 힘든 이유? ~라서 그래"
 3. "겉으로는 ~, 속으로는 ~"
@@ -232,7 +232,7 @@ D. 공감 → 경고 → 비유 → 팩폭
 예시: "돈 버는 기계인데 왜 통장은 늘 텅텅빌까"
 
 [판결문 형식 규칙]
-- 500자 이상 필수. 글자수 채우려고 늘리지 말고, 진짜 내용으로 채워라
+- 500자 이상, 700자 이하. 800자를 넘기지 마라. 군더더기 없이 알찬 내용으로 채워라
 - 문단마다 빈 줄 하나 넣어라 (\\n\\n)
 - ⚠️ 조심할 것들은 맨 마지막에, 본문과 빈 줄 띄고 써라
 - ⚠️를 본문 중간에 절대 넣지 마라
@@ -340,23 +340,22 @@ ${seunInfo}
     const intentInstruction = intentGuide[questionIntent] ?? '이 사람 사주에서 가장 중요한 걸 찾아서 알려줘'
 
     const systemPrompt = `너는 ${character.name}이야. 사주를 쉽고 재미있게 풀어주는 캐릭터. 한자나 어려운 명리 용어는 절대 쓰지 않고, 20-30대가 바로 이해할 수 있는 말로만 설명해. 반드시 제공된 도구(tool)를 호출해서 결과를 제출해라 — 그 외의 텍스트 설명은 필요 없다.`
+    const sharedContext = `${voiceGuide}\n${sajuInfo}\n${styleRules}`
+    const cachedSystem: Anthropic.TextBlockParam[] = [
+      { type: 'text', text: systemPrompt },
+      { type: 'text', text: sharedContext, cache_control: { type: 'ephemeral' } },
+    ]
 
-    // ✅ 신규: 6개씩 2호출 → 3개씩 4호출로 쪼갬. Promise.all은 "제일 늦게 끝나는 호출"이
-    // 전체 시간을 결정하는데, 호출당 담당량을 절반으로 줄이면 그만큼 대기시간도 절반이 됨.
     const makeJudgmentPrompt = (ids: number[], isFreeIds: number[], categoryHints: string[], primaryTool: string, avoidTools: string) => `
-${voiceGuide}
-${sajuInfo}
-
 [현재 상황] 이 사람은 지금 ${currentAge}세야. 분석할 때 이미 지난 나이대(예: 현재 40대면 20대·30대 얘기는 과거로만 짧게)는 넘어가고, 지금과 앞으로의 시기에 집중해서 써.
 
 [궁금한 것]: ${questionIntent}
 → ${intentInstruction}
 
 ${getInterpretationRules(primaryTool, avoidTools)}
-${styleRules}
 
 판결문 ${ids.join('번, ')}번을 작성해. 서로 겹치지 않게 각각 새로운 각도로 파고들어.
-각 판결문은 반드시 500자 이상. 내용 없으면 실격.
+각 판결문은 500자 이상 700자 이하. 800자를 넘기면 실격.
 
 [소제목(category) 규칙 — 반드시 지킬 것]
 각 판결문마다 이게 어떤 주제를 다루는지 짧은 소제목(2~5글자)을 붙여라.
@@ -367,18 +366,12 @@ ${categoryHints.includes('어울리는 지역') ? '["어울리는 지역" 카테
 반드시 위에서 지정한 카테고리대로, 판결문 ${ids.join('번, ')}번 내용을 만들어서 도구를 호출해.
 `
 
-    // ✅ 신규: strategy(대운 전략)를 판결문에서 분리해 별도 호출로.
-    // 판결문 여러 개 + strategy를 한 번에 요구하다 보니 8192 토큰 한도를 넘겨서
-    // JSON이 중간에 잘리는 "응답 파싱 실패" 오류가 종종 발생했음.
     const prompt3 = `
-${voiceGuide}
-${sajuInfo}
-
 [현재 상황] 이 사람은 지금 ${currentAge}세야.
 
 ${getInterpretationRules('오행 균형과 십성 구조를 종합한 전체 흐름', '')}
 
-이 사람의 인생 전략(대운 흐름)을 작성해서 도구를 호출해. 판결문이 아니라 전체 인생 로드맵이야.
+이 사람의 인생 전략(대운 흐름)을 작성해서 도구를 호출해. 판결문이 아니라 전체 인생 로드맵이야. 각 문단은 핵심만 간결하게.
 
 [lifecycle 배열은 반드시 이 나이대들로 채워]
 ${lifecycleRows}
@@ -386,23 +379,21 @@ ${lifecycleRows}
 
     const FREE_IDS = [1, 2, 3]
     const idGroups = GROUP_IDS.map(g => [...g])
-    // ✅ 신규: 4개 그룹이 병렬로 따로 도는 구조라 서로 뭘 쓰는지 모름 → 카테고리 겹침 방지 위해
-    // 그룹별로 미리 다른 카테고리를 배정. 무료(1~3)엔 가장 대중적인 카테고리 배치.
     const categoryGroups = [
-      ['성격', '재물운', '애정운'],
-      ['직업운', '건강운', '인간관계'],
-      ['대운', '인생흐름', '어울리는 지역'],
-      ['올해 총운', '위기관리', '결혼운'],
+      ['성격', '재물운'],
+      ['애정운', '직업운'],
+      ['건강운', '인간관계'],
+      ['대운', '인생흐름'],
+      ['어울리는 지역', '올해 총운'],
+      ['위기관리', '결혼운'],
     ]
-    // ✅ 신규: 오행 편중이 뚜렷한 사주(예: 목4개·수0개)는 4개 그룹이 전부 같은
-    // "오행 불균형" 얘기로 수렴해서 12개가 3~4개 얘기 반복이 되는 문제 발견됨.
-    // 그룹별로 핵심 근거 도구를 강제로 다르게 배정해서 실제로 다른 이야기가 나오게 함.
-    const toolGroups = [
+    const toolPool = [
       '오행 균형(목·화·토·금·수 과다·부족)',
       '십성 구조(비겁·식상·재성·관성·인성의 조합과 힘)',
       '신살과 특이 조합(지장간, 12운성 포함)',
       '대운·세운의 시기별 흐름',
     ]
+    const toolGroups = idGroups.map((_, gi) => toolPool[gi % toolPool.length])
 
     // ✅ 신규(핵심 안정화): 텍스트로 "JSON처럼 써줘"라고 부탁하는 대신, Anthropic의
     // Tool Use로 출력 형식을 API 차원에서 강제함. AI가 형식을 "어길 수 있는" 여지 자체를
@@ -415,8 +406,8 @@ ${lifecycleRows}
         properties: {
           titles: {
             type: 'array' as const,
-            minItems: 3,
-            maxItems: 3,
+            minItems: 2,
+            maxItems: 2,
             items: {
               type: 'object' as const,
               properties: {
@@ -425,7 +416,7 @@ ${lifecycleRows}
                 title: { type: 'string' as const, description: '읽자마자 "어 내 얘기잖아" 싶은 소름 돋는 상황 묘사 제목' },
                 teaser: { type: 'string' as const, description: '클릭하고 싶어지는 한 줄 훅' },
                 is_free: { type: 'boolean' as const },
-                content: { type: 'string' as const, description: '500자 이상. 공감+비유+팩폭+행동팁 포함, 문단 사이 빈줄(\\n\\n). 마지막에 "⚠️ 조심할 것들: " 로 시작하는 구체적 2~3가지' },
+                content: { type: 'string' as const, description: '500~700자. 800자 금지. 공감+비유+팩폭+행동팁 포함, 문단 사이 빈줄(\\n\\n). 마지막에 "⚠️ 조심할 것들: " 로 시작하는 구체적 2~3가지' },
               },
               required: ['id', 'category', 'title', 'teaser', 'is_free', 'content'],
             },
@@ -442,7 +433,7 @@ ${lifecycleRows}
         type: 'object' as const,
         properties: {
           overview: { type: 'string' as const, minLength: 30, description: '이 사람 사주 전체 핵심 3~4문장, 쉬운 말로' },
-          golden_period: { type: 'string' as const, minLength: 80, description: '전성기가 언제고 왜 그 시기인지 5~7문장, 구체적 나이·시기·기운·준비할 것 포함' },
+          golden_period: { type: 'string' as const, minLength: 80, description: '전성기가 언제고 왜 그 시기인지 3~5문장, 구체적 나이·시기·준비할 것 포함' },
           lifecycle: {
             type: 'array' as const,
             items: {
@@ -456,7 +447,7 @@ ${lifecycleRows}
               required: ['age', 'score', 'season', 'desc'],
             },
           },
-          peak_guide: { type: 'string' as const, minLength: 100, description: '전성기 활용법. "첫째, ~ \\n\\n둘째, ~ \\n\\n셋째, ~" 형식으로, 항목마다 반드시 \\n\\n(빈 줄)로 구분해서 각 항목이 2~3문장씩 되도록 풍부하게 써라.' },
+          peak_guide: { type: 'string' as const, minLength: 80, description: '전성기 활용법. "첫째, ~ \\n\\n둘째, ~ \\n\\n셋째, ~" 형식으로, 항목마다 빈 줄로 구분하고 각 항목 1~2문장.' },
           warning: { type: 'string' as const, minLength: 40, description: '가장 조심해야 할 것들. "⚠️ 첫째, ~ \\n\\n⚠️ 둘째, ~" 형식으로, 2~3개 항목을 \\n\\n으로 구분해서 각각 1~2문장씩 써라.' },
           final_word: { type: 'string' as const, minLength: 30, description: '캐릭터가 마지막으로 건네는 진심 어린 한마디 3~4문장, 감정과 응원 위주, 반말. 절대 비워두거나 생략하지 마라 — 필수 항목이다.' },
         },
@@ -472,22 +463,18 @@ ${lifecycleRows}
       input_schema: {
         type: 'object' as const,
         properties: {
-          answer: { type: 'string' as const, description: '500자 이상. 이 사람의 질문에 사주 근거를 들어 직접 답해라. 공감+비유+팩폭+행동팁 포함, 문단 구분은 "첫째, ~ 둘째, ~" 형식 활용 가능. 확정짓지 말고 확률적으로("~할 가능성이 높아") 답해라.' },
+          answer: { type: 'string' as const, description: '500~700자. 이 사람의 질문에 사주 근거를 들어 직접 답해라. 공감+비유+팩폭+행동팁 포함. 확정짓지 말고 확률적으로("~할 가능성이 높아") 답해라.' },
         },
         required: ['answer'],
       },
     }
     const makePersonalPrompt = (q: string) => `
-${voiceGuide}
-${sajuInfo}
-
 [이 사람이 직접 남긴 질문 — 이것에 집중해서 답해라]
 "${q}"
 
 ${getInterpretationRules('이 질문과 가장 직접적으로 관련된 명리 요소(질문 내용에 맞춰 오행/십성/신살/대운 중 적절한 것)', '')}
-${styleRules}
 
-이 사람의 질문에 사주를 근거로 직접 답하는 도구를 호출해. 질문과 상관없는 일반론 늘어놓지 말고, 정확히 이 질문에 대한 답을 해라.
+이 사람의 질문에 사주를 근거로 직접 답하는 도구를 호출해. 500~700자로, 질문과 상관없는 일반론 늘어놓지 말고 정확히 이 질문에 대한 답을 해라.
 ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 들어있다 — 질문이 그 사람과의 관계·궁합에 관한 것이라면, 반드시 두 사람의 사주를 같이 놓고 궁합 관점에서 답해라.' : ''}
 `
 
@@ -501,8 +488,8 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
     }))
     const retryAll = !retry || typeof retry !== 'object'
     const retryGroups: number[] = retryAll
-      ? [0, 1, 2, 3]
-      : (Array.isArray(retry.groups) ? retry.groups.filter((g: unknown) => typeof g === 'number' && g >= 0 && g <= 3) : [])
+      ? GROUP_IDS.map((_, i) => i)
+      : (Array.isArray(retry.groups) ? retry.groups.filter((g: unknown) => typeof g === 'number' && g >= 0 && g <= LAST_GROUP_INDEX) : [])
     const retryStrategy = retryAll || retry.strategy === true
     const retryPersonal = (retryAll ? !!trimmedPersonalQ : retry.personal === true) && !!trimmedPersonalQ
 
@@ -574,6 +561,8 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
             durationMs: Date.now() - started,
             inputTokens: res.usage?.input_tokens,
             outputTokens: res.usage?.output_tokens,
+            cacheCreation: res.usage?.cache_creation_input_tokens ?? 0,
+            cacheRead: res.usage?.cache_read_input_tokens ?? 0,
             stopReason,
             retries: attempt - 1,
             ok: stopReason !== 'max_tokens',
@@ -649,15 +638,16 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
             const ids = idGroups[gi]
             tasks.push((async () => {
               try {
+                if (gi > 0) await sleep(Math.min(gi * 80, 400))
                 const result = await callWithRetry({
                   model: 'claude-sonnet-4-6',
-                  max_tokens: 6000,
-                  system: systemPrompt,
+                  max_tokens: 3200,
+                  system: cachedSystem,
                   tools: [judgmentTool],
                   tool_choice: { type: 'tool', name: 'submit_judgments' },
                   messages: [{
                     role: 'user',
-                    content: makeJudgmentPrompt(ids, FREE_IDS, categoryGroups[gi], toolGroups[gi], gi === 0 ? '' : toolGroups[0]),
+                    content: makeJudgmentPrompt(ids, FREE_IDS, categoryGroups[gi], toolGroups[gi], gi === 0 ? '' : toolPool[(gi - 1) % toolPool.length]),
                   }],
                 }, `group${gi}`, (result) => {
                   const titles = result.titles
@@ -696,8 +686,8 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
               try {
                 const result = await callWithRetry({
                   model: 'claude-sonnet-4-6',
-                  max_tokens: 3500,
-                  system: systemPrompt,
+                  max_tokens: 2800,
+                  system: cachedSystem,
                   tools: [strategyTool],
                   tool_choice: { type: 'tool', name: 'submit_strategy' },
                   messages: [{ role: 'user', content: prompt3 }],
@@ -727,8 +717,8 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
               try {
                 const result = await callWithRetry({
                   model: 'claude-sonnet-4-6',
-                  max_tokens: 2000,
-                  system: systemPrompt,
+                  max_tokens: 1600,
+                  system: cachedSystem,
                   tools: [personalAnswerTool],
                   tool_choice: { type: 'tool', name: 'submit_personal_answer' },
                   messages: [{ role: 'user', content: makePersonalPrompt(trimmedPersonalQ) }],

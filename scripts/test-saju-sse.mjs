@@ -66,8 +66,8 @@ function assessCompletion(input) {
     if (item && typeof item === 'object' && 'id' in item) byId.set(String(item.id), item)
   }
   const missingIds = REQUIRED_TITLE_IDS.filter(id => !isValidTitle(byId.get(id)))
-  const received = [...new Set(input.receivedGroupIndexes)].filter(g => g >= 0 && g <= 3).sort((a,b)=>a-b)
-  const missingGroups = [0,1,2,3].filter(g => !received.includes(g))
+  const received = [...new Set(input.receivedGroupIndexes)].filter(g => g >= 0 && g <= 5).sort((a,b)=>a-b)
+  const missingGroups = [0,1,2,3,4,5].filter(g => !received.includes(g))
   const strategyOk = isValidStrategy(input.strategy)
   const personalOk = !input.requestedPersonal || (input.personal && typeof input.personal.answer === 'string' && input.personal.answer.length >= 50)
   return {
@@ -112,11 +112,11 @@ const baseStrategy = {
   final_word: 'final-word-text-here',
 }
 const titles12 = Array.from({ length: 12 }, (_, i) => ({ id: String(i + 1), title: '제목', content: 'C'.repeat(60) }))
-assert(!assessCompletion({ titles: titles12, strategy: baseStrategy, personal: null, requestedPersonal: false, receivedGroupIndexes: [0,1,2,3], gotDone: false }).complete, 'missing [DONE] must not be complete')
-const missingGroup = assessCompletion({ titles: titles12, strategy: baseStrategy, personal: null, requestedPersonal: false, receivedGroupIndexes: [0,1,2], gotDone: true })
-assert(!missingGroup.complete, '12 titles without 4 groupIndexes must not be complete')
-assert(missingGroup.missingGroups.join(',') === '3', 'missing group 3 must be reported')
-assert(assessCompletion({ titles: titles12, strategy: baseStrategy, personal: { question: 'Q', answer: 'D'.repeat(60) }, requestedPersonal: true, receivedGroupIndexes: [0,1,2,3], gotDone: true }).complete, 'valid complete payload must pass')
+assert(!assessCompletion({ titles: titles12, strategy: baseStrategy, personal: null, requestedPersonal: false, receivedGroupIndexes: [0,1,2,3,4,5], gotDone: false }).complete, 'missing [DONE] must not be complete')
+const missingGroup = assessCompletion({ titles: titles12, strategy: baseStrategy, personal: null, requestedPersonal: false, receivedGroupIndexes: [0,1,2,3,4], gotDone: true })
+assert(!missingGroup.complete, '12 titles without 6 groupIndexes must not be complete')
+assert(missingGroup.missingGroups.join(',') === '5', 'missing group 5 must be reported')
+assert(assessCompletion({ titles: titles12, strategy: baseStrategy, personal: { question: 'Q', answer: 'D'.repeat(60) }, requestedPersonal: true, receivedGroupIndexes: [0,1,2,3,4,5], gotDone: true }).complete, 'valid complete payload must pass')
 
 const sanitized = sanitizeText('첫째, 안녕\\n\\n둘째, 세상')
 assert(sanitized.includes('\n\n'), 'literal \\n must become real newlines')
@@ -146,6 +146,6 @@ assert(savedShape?.question === 'Q3', 'saved personalAnswer must parse')
 const fallbackShape = normalizePersonalAnswer({ data: { answer: 'H'.repeat(60) } }, '폼질문')
 assert(fallbackShape?.question === '폼질문', 'missing question must use fallback')
 assert(normalizePersonalAnswer({ type: 'personal', data: {} }) === null, 'personal without answer must be ignored')
-assert(!assessCompletion({ titles: titles12, strategy: baseStrategy, personal: null, requestedPersonal: true, receivedGroupIndexes: [0,1,2,3], gotDone: true }).complete, 'requested personal without answer must not be complete')
+assert(!assessCompletion({ titles: titles12, strategy: baseStrategy, personal: null, requestedPersonal: true, receivedGroupIndexes: [0,1,2,3,4,5], gotDone: true }).complete, 'requested personal without answer must not be complete')
 
 console.log('saju sse/contract/sanitize tests passed')

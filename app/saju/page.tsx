@@ -8,7 +8,7 @@ import TimeNumberInput from '@/app/components/TimeNumberInput'
 import { KOREA_REGIONS } from '@/lib/solarTime'
 import { sanitizeText } from '@/lib/sajuSanitize'
 import { appendSseChunk, parseSseFrame } from '@/lib/sajuSse'
-import { assessCompletion, GROUP_IDS, normalizePersonalAnswer, sortTitlesById } from '@/lib/sajuContract'
+import { assessCompletion, GROUP_IDS, LAST_GROUP_INDEX, normalizePersonalAnswer, sortTitlesById } from '@/lib/sajuContract'
 
 interface SajuTitle {
   id: string; category?: string; title: string; teaser: string; is_free: boolean; content: string
@@ -481,7 +481,7 @@ export default function SajuPage() {
           groups: [...new Set([
             ...reportNow.missingGroups,
             ...failedParts.filter(p => p.part === 'group' && typeof p.groupIndex === 'number').map(p => p.groupIndex as number),
-          ])],
+          ])].filter(g => g >= 0 && g <= LAST_GROUP_INDEX),
           strategy: !reportNow.strategyOk,
           personal: requestedPersonalRef.current && !reportNow.personalOk,
         }
@@ -547,7 +547,7 @@ export default function SajuPage() {
           return
         }
         if (parsed.type === 'group') {
-          if (typeof parsed.groupIndex !== 'number' || parsed.groupIndex < 0 || parsed.groupIndex > 3) {
+          if (typeof parsed.groupIndex !== 'number' || parsed.groupIndex < 0 || parsed.groupIndex > LAST_GROUP_INDEX) {
             clientLog('invalid_group_index', { groupIndex: parsed.groupIndex ?? null })
             return
           }
