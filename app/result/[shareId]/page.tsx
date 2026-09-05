@@ -4,6 +4,8 @@ import { useParams, useRouter } from 'next/navigation'
 import { useSession, signIn } from 'next-auth/react'
 import Link from 'next/link'
 import { UNLOCK_PRICE } from '@/lib/pricing'
+import { sanitizeText } from '@/lib/sajuSanitize'
+import { ensureKakaoReady, getKakaoDiagnostics, KAKAO_READY_MESSAGE } from '@/lib/kakaoShare'
 
 interface Section { id: string; emoji: string; title: string; body: string }
 interface SajuTitle { id: string; category?: string; title: string; teaser: string; is_free: boolean; content: string }
@@ -68,6 +70,10 @@ export default function ResultPage() {
   const [sajuData,    setSajuData]    = useState<any>(null)
   const [isPaid,      setIsPaid]      = useState(false)
   const [copied,      setCopied]      = useState(false)
+  const [shareError,  setShareError]  = useState('')
+  const [sharing,     setSharing]     = useState(false)
+  const [personalAnswer, setPersonalAnswer] = useState<{ question: string; answer: string } | null>(null)
+  const [isCompleteResult, setIsCompleteResult] = useState(true)
 
   useEffect(() => {
     if (authStatus === 'authenticated') fetchReading()
@@ -101,7 +107,9 @@ export default function ResultPage() {
           if (s !== -1 && e !== -1) clean = clean.slice(s, e + 1)
           const parsed = JSON.parse(clean)
           if (parsed.titles)   { setTitles(parsed.titles); setStrategy(parsed.strategy ?? null) }
+          if (parsed.personalAnswer) setPersonalAnswer(parsed.personalAnswer)
           if (parsed.sections) { setSections(parsed.sections) }
+          if (parsed._meta && parsed._meta.isComplete === false) setIsCompleteResult(false)
         } catch {
           setError('풀이 데이터를 불러오는 중 오류가 발생했습니다.')
         }
@@ -123,22 +131,50 @@ export default function ResultPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const handleKakaoShare = () => {
+  const handleKakaoShare = async () => {
+    setShareError('')
+    setSharing(true)
     const url   = window.location.href
     const title = formInfo ? `${formInfo.name}님의 사주팔자 풀이` : '사주궁 풀이 결과'
     const desc  = `${charName}이 직접 본 사주 결과 — 지금 확인해보세요`
-    if (typeof window !== 'undefined' && (window as any).Kakao?.Share) {
+    const imageUrl = `${window.location.origin}${charImg}`
+    const diag = getKakaoDiagnostics()
+    console.log(JSON.stringify({
+      tag: '사주궁:kakao',
+      event: 'share_attempt',
+      ...diag,
+      imageHost: (() => { try { return new URL(imageUrl).host } catch { return 'invalid' } })(),
+    }))
+
+    const ready = await ensureKakaoReady()
+    if (!ready.ok) {
+      console.error(JSON.stringify({ tag: '사주궁:kakao', event: 'share_not_ready', reason: ready.reason, ...getKakaoDiagnostics() }))
+      setShareError(KAKAO_READY_MESSAGE[ready.reason])
+      setSharing(false)
+      return
+    }
+
+    try {
       ;(window as any).Kakao.Share.sendDefault({
         objectType: 'feed',
         content: {
           title, description: desc,
-          imageUrl: `${window.location.origin}${charImg}`,
+          imageUrl,
           link: { mobileWebUrl: url, webUrl: url },
         },
         buttons: [{ title: '풀이 보기', link: { mobileWebUrl: url, webUrl: url } }],
       })
-    } else {
-      handleCopyLink()
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      console.error(JSON.stringify({
+        tag: '사주궁:kakao',
+        event: 'share_send_failed',
+        err: message,
+        ...getKakaoDiagnostics(),
+      }))
+      setShareError(message || '카카오 공유에 실패했어요.')
+    } finally {
+      setSharing(false)
     }
   }
 
@@ -290,6 +326,21 @@ export default function ResultPage() {
         </div>
       )}
 
+      {!isCompleteResult && (
+        <div className="mx-4 mt-4 px-3 py-2 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 text-xs">
+          이 풀이는 미완료 상태로 저장된 임시본입니다. 완성본이 아닙니다.
+        </div>
+      )}
+
+      {personalAnswer && (
+        <div className="mx-4 mt-4 rounded-2xl p-4 border" style={{ borderColor: charColor, background: `${charColor}18` }}>
+          <div className="font-bold text-sm mb-2" style={{ color: charColor }}>
+            족집게 질문 — “{sanitizeText(personalAnswer.question)}”
+          </div>
+          <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line">{sanitizeText(personalAnswer.answer)}</p>
+        </div>
+      )}
+
       {/* 새 포맷: titles */}
       {titles.length > 0 && (
         <div className="px-4 pt-4">
@@ -309,11 +360,11 @@ export default function ResultPage() {
                       </span>
                     )}
                   </div>
-                  <p className="font-bold text-base leading-snug text-white">{t.title}</p>
-                  {t.teaser && <p className="text-xs text-gray-500 mt-1">{t.teaser}</p>}
+                  <p className="font-bold text-base leading-snug text-white">{sanitizeText(t.title)}</p>
+                  {t.teaser && <p className="text-xs text-gray-500 mt-1">{sanitizeText(t.teaser)}</p>}
                   {t.content && (
                     <div className="text-gray-300 text-sm leading-relaxed mt-4">
-                      {t.content.split('\n').map((line, j) =>
+                      {sanitizeText(t.content).split('\n').map((line, j) =>
                         line.startsWith('⚠️')
                           ? <p key={j} className="mt-4 text-yellow-300 font-medium">{line}</p>
                           : line === ''
@@ -428,7 +479,7 @@ export default function ResultPage() {
               {strategy.overview && (
                 <div className="rounded-2xl p-4 bg-[#111] border border-gray-800">
                   <div className="flex items-center gap-2 mb-2"><span>🌌</span><span className="font-bold text-sm">인생의 큰 그림</span></div>
-                  <p className="text-gray-300 text-sm leading-relaxed">{strategy.overview}</p>
+                  <p className="text-gray-300 text-sm leading-relaxed">{sanitizeText(strategy.overview)}</p>
                 </div>
               )}
               {strategy.lifecycle?.length > 0 && (
@@ -475,19 +526,25 @@ export default function ResultPage() {
               {strategy.golden_period && (
                 <div className="rounded-2xl p-4 bg-[#111] border border-yellow-900/30">
                   <div className="flex items-center gap-2 mb-2"><span>🏆</span><span className="font-bold text-sm text-yellow-400">전성기는 언제?</span></div>
-                  <p className="text-gray-300 text-sm leading-relaxed">{strategy.golden_period}</p>
+                  <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line">{sanitizeText(strategy.golden_period)}</p>
                 </div>
               )}
               {strategy.peak_guide && (
                 <div className="rounded-2xl p-4 bg-[#111] border border-gray-800">
                   <div className="flex items-center gap-2 mb-2"><span>🚀</span><span className="font-bold text-sm text-green-400">전성기 1000% 활용법</span></div>
-                  <p className="text-gray-300 text-sm leading-relaxed">{strategy.peak_guide}</p>
+                  <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line">{sanitizeText(strategy.peak_guide)}</p>
                 </div>
               )}
               {strategy.warning && (
                 <div className="rounded-2xl p-4 bg-[#1a0808] border border-red-900/30">
                   <div className="flex items-center gap-2 mb-2"><span>⚠️</span><span className="font-bold text-sm text-red-400">조심할 시기</span></div>
-                  <p className="text-[#fca5a5] text-sm leading-relaxed">{strategy.warning}</p>
+                  <p className="text-[#fca5a5] text-sm leading-relaxed whitespace-pre-line">{sanitizeText(strategy.warning)}</p>
+                </div>
+              )}
+              {strategy.final_word && (
+                <div className="rounded-2xl p-4 border" style={{ background: `${charColor}14`, borderColor: `${charColor}55` }}>
+                  <div className="flex items-center gap-2 mb-2"><span>💬</span><span className="font-bold text-sm" style={{ color: charColor }}>마지막 한마디</span></div>
+                  <p className="text-gray-200 text-sm leading-relaxed">{sanitizeText(strategy.final_word)}</p>
                 </div>
               )}
             </div>
@@ -529,11 +586,15 @@ export default function ResultPage() {
 
       {/* 공유 버튼 */}
       <div className="px-4 mt-4 space-y-3">
-        <button className="w-full py-4 rounded-2xl font-black text-base flex items-center justify-center gap-2"
+        <button className="w-full py-4 rounded-2xl font-black text-base flex items-center justify-center gap-2 disabled:opacity-60"
           style={{ background: '#fee500', color: '#3c1e1e' }}
+          disabled={sharing}
           onClick={handleKakaoShare}>
-          💬 카카오로 공유하기
+          {sharing ? '카카오 공유 준비 중...' : '💬 카카오로 공유하기'}
         </button>
+        {shareError && (
+          <p className="text-xs text-red-300 text-center">{shareError}</p>
+        )}
         <button className="w-full py-3 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all"
           style={{ background: copied ? '#10B981' : '#1a1a2e', border: '1px solid #333', color: copied ? 'white' : '#aaa' }}
           onClick={handleCopyLink}>

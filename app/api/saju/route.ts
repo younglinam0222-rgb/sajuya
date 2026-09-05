@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { randomUUID } from 'crypto'
 import { CHARACTERS } from '@/lib/characters'
 import { correctToTrueSolarTime } from '@/lib/solarTime'
+import { GROUP_IDS } from '@/lib/sajuContract'
+import { sanitizeJudgmentTitles, sanitizeStrategy, sanitizeText } from '@/lib/sajuSanitize'
 // @ts-ignore — lunar-javascript는 공식 타입 정의가 없음
 import LunarJS from 'lunar-javascript'
 
@@ -10,7 +13,10 @@ import LunarJS from 'lunar-javascript'
 export const maxDuration = 300
 export const runtime = 'nodejs'
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
+const client = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY!,
+  maxRetries: 0,
+})
 
 // ─── 만세력 계산 ───────────────────────────────────
 const STEMS = ['甲','乙','丙','丁','戊','己','庚','辛','壬','癸']
@@ -236,7 +242,15 @@ D. 공감 → 경고 → 비유 → 팩폭
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, year, month, day, hour, gender, characterId, occupation, maritalStatus, questionIntent, partnerInfo, longitude, personalQuestion } = await req.json()
+    const body = await req.json()
+    const {
+      name, year, month, day, hour, gender, characterId, occupation,
+      maritalStatus, questionIntent, partnerInfo, longitude, personalQuestion,
+      requestId: clientRequestId, retry,
+    } = body
+    const requestId = typeof clientRequestId === 'string' && clientRequestId.length > 0 && clientRequestId.length < 80
+      ? clientRequestId
+      : randomUUID()
 
     const character = CHARACTERS[characterId] ?? CHARACTERS['doRyeong']
     const genderStr = gender === 'male' ? '남성' : '여성'
@@ -371,7 +385,7 @@ ${lifecycleRows}
 `
 
     const FREE_IDS = [1, 2, 3]
-    const idGroups = [[1,2,3], [4,5,6], [7,8,9], [10,11,12]]
+    const idGroups = GROUP_IDS.map(g => [...g])
     // ✅ 신규: 4개 그룹이 병렬로 따로 도는 구조라 서로 뭘 쓰는지 모름 → 카테고리 겹침 방지 위해
     // 그룹별로 미리 다른 카테고리를 배정. 무료(1~3)엔 가장 대중적인 카테고리 배치.
     const categoryGroups = [
@@ -477,21 +491,92 @@ ${styleRules}
 ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 들어있다 — 질문이 그 사람과의 관계·궁합에 관한 것이라면, 반드시 두 사람의 사주를 같이 놓고 궁합 관점에서 답해라.' : ''}
 `
 
-    // ✅ 재시도는 이제 "형식 오류" 대비가 아니라 API 타임아웃/네트워크 등 진짜 예외 상황 대비 안전망.
-    // ✅ 신규: minItems/maxItems는 AI에게 "이렇게 해라"는 가이드일 뿐, API가 강제로
-    // 막아주는 게 아님 — 실제로 3개 대신 더 적게 반환해도 에러 없이 통과되는 경우 발견됨
-    // (예: 4그룹 중 2개 그룹이 빈 배열 반환 → "판결문 6개 생성 완료"로 조용히 끝남).
-    // validate 콜백으로 결과 개수까지 검증해서, 틀리면 예외 처리 후 재시도하도록 보강.
+    const trimmedPersonalQ = typeof personalQuestion === 'string' ? personalQuestion.trim().slice(0, 200) : ''
+    const retryAll = !retry || typeof retry !== 'object'
+    const retryGroups: number[] = retryAll
+      ? [0, 1, 2, 3]
+      : (Array.isArray(retry.groups) ? retry.groups.filter((g: unknown) => typeof g === 'number' && g >= 0 && g <= 3) : [])
+    const retryStrategy = retryAll || retry.strategy === true
+    const retryPersonal = (retryAll ? !!trimmedPersonalQ : retry.personal === true) && !!trimmedPersonalQ
+
+    type ErrorKind = 'fatal' | 'transient' | 'validation' | 'truncation'
+
+    function classifyError(e: unknown): ErrorKind {
+      const status = (e as { status?: number; statusCode?: number }).status
+        ?? (e as { status?: number; statusCode?: number }).statusCode
+      const type = (e as { error?: { type?: string }; type?: string }).error?.type
+        ?? (e as { type?: string }).type
+      const msg = e instanceof Error ? e.message : String(e)
+      if (status === 400 || status === 401 || status === 403 || status === 404) return 'fatal'
+      if (type === 'authentication_error' || type === 'invalid_request_error' || type === 'permission_error') return 'fatal'
+      if (msg.includes('max_tokens') || msg.includes('토큰 한도')) return 'truncation'
+      if (
+        msg.includes('도구 호출 결과 없음')
+        || msg.includes('개수 불일치')
+        || msg.includes('ID 불일치')
+        || msg.includes('내용 부족')
+        || msg.includes('누락')
+        || msg.includes('너무 짧음')
+      ) return 'validation'
+      return 'transient'
+    }
+
+    function sleep(ms: number) {
+      return new Promise(resolve => setTimeout(resolve, ms))
+    }
+
+    const workAbort = new AbortController()
+    const onClientAbort = () => workAbort.abort()
+    if (req.signal.aborted) workAbort.abort()
+    else req.signal.addEventListener('abort', onClientAbort)
+
+    const deadlineAt = Date.now() + 270_000
+
     async function callWithRetry(
       params: Anthropic.MessageCreateParamsNonStreaming,
       label: string,
-      maxAttempts = 2,
       validate?: (result: Record<string, unknown>) => void,
     ) {
       let lastErr: unknown = null
+      let lastKind: ErrorKind = 'transient'
+      const maxAttempts = 2
+
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        if (workAbort.signal.aborted) throw new Error('aborted')
+        const remaining = deadlineAt - Date.now()
+        if (remaining < 8_000) {
+          throw lastErr instanceof Error ? lastErr : new Error('전체 제한시간 부족')
+        }
+
+        const callMaxTokens = attempt > 1 && lastKind === 'truncation'
+          ? Math.min((params.max_tokens ?? 6000) + 2000, 8192)
+          : params.max_tokens
+        const started = Date.now()
+
         try {
-          const res = await client.messages.create(params)
+          const res = await client.messages.create(
+            { ...params, max_tokens: callMaxTokens },
+            { signal: workAbort.signal, maxRetries: 0 },
+          )
+          const stopReason = res.stop_reason
+          console.log(JSON.stringify({
+            tag: '사주궁',
+            requestId,
+            call: label,
+            attempt,
+            durationMs: Date.now() - started,
+            inputTokens: res.usage?.input_tokens,
+            outputTokens: res.usage?.output_tokens,
+            stopReason,
+            retries: attempt - 1,
+            ok: stopReason !== 'max_tokens',
+          }))
+
+          if (stopReason === 'max_tokens') {
+            lastKind = 'truncation'
+            throw new Error('토큰 한도(max_tokens)로 응답이 잘림')
+          }
+
           const toolUse = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
           if (!toolUse) throw new Error('도구 호출 결과 없음')
           const result = toolUse.input as Record<string, unknown>
@@ -499,116 +584,219 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
           return result
         } catch (e) {
           lastErr = e
-          console.error(`[사주궁] ${label} 실패 (시도 ${attempt}/${maxAttempts}):`, e instanceof Error ? e.message : e)
+          if (workAbort.signal.aborted) throw e
+          lastKind = classifyError(e)
+          console.error(JSON.stringify({
+            tag: '사주궁',
+            requestId,
+            call: label,
+            attempt,
+            durationMs: Date.now() - started,
+            kind: lastKind,
+            retries: attempt - 1,
+            ok: false,
+            err: e instanceof Error ? e.message : String(e),
+          }))
+          if (lastKind === 'fatal') break
+          if (attempt < maxAttempts && lastKind === 'transient') await sleep(800)
         }
       }
-      throw new Error(`${label} 생성 실패 (재시도 ${maxAttempts}회 모두 실패): ${lastErr instanceof Error ? lastErr.message : lastErr}`)
+
+      throw new Error(`${label} 생성 실패: ${lastErr instanceof Error ? lastErr.message : lastErr}`)
     }
-
-    const trimmedPersonalQ = typeof personalQuestion === 'string' ? personalQuestion.trim().slice(0, 200) : ''
-
-    const [parsedGroups, parsed3, personalAnswerParsed] = await Promise.all([
-      Promise.all(idGroups.map((ids, gi) => callWithRetry({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 6000,
-        system: systemPrompt,
-        tools: [judgmentTool],
-        tool_choice: { type: 'tool', name: 'submit_judgments' },
-        messages: [{ role: 'user', content: makeJudgmentPrompt(ids, FREE_IDS, categoryGroups[gi], toolGroups[gi], gi === 0 ? '' : toolGroups[0]) }],
-      }, `${gi + 1}번 그룹(${ids.join(',')})`, 2, (result) => {
-        const titles = result.titles
-        if (!Array.isArray(titles) || titles.length !== ids.length) {
-          throw new Error(`판결문 개수 불일치 — 기대: ${ids.length}개, 실제: ${Array.isArray(titles) ? titles.length : '배열 아님'}개`)
-        }
-      }))),
-      callWithRetry({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 3500,
-        system: systemPrompt,
-        tools: [strategyTool],
-        tool_choice: { type: 'tool', name: 'submit_strategy' },
-        messages: [{ role: 'user', content: prompt3 }],
-      }, '전략', 2, (result) => {
-        const fw = result.final_word
-        if (typeof fw !== 'string' || fw.trim().length < 20) {
-          throw new Error(`final_word 누락 또는 너무 짧음 (${typeof fw === 'string' ? fw.length : 'undefined'}자)`)
-        }
-      }),
-      trimmedPersonalQ
-        ? callWithRetry({
-            model: 'claude-sonnet-4-6',
-            max_tokens: 2000,
-            system: systemPrompt,
-            tools: [personalAnswerTool],
-            tool_choice: { type: 'tool', name: 'submit_personal_answer' },
-            messages: [{ role: 'user', content: makePersonalPrompt(trimmedPersonalQ) }],
-          }, '개인질문')
-        : Promise.resolve(null),
-    ])
-
-    const allTitles: unknown[] = []
-    parsedGroups.forEach((parsed: any) => {
-      if (Array.isArray(parsed.titles)) allTitles.push(...parsed.titles)
-    })
-
-    const combined = {
-      titles: allTitles,
-      strategy: parsed3,
-      personalAnswer: trimmedPersonalQ && personalAnswerParsed
-        ? { question: trimmedPersonalQ, answer: (personalAnswerParsed as any).answer }
-        : undefined,
-      disclaimer: '본 풀이는 엔터테인먼트 및 참고 목적이며, 중요한 결정은 전문가와 상담하세요.',
-    }
-
-    console.log(`[사주궁] 판결문 ${combined.titles.length}개 생성 완료`)
 
     const encoder = new TextEncoder()
+    const sseHeaders = {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    }
+
     const readable = new ReadableStream({
-      start(controller) {
-        controller.enqueue(encoder.encode(
-          `data: ${JSON.stringify({ type: 'manse', data: manse })}\n\n`
-        ))
-        const jsonStr = JSON.stringify(combined)
-        const chunkSize = 200
-        for (let i = 0; i < jsonStr.length; i += chunkSize) {
-          controller.enqueue(encoder.encode(
-            `data: ${JSON.stringify({ text: jsonStr.slice(i, i + chunkSize) })}\n\n`
-          ))
+      async start(controller) {
+        let closed = false
+        const send = (event: Record<string, unknown>) => {
+          if (closed || workAbort.signal.aborted) return
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ ...event, requestId })}\n\n`))
         }
-        controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-        controller.close()
+        const finish = (withDone: boolean) => {
+          if (closed) return
+          closed = true
+          try {
+            if (withDone && !workAbort.signal.aborted) {
+              controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+            }
+            controller.close()
+          } catch { /* already closed */ }
+          req.signal.removeEventListener('abort', onClientAbort)
+        }
+
+        try {
+          send({ type: 'meta', startedAt: Date.now(), retryAll, retryGroups, retryStrategy, retryPersonal })
+          send({ type: 'manse', data: manse })
+
+          const tasks: Promise<void>[] = []
+
+          for (const gi of retryGroups) {
+            const ids = idGroups[gi]
+            tasks.push((async () => {
+              try {
+                const result = await callWithRetry({
+                  model: 'claude-sonnet-4-6',
+                  max_tokens: 6000,
+                  system: systemPrompt,
+                  tools: [judgmentTool],
+                  tool_choice: { type: 'tool', name: 'submit_judgments' },
+                  messages: [{
+                    role: 'user',
+                    content: makeJudgmentPrompt(ids, FREE_IDS, categoryGroups[gi], toolGroups[gi], gi === 0 ? '' : toolGroups[0]),
+                  }],
+                }, `group${gi}`, (result) => {
+                  const titles = result.titles
+                  if (!Array.isArray(titles) || titles.length !== ids.length) {
+                    throw new Error(`판결문 개수 불일치 — 기대: ${ids.length}개, 실제: ${Array.isArray(titles) ? titles.length : '배열 아님'}개`)
+                  }
+                  const got = titles.map((t: { id?: unknown }) => String(t?.id ?? '')).sort()
+                  const expected = ids.map(String).sort()
+                  if (got.join(',') !== expected.join(',')) {
+                    throw new Error(`판결문 ID 불일치 — 기대: ${expected.join(',')}, 실제: ${got.join(',')}`)
+                  }
+                  for (const t of titles as Array<{ id?: unknown; title?: unknown; content?: unknown }>) {
+                    if (typeof t?.title !== 'string' || !t.title.trim() || typeof t.content !== 'string' || t.content.trim().length < 50) {
+                      throw new Error(`판결문 내용 부족 id=${t?.id}`)
+                    }
+                  }
+                })
+                send({ type: 'group', groupIndex: gi, titles: sanitizeJudgmentTitles(result.titles) })
+              } catch (e) {
+                if (workAbort.signal.aborted) return
+                const kind = classifyError(e)
+                send({
+                  type: 'error',
+                  part: 'group',
+                  groupIndex: gi,
+                  message: e instanceof Error ? e.message : String(e),
+                  retryable: kind !== 'fatal',
+                  code: kind,
+                })
+              }
+            })())
+          }
+
+          if (retryStrategy) {
+            tasks.push((async () => {
+              try {
+                const result = await callWithRetry({
+                  model: 'claude-sonnet-4-6',
+                  max_tokens: 3500,
+                  system: systemPrompt,
+                  tools: [strategyTool],
+                  tool_choice: { type: 'tool', name: 'submit_strategy' },
+                  messages: [{ role: 'user', content: prompt3 }],
+                }, 'strategy', (result) => {
+                  const fw = result.final_word
+                  if (typeof fw !== 'string' || fw.trim().length < 20) {
+                    throw new Error(`final_word 누락 또는 너무 짧음 (${typeof fw === 'string' ? fw.length : 'undefined'}자)`)
+                  }
+                })
+                send({ type: 'strategy', data: sanitizeStrategy(result) })
+              } catch (e) {
+                if (workAbort.signal.aborted) return
+                const kind = classifyError(e)
+                send({
+                  type: 'error',
+                  part: 'strategy',
+                  message: e instanceof Error ? e.message : String(e),
+                  retryable: kind !== 'fatal',
+                  code: kind,
+                })
+              }
+            })())
+          }
+
+          if (retryPersonal) {
+            tasks.push((async () => {
+              try {
+                const result = await callWithRetry({
+                  model: 'claude-sonnet-4-6',
+                  max_tokens: 2000,
+                  system: systemPrompt,
+                  tools: [personalAnswerTool],
+                  tool_choice: { type: 'tool', name: 'submit_personal_answer' },
+                  messages: [{ role: 'user', content: makePersonalPrompt(trimmedPersonalQ) }],
+                }, 'personal', (result) => {
+                  if (typeof result.answer !== 'string' || result.answer.trim().length < 50) {
+                    throw new Error('개인질문 답변 누락 또는 너무 짧음')
+                  }
+                })
+                send({
+                  type: 'personal',
+                  data: {
+                    question: trimmedPersonalQ,
+                    answer: sanitizeText(result.answer),
+                  },
+                })
+              } catch (e) {
+                if (workAbort.signal.aborted) return
+                const kind = classifyError(e)
+                send({
+                  type: 'error',
+                  part: 'personal',
+                  message: e instanceof Error ? e.message : String(e),
+                  retryable: kind !== 'fatal',
+                  code: kind,
+                })
+              }
+            })())
+          }
+
+          await Promise.allSettled(tasks)
+          finish(!workAbort.signal.aborted)
+        } catch (e) {
+          if (!workAbort.signal.aborted) {
+            send({
+              type: 'error',
+              part: 'fatal',
+              message: e instanceof Error ? e.message : '분석 중 오류가 발생했습니다. 다시 시도해주세요.',
+              retryable: false,
+              code: 'fatal',
+            })
+          }
+          finish(!workAbort.signal.aborted)
+        }
+      },
+      cancel() {
+        workAbort.abort()
+        req.signal.removeEventListener('abort', onClientAbort)
       },
     })
 
-    return new NextResponse(readable, {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      },
-    })
+    return new NextResponse(readable, { headers: sseHeaders })
 
   } catch (e) {
-    console.error('[사주궁] 서버 오류:', e)
-    // ✅ 수정: 일반 JSON을 반환하면 클라이언트가 SSE 포맷(`data: ...`)이 아니라고 판단해
-    // 아무 처리도 못 하고 "분석 중" 화면에 멈춰있게 됨.
-    // 클라이언트가 알아볼 수 있도록 동일한 SSE 스트림 포맷으로 에러 이벤트를 보내준다.
+    console.error(JSON.stringify({
+      tag: '사주궁',
+      phase: 'setup',
+      err: e instanceof Error ? e.message : String(e),
+    }))
     const encoder = new TextEncoder()
     const errorStream = new ReadableStream({
       start(controller) {
         controller.enqueue(encoder.encode(
-          `data: ${JSON.stringify({ type: 'error', message: '분석 중 오류가 발생했습니다. 다시 시도해주세요.' })}\n\n`
+          `data: ${JSON.stringify({ type: 'error', part: 'fatal', message: '분석 중 오류가 발생했습니다. 다시 시도해주세요.', retryable: false, code: 'fatal' })}\n\n`
         ))
         controller.enqueue(encoder.encode('data: [DONE]\n\n'))
         controller.close()
       },
     })
     return new NextResponse(errorStream, {
-      status: 200, // 스트림은 200으로 열고 내용으로 에러를 전달 (fetch가 body를 읽을 수 있도록)
+      status: 200,
       headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
       },
     })
   }
