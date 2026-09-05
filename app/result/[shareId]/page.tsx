@@ -5,6 +5,7 @@ import { useSession, signIn } from 'next-auth/react'
 import Link from 'next/link'
 import { UNLOCK_PRICE } from '@/lib/pricing'
 import { sanitizeText } from '@/lib/sajuSanitize'
+import { extractPersonalAnswer } from '@/lib/sajuContract'
 import { ensureKakaoReady, getKakaoDiagnostics, KAKAO_READY_MESSAGE } from '@/lib/kakaoShare'
 
 interface Section { id: string; emoji: string; title: string; body: string }
@@ -89,13 +90,16 @@ export default function ResultPage() {
       setCharacterId(data.character_id ?? 'baekhalma')
       setIsPaid(data.is_paid ?? false)
 
-      // ✅ 수정: saju_data는 jsonb → 이미 객체로 옴. string이면 파싱.
+      let fallbackQuestion = ''
       if (data.saju_data) {
         const sajuParsed = typeof data.saju_data === 'string'
           ? JSON.parse(data.saju_data)
           : data.saju_data
         setFormInfo(sajuParsed.form ?? null)
         setSajuData(sajuParsed.saju ?? null)
+        if (typeof sajuParsed?.form?.personalQuestion === 'string') {
+          fallbackQuestion = sajuParsed.form.personalQuestion
+        }
       }
 
       if (data.ai_result) {
@@ -107,7 +111,8 @@ export default function ResultPage() {
           if (s !== -1 && e !== -1) clean = clean.slice(s, e + 1)
           const parsed = JSON.parse(clean)
           if (parsed.titles)   { setTitles(parsed.titles); setStrategy(parsed.strategy ?? null) }
-          if (parsed.personalAnswer) setPersonalAnswer(parsed.personalAnswer)
+          const savedPersonal = extractPersonalAnswer(parsed, fallbackQuestion)
+          if (savedPersonal) setPersonalAnswer(savedPersonal)
           if (parsed.sections) { setSections(parsed.sections) }
           if (parsed._meta && parsed._meta.isComplete === false) setIsCompleteResult(false)
         } catch {

@@ -8,7 +8,7 @@ import TimeNumberInput from '@/app/components/TimeNumberInput'
 import { KOREA_REGIONS } from '@/lib/solarTime'
 import { sanitizeText } from '@/lib/sajuSanitize'
 import { appendSseChunk, parseSseFrame } from '@/lib/sajuSse'
-import { assessCompletion, GROUP_IDS, sortTitlesById } from '@/lib/sajuContract'
+import { assessCompletion, GROUP_IDS, normalizePersonalAnswer, sortTitlesById } from '@/lib/sajuContract'
 
 interface SajuTitle {
   id: string; category?: string; title: string; teaser: string; is_free: boolean; content: string
@@ -350,10 +350,14 @@ export default function SajuPage() {
 
   const saveReading = async (requestId: string, complete: boolean) => {
     if (requestIdRef.current !== requestId) return
+    const personalAnswer = normalizePersonalAnswer(
+      finalResultRef.current.personalAnswer,
+      form.personalQuestion,
+    ) ?? finalResultRef.current.personalAnswer
     const payload = {
       titles: mergeTitleList(),
       strategy: finalResultRef.current.strategy,
-      personalAnswer: finalResultRef.current.personalAnswer,
+      ...(personalAnswer ? { personalAnswer } : {}),
       disclaimer: finalResultRef.current.disclaimer ?? '본 풀이는 엔터테인먼트 및 참고 목적이며, 중요한 결정은 전문가와 상담하세요.',
     }
     const fingerprint = `${requestId}:${complete}:${payload.titles.map(t => t.id).join(',')}:${payload.strategy ? 1 : 0}`
@@ -486,7 +490,11 @@ export default function SajuPage() {
         headers: { 'Content-Type': 'application/json' },
         signal: ac.signal,
         body: JSON.stringify({
-          ...form, occupation: form.occupation || '일반인', calType, characterId: selectedChar.id,
+          ...form,
+          personalQuestion: form.personalQuestion,
+          occupation: form.occupation || '일반인',
+          calType,
+          characterId: selectedChar.id,
           partnerInfo: isRomance ? partnerForm : undefined,
           longitude: selectedRegion?.longitude,
           requestId,
@@ -509,7 +517,10 @@ export default function SajuPage() {
       const applyEvent = (parsed: Record<string, unknown>) => {
         if (parsed.requestId && parsed.requestId !== requestId) return
         if (parsed.type === 'error') {
-          const part = (parsed.part as FailedPart['part']) || 'fatal'
+          const rawPart = parsed.part ?? parsed.scope
+          const part = (rawPart === 'group' || rawPart === 'strategy' || rawPart === 'personal' || rawPart === 'fatal'
+            ? rawPart
+            : 'fatal') as FailedPart['part']
           const failed: FailedPart = {
             part,
             groupIndex: typeof parsed.groupIndex === 'number' ? parsed.groupIndex : undefined,
@@ -554,13 +565,41 @@ export default function SajuPage() {
           setStage('result')
           return
         }
-        if (parsed.type === 'personal') {
+        if (parsed.type === 'personal' || parsed.type === 'personalAnswer') {
+          const personalAnswer = normalizePersonalAnswer(parsed, form.personalQuestion)
+          if (!personalAnswer) {
+            clientLog('personal_event_ignored', { hasData: parsed.data != null, keys: Object.keys(parsed) })
+            return
+          }
           publishResult({
             ...finalResultRef.current,
-            personalAnswer: parsed.data as { question: string; answer: string },
+            personalAnswer,
             titles: mergeTitleList(),
           })
+          clientLog('personal_received', { questionChars: personalAnswer.question.length, answerChars: personalAnswer.answer.length })
           setStage('result')
+          return
+        }
+        if (typeof parsed.text === 'string') {
+          const combined = `${(finalResultRef.current as { _textBuf?: string })._textBuf ?? ''}${parsed.text}`
+          ;(finalResultRef.current as { _textBuf?: string })._textBuf = combined
+          try {
+            const s = combined.indexOf('{')
+            const e = combined.lastIndexOf('}')
+            if (s !== -1 && e !== -1) {
+              const interim = JSON.parse(combined.slice(s, e + 1))
+              const personalAnswer = normalizePersonalAnswer(interim, form.personalQuestion)
+              if (personalAnswer) {
+                publishResult({
+                  ...finalResultRef.current,
+                  personalAnswer,
+                  titles: Array.isArray(interim.titles) ? interim.titles : mergeTitleList(),
+                  strategy: interim.strategy ?? finalResultRef.current.strategy,
+                })
+                setStage('result')
+              }
+            }
+          } catch { /* 누적 중 */ }
         }
       }
 
@@ -756,19 +795,29 @@ export default function SajuPage() {
             </div>
           )}
 
-          {manse && <ManseTable manse={manse} charColor={selectedChar.color} />}
-
-          {result.personalAnswer && (
+          {(result.personalAnswer || form.personalQuestion.trim()) && (
             <div className="mb-4 rounded-2xl p-4 border-2" style={{ background: `${selectedChar.color}18`, borderColor: selectedChar.color }}>
               <div className="flex items-center gap-2 mb-2">
                 <span>🔮</span>
                 <span className="font-bold text-sm" style={{ color: selectedChar.color }}>
-                  족집게 질문 — &ldquo;{result.personalAnswer.question}&rdquo;
+                  족집게 질문 — &ldquo;{sanitizeText(result.personalAnswer?.question || form.personalQuestion)}&rdquo;
                 </span>
               </div>
-              <FormattedStrategyText text={result.personalAnswer.answer} highlightColor={selectedChar.color} />
+              {result.personalAnswer?.answer ? (
+                <FormattedStrategyText text={result.personalAnswer.answer} highlightColor={selectedChar.color} />
+              ) : (
+                <p className="text-sm text-gray-400">
+                  {generating
+                    ? '질문에 대한 답변을 작성하는 중...'
+                    : failedParts.some(p => p.part === 'personal')
+                      ? '족집게 답변 생성에 실패했어요. 아래 버튼으로 이 항목만 다시 생성할 수 있어요.'
+                      : '족집게 답변이 아직 도착하지 않았어요.'}
+                </p>
+              )}
             </div>
           )}
+
+          {manse && <ManseTable manse={manse} charColor={selectedChar.color} />}
 
           <div className="mb-2">
             <p className="text-xs text-gray-500 mb-2 font-medium">✨ 판결 {allTitles.length}가지{generating ? ' · 도착하는 대로 표시' : ''}</p>

@@ -732,6 +732,7 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
                 })
                 send({
                   type: 'personal',
+                  question: trimmedPersonalQ,
                   data: {
                     question: trimmedPersonalQ,
                     answer: sanitizeText(result.answer),

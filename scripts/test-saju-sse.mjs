@@ -124,4 +124,28 @@ assert(!sanitized.includes('\\n'), 'literal \\n must not remain visible')
 assert(sanitizeText('정상 문장입니다.') === '정상 문장입니다.', 'normal text must stay intact')
 assert(sanitizeText(123) === '', 'non-string must become empty')
 
+function normalizePersonalAnswer(source, fallbackQuestion = '') {
+  if (typeof source === 'string' && source.trim()) {
+    return { question: fallbackQuestion.trim(), answer: source.trim() }
+  }
+  if (!source || typeof source !== 'object') return null
+  const data = source.data && typeof source.data === 'object' ? source.data : null
+  const nested = source.personalAnswer && typeof source.personalAnswer === 'object' ? source.personalAnswer : null
+  const questionRaw = [source.question, data?.question, nested?.question, fallbackQuestion].find(v => typeof v === 'string' && v.trim())
+  const answerRaw = [source.answer, data?.answer, nested?.answer].find(v => typeof v === 'string' && v.trim())
+  if (typeof answerRaw !== 'string' || !answerRaw.trim()) return null
+  return { question: typeof questionRaw === 'string' ? questionRaw.trim() : '', answer: answerRaw.trim() }
+}
+
+const mainShape = normalizePersonalAnswer({ type: 'personal', question: '회사 계속 다닐까요?', data: { answer: 'E'.repeat(60) } })
+assert(mainShape?.question === '회사 계속 다닐까요?' && mainShape.answer.length === 60, 'main personal event shape must parse')
+const branchShape = normalizePersonalAnswer({ type: 'personal', data: { question: 'Q2', answer: 'F'.repeat(60) } })
+assert(branchShape?.question === 'Q2' && branchShape.answer.length === 60, 'nested data personal event shape must parse')
+const savedShape = normalizePersonalAnswer({ personalAnswer: { question: 'Q3', answer: 'G'.repeat(60) } })
+assert(savedShape?.question === 'Q3', 'saved personalAnswer must parse')
+const fallbackShape = normalizePersonalAnswer({ data: { answer: 'H'.repeat(60) } }, '폼질문')
+assert(fallbackShape?.question === '폼질문', 'missing question must use fallback')
+assert(normalizePersonalAnswer({ type: 'personal', data: {} }) === null, 'personal without answer must be ignored')
+assert(!assessCompletion({ titles: titles12, strategy: baseStrategy, personal: null, requestedPersonal: true, receivedGroupIndexes: [0,1,2,3], gotDone: true }).complete, 'requested personal without answer must not be complete')
+
 console.log('saju sse/contract/sanitize tests passed')

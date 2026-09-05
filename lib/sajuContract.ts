@@ -51,11 +51,43 @@ export function isValidStrategy(strategy: unknown): strategy is SajuStrategyLike
     && Array.isArray(s.lifecycle) && s.lifecycle.length >= 3
 }
 
+export type PersonalAnswer = { question: string; answer: string }
+
+/** SSE `personal` 이벤트와 저장 JSON 양쪽 계약을 하나의 { question, answer }로 맞춘다. */
+export function normalizePersonalAnswer(source: unknown, fallbackQuestion = ''): PersonalAnswer | null {
+  if (typeof source === 'string' && source.trim()) {
+    return { question: fallbackQuestion.trim(), answer: source.trim() }
+  }
+  if (!source || typeof source !== 'object') return null
+  const o = source as Record<string, unknown>
+  const data = o.data && typeof o.data === 'object' && !Array.isArray(o.data)
+    ? o.data as Record<string, unknown>
+    : null
+  const nested = o.personalAnswer && typeof o.personalAnswer === 'object'
+    ? o.personalAnswer as Record<string, unknown>
+    : null
+
+  const questionRaw = [o.question, data?.question, nested?.question, fallbackQuestion]
+    .find(v => typeof v === 'string' && v.trim())
+  const answerRaw = [o.answer, data?.answer, nested?.answer]
+    .find(v => typeof v === 'string' && v.trim())
+
+  if (typeof answerRaw !== 'string' || !answerRaw.trim()) return null
+  return {
+    question: typeof questionRaw === 'string' ? questionRaw.trim() : '',
+    answer: answerRaw.trim(),
+  }
+}
+
+export function extractPersonalAnswer(payload: unknown, fallbackQuestion = ''): PersonalAnswer | null {
+  if (!payload || typeof payload !== 'object') return null
+  const o = payload as Record<string, unknown>
+  return normalizePersonalAnswer(o.personalAnswer ?? o.personal ?? payload, fallbackQuestion)
+}
+
 export function isValidPersonal(personal: unknown): boolean {
-  if (!personal || typeof personal !== 'object') return false
-  const p = personal as { question?: unknown; answer?: unknown }
-  return typeof p.question === 'string' && p.question.trim().length > 0
-    && typeof p.answer === 'string' && p.answer.trim().length >= 50
+  const parsed = normalizePersonalAnswer(personal)
+  return !!parsed && parsed.question.length > 0 && parsed.answer.length >= 50
 }
 
 export function sortTitlesById<T extends { id: string | number }>(titles: T[]): T[] {

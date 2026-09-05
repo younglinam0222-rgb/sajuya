@@ -8,11 +8,18 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-function withSaveMeta(aiResult: unknown, isComplete: boolean, requestId?: unknown) {
+function withSaveMeta(aiResult: unknown, isComplete: boolean, requestId?: unknown, sajuData?: { form?: { personalQuestion?: unknown } }) {
   if (typeof aiResult !== 'string') return aiResult
   try {
     const parsed = JSON.parse(aiResult)
     if (!parsed || typeof parsed !== 'object') return aiResult
+    const fallbackQ = typeof sajuData?.form?.personalQuestion === 'string' ? sajuData.form.personalQuestion.trim() : ''
+    if (parsed.personalAnswer && typeof parsed.personalAnswer === 'object') {
+      const pa = parsed.personalAnswer as { question?: unknown; answer?: unknown }
+      if ((!pa.question || typeof pa.question !== 'string' || !pa.question.trim()) && fallbackQ) {
+        parsed.personalAnswer = { ...pa, question: fallbackQ }
+      }
+    }
     parsed._meta = {
       ...(typeof parsed._meta === 'object' && parsed._meta ? parsed._meta : {}),
       isComplete: !!isComplete,
@@ -29,7 +36,7 @@ export async function POST(req: NextRequest) {
   try {
     const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
     const { characterId, occupationId, sajuData, aiResult, isPaid, shareId: existingShareId, requestId, isComplete } = await req.json()
-    const storedResult = withSaveMeta(aiResult, !!isComplete, requestId)
+    const storedResult = withSaveMeta(aiResult, !!isComplete, requestId, sajuData)
 
     if (typeof existingShareId === 'string' && existingShareId.length >= 8 && existingShareId.length <= 32) {
       if (!token?.sub) {
