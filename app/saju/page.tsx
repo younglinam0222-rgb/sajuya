@@ -43,7 +43,6 @@ const SEASON_ICONS:  Record<string, string> = { '봄':'🌱','여름':'☀️','
 const ELEMENT_COLORS: Record<string, string> = { '木':'#4ade80','火':'#f87171','土':'#fbbf24','金':'#d1d5db','水':'#60a5fa' }
 const ELEMENT_BG:    Record<string, string> = { '木':'rgba(34,197,94,.15)','火':'rgba(239,68,68,.15)','土':'rgba(234,179,8,.15)','金':'rgba(156,163,175,.15)','水':'rgba(96,165,250,.15)' }
 
-// ✅ 신규: 전략 결과 맨 아래에 캐릭터별로 다르게 붙는 마무리 한마디 라벨
 const FINAL_WORD_LABEL: Record<string, { icon: string; label: string }> = {
   baekhalma: { icon: '🧓', label: '할매의 진심 한마디' },
   doRyeong:  { icon: '🙏', label: '도령이 마지막으로 하고 싶은 말' },
@@ -172,7 +171,6 @@ function LifecycleChart({ data }: { data: LifecycleItem[] }) {
   )
 }
 
-// ✅ 수정: 데드코드(open state) 제거
 function TitleCard({ item, charColor, idx }: { item: SajuTitle; charColor: string; idx: number }) {
   return (
     <div className="rounded-2xl overflow-hidden border" style={{ borderColor: `${charColor}40`, background: '#111118' }}>
@@ -203,10 +201,6 @@ function TitleCard({ item, charColor, idx }: { item: SajuTitle; charColor: strin
   )
 }
 
-// ✅ 신규: "인생 전략 분석" 섹션(전성기 활용법·조심할 시기)도 판결문 카드처럼
-// 항목별 줄바꿈 + 강조 색상이 먹히도록, 텍스트를 줄 단위로 쪼개서 렌더링하는 공용 헬퍼.
-// ⚠️ 수정: AI가 응답에 실제 줄바꿈(\n)을 안 넣어주는 경우가 있어서, 줄바꿈 유무와
-// 상관없이 "첫째/둘째/셋째/⚠️" 앞에서 강제로 문단을 끊도록 정규식으로 보강.
 function FormattedStrategyText({ text, highlightColor = '#fbbf24' }: { text: string; highlightColor?: string }) {
   const normalized = text.replace(/\s*(첫째,|둘째,|셋째,|넷째,|다섯째,|⚠️)/g, '\n$1').trim()
   const lines = normalized.split('\n').map(l => l.trim()).filter(l => l !== '')
@@ -242,18 +236,16 @@ export default function SajuPage() {
   const [partnerForm, setPartnerForm] = useState({
     name: '', year: '1990', month: '1', day: '1', hour: '', gender: 'male',
   })
-  // ✅ 신규: 직업 '기타(직접입력)' — 목록에 없는 직업은 자유롭게 타이핑
   const [showCustomOcc, setShowCustomOcc] = useState(false)
 
-  // ✅ 수정: ref로 저장 시 stale 클로저 방지
   const finalResultRef = useRef<Partial<SajuResult>>({})
   const finalManseRef  = useRef<ManseData | null>(null)
+  // ✅ 신규: 판결문은 그룹 단위(3개씩)로 완료 순서가 뒤섞여 도착할 수 있어서,
+  // id를 key로 하는 맵에 누적한 뒤 항상 숫자 순으로 정렬해서 화면/저장에 반영한다.
+  const titlesMapRef = useRef<Record<string, SajuTitle>>({})
 
   const isRomance = form.questionIntent === '연애/결혼'
 
-  // ✅ 신규: 오늘의 운세(/daily) 등에서 "전체 사주 풀이 보기" 버튼으로 넘어올 때
-  // URL 쿼리(?name=...&year=...)로 입력값을 미리 채워줌 (전환 마찰 감소)
-  // useSearchParams 훅 대신 window.location으로 읽어서 정적 프리렌더링 이슈(Suspense 필요) 회피
   useEffect(() => {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
@@ -273,11 +265,6 @@ export default function SajuPage() {
 
   const handleSubmit = async () => {
     if (!form.name) return
-    // ✅ 수정: 버그 발견 — status !== 'authenticated'로 막아놨었는데, next-auth는
-    // 탭 전환/포커스 복귀 시 세션을 잠깐 재검증하면서 status가 순간적으로 'loading'으로
-    // 바뀔 수 있음. 그 타이밍에 버튼을 누르면 이 조건에 걸려서 "조용히 아무것도 안 일어나는"
-    // 것처럼 보였을 가능성이 큼(화면 위쪽에 작은 에러 배너만 뜨고 눈에 안 띄었을 수 있음).
-    // 실제로 로그인이 안 된 경우만 막도록 조건을 좁힘.
     if (status === 'unauthenticated') {
       setErrorMsg('로그인 후 이용할 수 있어요.')
       return
@@ -288,6 +275,7 @@ export default function SajuPage() {
     setManse(null)
     finalResultRef.current = {}
     finalManseRef.current  = null
+    titlesMapRef.current   = {}
 
     try {
       const selectedRegion = KOREA_REGIONS.find(r => r.name === form.birthPlace)
@@ -300,8 +288,6 @@ export default function SajuPage() {
           longitude: selectedRegion?.longitude,
         }),
       })
-      // ✅ 수정: body가 없으면 그냥 return 해서 '분석 중' 화면에 영원히 멈춰있던 버그.
-      // 이제 명확한 에러를 띄우고 입력 화면으로 되돌린다.
       if (!res.body) {
         setErrorMsg('서버 응답을 받지 못했어요. 다시 시도해주세요.')
         setStage('input')
@@ -310,54 +296,86 @@ export default function SajuPage() {
 
       const reader  = res.body.getReader()
       const decoder = new TextDecoder()
-      let accumulated = ''
-      // ✅ 수정: done 플래그로 while 루프 탈출
       let done = false
-      let serverError = false
+      let fatalError = false
+      let partialErrorCount = 0
+
+      // ✅ 신규: 도착한 판결문 그룹을 id 기준으로 정렬해서 result/ref에 반영하는 헬퍼
+      const applySortedTitles = () => {
+        const sorted = Object.values(titlesMapRef.current).sort((a, b) => Number(a.id) - Number(b.id))
+        finalResultRef.current = { ...finalResultRef.current, titles: sorted }
+        setResult(r => ({ ...r, titles: sorted }))
+      }
 
       while (!done) {
         const { done: streamDone, value } = await reader.read()
         if (streamDone) break
         const chunk = decoder.decode(value, { stream: true })
         for (const line of chunk.split('\n')) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6).trim()
-            if (data === '[DONE]') { done = true; break }
-            try {
-              const parsed = JSON.parse(data)
-              if (parsed.type === 'error') {
-                serverError = true
+          if (!line.startsWith('data: ')) continue
+          const data = line.slice(6).trim()
+          if (data === '[DONE]') { done = true; break }
+
+          let parsed: any
+          try {
+            parsed = JSON.parse(data)
+          } catch {
+            continue
+          }
+
+          switch (parsed.type) {
+            case 'manse': {
+              finalManseRef.current = parsed.data
+              setManse(parsed.data)
+              break
+            }
+            case 'group': {
+              (parsed.titles as SajuTitle[]).forEach(t => { titlesMapRef.current[t.id] = t })
+              applySortedTitles()
+              break
+            }
+            case 'strategy': {
+              finalResultRef.current = { ...finalResultRef.current, strategy: parsed.data }
+              setResult(r => ({ ...r, strategy: parsed.data }))
+              break
+            }
+            case 'personal': {
+              const personalAnswer = { question: parsed.question, answer: parsed.data.answer }
+              finalResultRef.current = { ...finalResultRef.current, personalAnswer }
+              setResult(r => ({ ...r, personalAnswer }))
+              break
+            }
+            case 'meta': {
+              finalResultRef.current = { ...finalResultRef.current, disclaimer: parsed.disclaimer }
+              setResult(r => ({ ...r, disclaimer: parsed.disclaimer }))
+              break
+            }
+            case 'error': {
+              // fatal(전체 실패)만 즉시 중단하고, group/strategy/personal 부분 실패는
+              // 로그만 남기고 이미 도착한 나머지 결과로 계속 진행한다.
+              console.error('[사주궁] 부분 오류 이벤트', parsed)
+              if (parsed.scope === 'fatal') {
+                fatalError = true
                 setErrorMsg(parsed.message || '분석 중 오류가 발생했습니다. 다시 시도해주세요.')
-                continue
+              } else {
+                partialErrorCount++
               }
-              if (parsed.type === 'manse') {
-                finalManseRef.current = parsed.data
-                setManse(parsed.data)
-                continue
-              }
-              if (parsed.text) {
-                accumulated += parsed.text
-                try {
-                  const clean = accumulated.replace(/```json/g,'').replace(/```/g,'').trim()
-                  const s = clean.indexOf('{'), e = clean.lastIndexOf('}')
-                  if (s !== -1 && e !== -1) {
-                    const interim = JSON.parse(clean.slice(s, e+1))
-                    finalResultRef.current = interim
-                    setResult(interim)
-                  }
-                } catch { /* 누적 중 */ }
-              }
-            } catch {}
+              break
+            }
+            default:
+              break
           }
         }
       }
 
-      // ✅ 수정: 서버가 에러 이벤트를 보냈거나 결과 파싱에 실패한 경우
-      // 빈 결과로 저장/이동하지 말고 바로 입력 화면으로.
-      if (serverError || !finalResultRef.current.titles) {
-        if (!serverError) setErrorMsg('풀이 생성에 실패했어요. 다시 시도해주세요.')
+      if (fatalError || !finalResultRef.current.titles || finalResultRef.current.titles.length === 0) {
+        if (!fatalError) setErrorMsg('풀이 생성에 실패했어요. 다시 시도해주세요.')
         setStage('input')
         return
+      }
+
+      if (partialErrorCount > 0) {
+        console.warn(`[사주궁] 일부 항목(${partialErrorCount}개) 생성 실패 — 나머지 결과로 진행`)
       }
 
       // 저장
@@ -403,7 +421,6 @@ export default function SajuPage() {
     )
   }
 
-  // ✅ 추가: 로그인 안 하면 사주 풀이 기능 자체를 못 쓰게 막음
   if (status === 'unauthenticated') {
     return (
       <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center text-white px-6 text-center">
@@ -439,7 +456,6 @@ export default function SajuPage() {
   if (stage === 'saving') return <LoadingScreen name={form.name} character={selectedChar} saving />
 
   if (stage === 'result' && result.titles) {
-    // 런칭 프로모션: 전부 무료
     const allTitles = result.titles
     return (
       <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
@@ -545,7 +561,6 @@ export default function SajuPage() {
           </div>
         )}
 
-        {/* 캐릭터 선택 */}
         <div className="mb-4">
           <label className="text-xs text-gray-400 mb-2 block">신령 선택</label>
           <div className="grid grid-cols-2 gap-2">
@@ -571,7 +586,6 @@ export default function SajuPage() {
           </div>
         </div>
 
-        {/* 질문 의도 */}
         <div className="mb-4">
           <label className="text-xs text-gray-400 mb-2 block">무엇이 가장 궁금하세요?</label>
           <div className="flex flex-wrap gap-2">
@@ -587,7 +601,6 @@ export default function SajuPage() {
           </div>
         </div>
 
-        {/* ✅ 신규: 직접 궁금한 거 자유 입력 (선택) — 채워지면 결과 맨 위에 전용 답변 카드로 표시 */}
         <div className="mb-4">
           <label className="text-xs text-gray-400 mb-2 block">
             🔮 족집게 질문 <span className="text-gray-600">(선택)</span>
@@ -603,7 +616,6 @@ export default function SajuPage() {
           <p className="text-xs text-gray-600 mt-1">비워두면 위에서 고른 주제로만 풀이해드려요</p>
         </div>
 
-        {/* 내 정보 */}
         <div className="bg-[#111118] rounded-2xl p-4 mb-3 border border-gray-800 space-y-3">
           <p className="text-xs font-bold text-gray-400">{isRomance ? '👤 내 정보' : '👤 기본 정보'}</p>
           <div>
@@ -719,7 +731,6 @@ export default function SajuPage() {
           </div>
         </div>
 
-        {/* 상대방 정보 */}
         {isRomance && (
           <div className="bg-[#111118] rounded-2xl p-4 mb-3 border space-y-3"
             style={{ borderColor: `${selectedChar.color}40` }}>
