@@ -299,6 +299,12 @@ export default function SajuPage() {
       let done = false
       let fatalError = false
       let partialErrorCount = 0
+      // ✅ 수정(핵심 버그 픽스): 긴 SSE 이벤트(판결문 그룹 등)가 네트워크 청크 경계에서
+      // 잘려서 여러 번의 read()에 나눠 도착할 수 있음. 매 read()를 독립적으로
+      // line.split('\n') 하면 잘린 조각이 JSON.parse 실패로 조용히 버려져서
+      // "풀이 생성 실패"로 떨어지는 원인이 됨. 버퍼에 계속 이어붙이고,
+      // "\n\n"(이벤트 구분자)이 완전히 도착한 부분만 잘라서 처리하도록 수정.
+      let buffer = ''
 
       // ✅ 신규: 도착한 판결문 그룹을 id 기준으로 정렬해서 result/ref에 반영하는 헬퍼
       const applySortedTitles = () => {
@@ -310,10 +316,14 @@ export default function SajuPage() {
       while (!done) {
         const { done: streamDone, value } = await reader.read()
         if (streamDone) break
-        const chunk = decoder.decode(value, { stream: true })
-        for (const line of chunk.split('\n')) {
-          if (!line.startsWith('data: ')) continue
-          const data = line.slice(6).trim()
+        buffer += decoder.decode(value, { stream: true })
+
+        let idx: number
+        while ((idx = buffer.indexOf('\n\n')) !== -1) {
+          const rawEvent = buffer.slice(0, idx)
+          buffer = buffer.slice(idx + 2)
+          if (!rawEvent.startsWith('data: ')) continue
+          const data = rawEvent.slice(6).trim()
           if (data === '[DONE]') { done = true; break }
 
           let parsed: any
