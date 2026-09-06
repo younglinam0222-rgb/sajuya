@@ -488,6 +488,7 @@ export default function SajuPage() {
         }
       : undefined
 
+    let fatalMessage = ''
     try {
       const selectedRegion = KOREA_REGIONS.find(r => r.name === form.birthPlace)
       const res = await fetch('/api/saju', {
@@ -507,6 +508,12 @@ export default function SajuPage() {
         }),
       })
       if (requestIdRef.current !== requestId) return
+      if (!res.ok) {
+        setErrorMsg(res.status === 401 ? '로그인 후 이용할 수 있어요.' : `서버 오류(${res.status}). 다시 시도해주세요.`)
+        setGenStatus('failed')
+        setStage('input')
+        return
+      }
       if (!res.body) {
         setErrorMsg('서버 응답을 받지 못했어요. 다시 시도해주세요.')
         setGenStatus('failed')
@@ -533,8 +540,14 @@ export default function SajuPage() {
             retryable: parsed.retryable !== false,
           }
           setFailedParts(prev => [...prev, failed])
+          console.error('[사주궁] 부분 오류 이벤트', failed.message, {
+            part,
+            groupIndex: failed.groupIndex,
+            code: parsed.code ?? null,
+          })
+          if (!fatalMessage && failed.message) fatalMessage = failed.message
           if (part === 'fatal') setErrorMsg(failed.message)
-          clientLog('part_error', { part, groupIndex: failed.groupIndex, retryable: failed.retryable, code: parsed.code ?? null })
+          clientLog('part_error', { part, groupIndex: failed.groupIndex, retryable: failed.retryable, code: parsed.code ?? null, message: failed.message })
           return
         }
         if (parsed.type === 'manse') {
@@ -673,7 +686,7 @@ export default function SajuPage() {
       setGenStatus(hasAny ? 'partial' : 'failed')
       setStage(hasAny ? 'result' : 'input')
       if (!hasAny) {
-        setErrorMsg(report.gotDone ? '풀이 생성에 실패했어요. 다시 시도해주세요.' : '생성이 끝까지 끝나지 않았어요. 다시 시도해주세요.')
+        setErrorMsg(fatalMessage || (report.gotDone ? '풀이 생성에 실패했어요. 다시 시도해주세요.' : '생성이 끝까지 끝나지 않았어요. 다시 시도해주세요.'))
         return
       }
       if (!report.gotDone) {
@@ -917,8 +930,14 @@ export default function SajuPage() {
         </div>
 
         {errorMsg && (
-          <div className="mb-4 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
-            {errorMsg}
+          <div className="mb-4 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs space-y-1">
+            <p>{errorMsg}</p>
+            {failedParts.length > 0 && failedParts.slice(0, 3).map((p, i) => (
+              <p key={`${p.part}-${p.groupIndex ?? 'x'}-${i}`} className="text-red-300/80">
+                {p.part === 'group' ? `${(p.groupIndex ?? 0) + 1}번 그룹` : p.part === 'strategy' ? '인생 전략' : p.part === 'personal' ? '족집게 질문' : '전체'}
+                {p.message ? ` · ${p.message}` : ''}
+              </p>
+            ))}
           </div>
         )}
 

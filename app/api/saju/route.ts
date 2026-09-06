@@ -18,6 +18,39 @@ const client = new Anthropic({
   maxRetries: 0,
 })
 
+function publicErrorMessage(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e)
+  if (!msg || msg.length > 180) return '분석 중 오류가 발생했습니다. 다시 시도해주세요.'
+  if (/api[_-]?key|sk-ant|bearer|secret|authorization/i.test(msg)) {
+    return '분석 서버 설정 오류가 났어요. 다시 시도해주세요.'
+  }
+  return msg
+}
+
+function sseFailure(message: string, requestId?: string, manse?: unknown) {
+  const encoder = new TextEncoder()
+  const errorStream = new ReadableStream({
+    start(controller) {
+      const send = (event: Record<string, unknown>) => {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ ...event, requestId: requestId ?? null })}\n\n`))
+      }
+      if (manse) send({ type: 'manse', data: manse })
+      send({ type: 'error', part: 'fatal', message, retryable: false, code: 'fatal' })
+      controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+      controller.close()
+    },
+  })
+  return new NextResponse(errorStream, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  })
+}
+
 // ─── 만세력 계산 ───────────────────────────────────
 const STEMS = ['甲','乙','丙','丁','戊','己','庚','辛','壬','癸']
 const BRANCHES = ['子','丑','寅','卯','辰','巳','午','未','申','酉','戌','亥']
@@ -241,6 +274,8 @@ D. 공감 → 경고 → 비유 → 팩폭
 }
 
 export async function POST(req: NextRequest) {
+  let setupRequestId: string | undefined
+  let setupManse: unknown = null
   try {
     const body = await req.json()
     const {
@@ -251,13 +286,21 @@ export async function POST(req: NextRequest) {
     const requestId = typeof clientRequestId === 'string' && clientRequestId.length > 0 && clientRequestId.length < 80
       ? clientRequestId
       : randomUUID()
+    setupRequestId = requestId
 
     const character = CHARACTERS[characterId] ?? CHARACTERS['doRyeong']
+    if (!character) {
+      return sseFailure('선택한 신령 정보를 찾지 못했어요.', requestId)
+    }
     const genderStr = gender === 'male' ? '남성' : '여성'
     const voiceGuide = CHARACTER_VOICE[characterId] ?? CHARACTER_VOICE['doRyeong']
     const styleRules = getStyleRules()
 
     const manse = calcManse(parseInt(year), parseInt(month), parseInt(day), hour ?? '', typeof longitude === 'number' ? longitude : undefined)
+    setupManse = manse
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return sseFailure('분석 서버 설정이 없어 풀이를 만들 수 없어요.', requestId, manse)
+    }
 
     // 현재 나이 계산
     const currentYear = new Date().getFullYear()
@@ -594,7 +637,11 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
             err: e instanceof Error ? e.message : String(e),
           }))
           if (lastKind === 'fatal') break
-          if (attempt < maxAttempts && lastKind === 'transient') await sleep(800)
+          if (attempt < maxAttempts && lastKind === 'transient') {
+            const status = (e as { status?: number; statusCode?: number }).status
+              ?? (e as { status?: number; statusCode?: number }).statusCode
+            await sleep(status === 429 ? 1600 : 800)
+          }
         }
       }
 
@@ -630,15 +677,20 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
 
         try {
           send({ type: 'meta', startedAt: Date.now(), retryAll, retryGroups, retryStrategy, retryPersonal })
-          send({ type: 'manse', data: manse })
+          try {
+            send({ type: 'manse', data: manse })
+          } catch (e) {
+            send({ type: 'error', part: 'fatal', message: publicErrorMessage(e), retryable: false, code: 'fatal' })
+          }
 
           const tasks: Promise<void>[] = []
-
-          for (const gi of retryGroups) {
+          const runGroup = async (gi: number) => {
             const ids = idGroups[gi]
-            tasks.push((async () => {
-              try {
-                if (gi > 0) await sleep(Math.min(gi * 80, 400))
+            if (!ids) {
+              send({ type: 'error', part: 'group', groupIndex: gi, message: '알 수 없는 그룹입니다.', retryable: false, code: 'fatal' })
+              return
+            }
+            try {
                 const result = await callWithRetry({
                   model: 'claude-sonnet-4-6',
                   max_tokens: 3200,
@@ -677,9 +729,17 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
                   retryable: kind !== 'fatal',
                   code: kind,
                 })
-              }
-            })())
+            }
           }
+          const groupQueue = retryGroups.filter(gi => Array.isArray(idGroups[gi]))
+          const groupWorkers = Array.from({ length: Math.min(4, groupQueue.length) }, async () => {
+            while (groupQueue.length) {
+              const gi = groupQueue.shift()
+              if (gi === undefined) break
+              await runGroup(gi)
+            }
+          })
+          tasks.push(...groupWorkers)
 
           if (retryStrategy) {
             tasks.push((async () => {
@@ -762,7 +822,7 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
             send({
               type: 'error',
               part: 'fatal',
-              message: e instanceof Error ? e.message : '분석 중 오류가 발생했습니다. 다시 시도해주세요.',
+              message: publicErrorMessage(e),
               retryable: false,
               code: 'fatal',
             })
@@ -784,24 +844,6 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
       phase: 'setup',
       err: e instanceof Error ? e.message : String(e),
     }))
-    const encoder = new TextEncoder()
-    const errorStream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(encoder.encode(
-          `data: ${JSON.stringify({ type: 'error', part: 'fatal', message: '분석 중 오류가 발생했습니다. 다시 시도해주세요.', retryable: false, code: 'fatal' })}\n\n`
-        ))
-        controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-        controller.close()
-      },
-    })
-    return new NextResponse(errorStream, {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/event-stream; charset=utf-8',
-        'Cache-Control': 'no-cache, no-transform',
-        Connection: 'keep-alive',
-        'X-Accel-Buffering': 'no',
-      },
-    })
+    return sseFailure(publicErrorMessage(e), setupRequestId, setupManse)
   }
 }
