@@ -1,17 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { randomUUID } from 'crypto'
 import { CHARACTERS } from '@/lib/characters'
 import { correctToTrueSolarTime } from '@/lib/solarTime'
+import { GROUP_IDS, LAST_GROUP_INDEX } from '@/lib/sajuContract'
+import { sanitizeJudgmentTitles, sanitizeStrategy, sanitizeText } from '@/lib/sajuSanitize'
 // @ts-ignore — lunar-javascript는 공식 타입 정의가 없음
 import LunarJS from 'lunar-javascript'
 
+// ✅ 수정(재발): 120초로도 부족해서 타임아웃 발생 (Vercel Runtime Timeout Error, 504)
+// 결혼상태 반영 등 프롬프트 지시사항이 늘어나며 Claude 생성 시간이 길어짐 → 300초로 상향
 export const maxDuration = 300
 export const runtime = 'nodejs'
 
-// ✅ 수정: SDK 자체 재시도(기본 2회)를 끄고, 아래 callWithRetry 하나로만 재시도를 통제함.
-// 기존엔 SDK 재시도 + 우리 재시도 루프가 겹쳐서 한 그룹이 최대 6번까지 HTTP 요청을
-// 시도할 수 있었음 — 이게 "가끔 한 그룹만 유독 오래 걸리는" 현상의 유력한 원인.
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY!, maxRetries: 0 })
+const client = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY!,
+  maxRetries: 0,
+})
+
+function publicErrorMessage(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e)
+  if (!msg || msg.length > 180) return '분석 중 오류가 발생했습니다. 다시 시도해주세요.'
+  if (/api[_-]?key|sk-ant|bearer|secret|authorization/i.test(msg)) {
+    return '분석 서버 설정 오류가 났어요. 다시 시도해주세요.'
+  }
+  return msg
+}
+
+function sseFailure(message: string, requestId?: string, manse?: unknown) {
+  const encoder = new TextEncoder()
+  const errorStream = new ReadableStream({
+    start(controller) {
+      const send = (event: Record<string, unknown>) => {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ ...event, requestId: requestId ?? null })}\n\n`))
+      }
+      if (manse) send({ type: 'manse', data: manse })
+      send({ type: 'error', part: 'fatal', message, retryable: false, code: 'fatal' })
+      controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+      controller.close()
+    },
+  })
+  return new NextResponse(errorStream, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  })
+}
 
 // ─── 만세력 계산 ───────────────────────────────────
 const STEMS = ['甲','乙','丙','丁','戊','己','庚','辛','壬','癸']
@@ -31,9 +69,15 @@ function getSipsinBranch(dayStemIdx: number, branchIdx: number) {
   return SIPSIN[((mainStemMap[branchIdx] - dayStemIdx + 10) % 10)]
 }
 function calcYearPillar(year: number, month: number, day: number) {
+  // ✅ 수정: 입춘(立春) 기준 반영 안 하던 버그 — 1월~2월 초(입춘 전) 출생자는
+  // 연주가 한 해 밀려서 잘못 나오고 있었음. lunar-javascript의 입춘 기준 계산으로 교체.
   const lunar = LunarJS.Solar.fromYmd(year, month, day).getLunar()
   return ganZhiToPillar(lunar.getYearInGanZhiByLiChun())
 }
+// ✅ 수정: 심각한 버그 발견 — 기존 월주/일주 계산이 자체 수식으로 짜여있었는데
+// 실제 검증(경쟁사 만세력 + 이미 설치돼있던 검증된 lunar-javascript 라이브러리 대조)
+// 결과 둘 다 틀린 것으로 확인됨. 월주는 절기(節氣) 경계를 반영 안 했고, 일주는 기준일
+// 계산이 어긋나 있었음. 자체 수식 대신 lunar-javascript로 전면 교체.
 function ganZhiToPillar(ganzhi: string) {
   const stemChar = ganzhi[0], branchChar = ganzhi[1]
   const si = STEMS.indexOf(stemChar), bi = BRANCHES.indexOf(branchChar)
@@ -60,6 +104,8 @@ const HOUR_NAMES: Record<number, string> = {
   19:'술시(戌時)', 20:'술시(戌時)', 21:'해시(亥時)', 22:'해시(亥時)',
 }
 function calcManse(year: number, month: number, day: number, hourMinute: string, longitude?: number) {
+  // ✅ 신규: 출생지(경도) 선택 입력 시 진태양시로 보정 후 계산.
+  // 안 넣으면 기존과 완전히 동일하게 표준시 그대로 사용 (선택사항, 필수 아님).
   let y = year, mo = month, d = day, hm = hourMinute
   let solarTimeCorrection: ReturnType<typeof correctToTrueSolarTime> | null = null
   if (longitude && hourMinute) {
@@ -103,6 +149,7 @@ function calcManse(year: number, month: number, day: number, hourMinute: string,
   }
 }
 
+// ─── 현재 나이 기준 lifecycle 구간 생성 ─────────────
 function buildLifecycleTemplate(currentAge: number): string {
   const currentDecade = Math.floor(currentAge / 10) * 10
   let offsets: number[]
@@ -120,6 +167,7 @@ function buildLifecycleTemplate(currentAge: number): string {
     .join(',\n')
 }
 
+// ─── 캐릭터별 말투 ─────────────────────────────────
 const CHARACTER_VOICE: Record<string, string> = {
   baekhalma: `
 너는 건물주 백할매야. 수십 년 인생 살면서 별 사람 다 봤고, 돈 흐름은 귀신같이 알아.
@@ -152,6 +200,15 @@ const CHARACTER_VOICE: Record<string, string> = {
 `,
 }
 
+// ─── 해석 근거 규칙 (다수 유파 합의 기반 — AI가 근거없이 지어내는 것 방지) ──
+// ⚠️ 수정: 단순히 "합의된 결론만 써라"라고만 하면, 이 사주처럼 오행 편중이
+// 뚜렷한 경우 4개 그룹 전부가 같은 결론(예: "목 과다·수 없음")으로 수렴해서
+// 12개 판결문이 실질적으로 3~4가지 얘기의 반복이 되는 부작용 발견됨.
+// → 그룹별로 "핵심 근거 도구"를 강제로 다르게 배정해서 이걸 막음.
+// ⚠️ 재수정: "4개 이론 관점에서 속으로 따로 판단해봐" 같은 다단계 사고 과정을
+// 시켰더니, 그 사고 과정 일부가 JSON 밖으로 새어나오거나 JSON 안에 섞여서
+// "N번 그룹 응답 파싱 실패" 에러가 반복 발생함. 다단계 사고 지시를 없애고
+// 결과에 직접 적용할 규칙 한두 줄로 단순화 — 파싱 안전성을 우선함.
 function getInterpretationRules(primaryTool: string, avoidTools: string) {
   return `
 [해석 근거 규칙]
@@ -161,6 +218,7 @@ ${avoidTools ? `"${avoidTools}" 관련 얘기(예: 오행 과다·부족)는 이
 `
 }
 
+// ─── 공통 스타일 룰 ────────────────────────────────
 function getStyleRules() {
   return `
 [말투 생성 엔진 — 100% 적용 필수]
@@ -179,7 +237,7 @@ function getStyleRules() {
 "버는 힘은 좋은데, 모으는 재주가 약해."
 "통장은 늘 바쁜데, 잔고는 늘 한가해."
 
-[문장 공식 — 판결문마다 최소 5개 이상 섞어서]
+[문장 공식 — 판결문마다 최소 3개 이상 섞어서]
 1. "~가 아니라, ~다"
 2. "지금 힘든 이유? ~라서 그래"
 3. "겉으로는 ~, 속으로는 ~"
@@ -207,8 +265,8 @@ D. 공감 → 경고 → 비유 → 팩폭
 예시: "돈 버는 기계인데 왜 통장은 늘 텅텅빌까"
 
 [판결문 형식 규칙]
-- 500자 이상 필수. 글자수 채우려고 늘리지 말고, 진짜 내용으로 채워라
-- 문단이 바뀔 때마다 반드시 빈 줄(엔터 두 번)로 구분해서 써라. 절대로 백슬래시 n(\\n) 같은 글자를 텍스트 안에 그대로 쓰지 마라 — 실제 줄바꿈 키(엔터)를 눌러서 구분해야 한다.
+- 500자 이상, 700자 이하. 800자를 넘기지 마라. 군더더기 없이 알찬 내용으로 채워라
+- 문단마다 빈 줄 하나 넣어라 (\\n\\n)
 - ⚠️ 조심할 것들은 맨 마지막에, 본문과 빈 줄 띄고 써라
 - ⚠️를 본문 중간에 절대 넣지 마라
 - 각 문단 3~5문장으로 구성
@@ -216,26 +274,46 @@ D. 공감 → 경고 → 비유 → 팩폭
 }
 
 export async function POST(req: NextRequest) {
-  const encoder = new TextEncoder()
-
+  let setupRequestId: string | undefined
+  let setupManse: unknown = null
   try {
-    const { name, year, month, day, hour, gender, characterId, occupation, maritalStatus, questionIntent, partnerInfo, longitude, personalQuestion } = await req.json()
+    const body = await req.json()
+    const {
+      name, year, month, day, hour, gender, characterId, occupation,
+      maritalStatus, questionIntent, partnerInfo, longitude, personalQuestion,
+      requestId: clientRequestId, retry,
+    } = body
+    const requestId = typeof clientRequestId === 'string' && clientRequestId.length > 0 && clientRequestId.length < 80
+      ? clientRequestId
+      : randomUUID()
+    setupRequestId = requestId
 
     const character = CHARACTERS[characterId] ?? CHARACTERS['doRyeong']
+    if (!character) {
+      return sseFailure('선택한 신령 정보를 찾지 못했어요.', requestId)
+    }
     const genderStr = gender === 'male' ? '남성' : '여성'
     const voiceGuide = CHARACTER_VOICE[characterId] ?? CHARACTER_VOICE['doRyeong']
     const styleRules = getStyleRules()
 
     const manse = calcManse(parseInt(year), parseInt(month), parseInt(day), hour ?? '', typeof longitude === 'number' ? longitude : undefined)
+    setupManse = manse
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return sseFailure('분석 서버 설정이 없어 풀이를 만들 수 없어요.', requestId, manse)
+    }
 
+    // 현재 나이 계산
     const currentYear = new Date().getFullYear()
     const currentAge = currentYear - parseInt(year) + 1
 
+    // ✅ 신규: "몇 년도 상반기/하반기"처럼 구체적인 시기를 짚어줄 수 있도록,
+    // 올해·내년의 실제 세운(연간지)과 상/하반기 대표 월주까지 미리 계산해서 프롬프트에 넣음.
+    // 계산은 정확한 명리학 공식(lunar-javascript)이고, AI는 이 값을 인용해서 문장만 만듦.
     const dayStemIdx = manse.dayPillar.stemIdx
     const buildSeunInfo = (y: number) => {
       const yp = calcYearPillar(y, 6, 15)
-      const firstHalf = calcMonthPillar(y, 4, 15)
-      const secondHalf = calcMonthPillar(y, 10, 15)
+      const firstHalf = calcMonthPillar(y, 4, 15)   // 상반기 대표(음력 절기 기준 월주)
+      const secondHalf = calcMonthPillar(y, 10, 15) // 하반기 대표
       return {
         year: y,
         ganzhi: `${yp.stem}${yp.branch}`,
@@ -254,6 +332,7 @@ ${thisYearSeun.year}년(올해): 연간지 ${thisYearSeun.ganzhi} (십성: ${thi
 ${nextYearSeun.year}년(내년): 연간지 ${nextYearSeun.ganzhi} (십성: ${nextYearSeun.sipsin}) / 상반기 월기운 ${nextYearSeun.firstHalfGanzhi}(${nextYearSeun.firstHalfSipsin}) / 하반기 월기운 ${nextYearSeun.secondHalfGanzhi}(${nextYearSeun.secondHalfSipsin})
 `
 
+    // lifecycle 구간 동적 생성 (나이에 맞게)
     const lifecycleRows = buildLifecycleTemplate(currentAge)
 
     const elementDesc = Object.entries(manse.elementCount)
@@ -304,21 +383,22 @@ ${seunInfo}
     const intentInstruction = intentGuide[questionIntent] ?? '이 사람 사주에서 가장 중요한 걸 찾아서 알려줘'
 
     const systemPrompt = `너는 ${character.name}이야. 사주를 쉽고 재미있게 풀어주는 캐릭터. 한자나 어려운 명리 용어는 절대 쓰지 않고, 20-30대가 바로 이해할 수 있는 말로만 설명해. 반드시 제공된 도구(tool)를 호출해서 결과를 제출해라 — 그 외의 텍스트 설명은 필요 없다.`
+    const sharedContext = `${voiceGuide}\n${sajuInfo}\n${styleRules}`
+    const cachedSystem: Anthropic.TextBlockParam[] = [
+      { type: 'text', text: systemPrompt },
+      { type: 'text', text: sharedContext, cache_control: { type: 'ephemeral' } },
+    ]
 
     const makeJudgmentPrompt = (ids: number[], isFreeIds: number[], categoryHints: string[], primaryTool: string, avoidTools: string) => `
-${voiceGuide}
-${sajuInfo}
-
 [현재 상황] 이 사람은 지금 ${currentAge}세야. 분석할 때 이미 지난 나이대(예: 현재 40대면 20대·30대 얘기는 과거로만 짧게)는 넘어가고, 지금과 앞으로의 시기에 집중해서 써.
 
 [궁금한 것]: ${questionIntent}
 → ${intentInstruction}
 
 ${getInterpretationRules(primaryTool, avoidTools)}
-${styleRules}
 
 판결문 ${ids.join('번, ')}번을 작성해. 서로 겹치지 않게 각각 새로운 각도로 파고들어.
-각 판결문은 반드시 500자 이상. 내용 없으면 실격.
+각 판결문은 500자 이상 700자 이하. 800자를 넘기면 실격.
 
 [소제목(category) 규칙 — 반드시 지킬 것]
 각 판결문마다 이게 어떤 주제를 다루는지 짧은 소제목(2~5글자)을 붙여라.
@@ -330,34 +410,37 @@ ${categoryHints.includes('어울리는 지역') ? '["어울리는 지역" 카테
 `
 
     const prompt3 = `
-${voiceGuide}
-${sajuInfo}
-
 [현재 상황] 이 사람은 지금 ${currentAge}세야.
 
 ${getInterpretationRules('오행 균형과 십성 구조를 종합한 전체 흐름', '')}
 
-이 사람의 인생 전략(대운 흐름)을 작성해서 도구를 호출해. 판결문이 아니라 전체 인생 로드맵이야.
+이 사람의 인생 전략(대운 흐름)을 작성해서 도구를 호출해. 판결문이 아니라 전체 인생 로드맵이야. 각 문단은 핵심만 간결하게.
 
 [lifecycle 배열은 반드시 이 나이대들로 채워]
 ${lifecycleRows}
 `
 
     const FREE_IDS = [1, 2, 3]
-    const idGroups = [[1,2,3], [4,5,6], [7,8,9], [10,11,12]]
+    const idGroups = GROUP_IDS.map(g => [...g])
     const categoryGroups = [
-      ['성격', '재물운', '애정운'],
-      ['직업운', '건강운', '인간관계'],
-      ['대운', '인생흐름', '어울리는 지역'],
-      ['올해 총운', '위기관리', '결혼운'],
+      ['성격', '재물운'],
+      ['애정운', '직업운'],
+      ['건강운', '인간관계'],
+      ['대운', '인생흐름'],
+      ['어울리는 지역', '올해 총운'],
+      ['위기관리', '결혼운'],
     ]
-    const toolGroups = [
+    const toolPool = [
       '오행 균형(목·화·토·금·수 과다·부족)',
       '십성 구조(비겁·식상·재성·관성·인성의 조합과 힘)',
       '신살과 특이 조합(지장간, 12운성 포함)',
       '대운·세운의 시기별 흐름',
     ]
+    const toolGroups = idGroups.map((_, gi) => toolPool[gi % toolPool.length])
 
+    // ✅ 신규(핵심 안정화): 텍스트로 "JSON처럼 써줘"라고 부탁하는 대신, Anthropic의
+    // Tool Use로 출력 형식을 API 차원에서 강제함. AI가 형식을 "어길 수 있는" 여지 자체를
+    // 없애는 근본적인 해결책 — 재시도(안전망)는 남겨두되, 이제 진짜 예외 상황(네트워크 등)에만 걸림.
     const judgmentTool = {
       name: 'submit_judgments',
       description: '작성한 사주 판결문들을 제출한다.',
@@ -366,8 +449,8 @@ ${lifecycleRows}
         properties: {
           titles: {
             type: 'array' as const,
-            minItems: 3,
-            maxItems: 3,
+            minItems: 2,
+            maxItems: 2,
             items: {
               type: 'object' as const,
               properties: {
@@ -376,7 +459,7 @@ ${lifecycleRows}
                 title: { type: 'string' as const, description: '읽자마자 "어 내 얘기잖아" 싶은 소름 돋는 상황 묘사 제목' },
                 teaser: { type: 'string' as const, description: '클릭하고 싶어지는 한 줄 훅' },
                 is_free: { type: 'boolean' as const },
-                content: { type: 'string' as const, description: '500자 이상. 공감+비유+팩폭+행동팁 포함, 문단이 바뀔 때마다 실제 엔터로 빈 줄 구분(백슬래시n 글자를 텍스트로 쓰지 말 것). 마지막에 "⚠️ 조심할 것들: " 로 시작하는 구체적 2~3가지' },
+                content: { type: 'string' as const, description: '500~700자. 800자 금지. 공감+비유+팩폭+행동팁 포함, 문단 사이 빈줄(\\n\\n). 마지막에 "⚠️ 조심할 것들: " 로 시작하는 구체적 2~3가지' },
               },
               required: ['id', 'category', 'title', 'teaser', 'is_free', 'content'],
             },
@@ -393,7 +476,7 @@ ${lifecycleRows}
         type: 'object' as const,
         properties: {
           overview: { type: 'string' as const, minLength: 30, description: '이 사람 사주 전체 핵심 3~4문장, 쉬운 말로' },
-          golden_period: { type: 'string' as const, minLength: 80, description: '전성기가 언제고 왜 그 시기인지 5~7문장, 구체적 나이·시기·기운·준비할 것 포함' },
+          golden_period: { type: 'string' as const, minLength: 80, description: '전성기가 언제고 왜 그 시기인지 3~5문장, 구체적 나이·시기·준비할 것 포함' },
           lifecycle: {
             type: 'array' as const,
             items: {
@@ -407,69 +490,130 @@ ${lifecycleRows}
               required: ['age', 'score', 'season', 'desc'],
             },
           },
-          peak_guide: { type: 'string' as const, minLength: 100, description: '전성기 활용법. "첫째, ~ / 둘째, ~ / 셋째, ~" 형식으로, 항목이 바뀔 때마다 실제 엔터를 두 번 눌러 빈 줄로 구분해서(백슬래시n 글자를 텍스트로 쓰지 말 것) 각 항목이 2~3문장씩 되도록 풍부하게 써라.' },
-          warning: { type: 'string' as const, minLength: 40, description: '가장 조심해야 할 것들. "⚠️ 첫째, ~ / ⚠️ 둘째, ~" 형식으로, 항목이 바뀔 때마다 실제 엔터를 두 번 눌러 빈 줄로 구분해서(백슬래시n 글자를 텍스트로 쓰지 말 것) 2~3개 항목을 각각 1~2문장씩 써라.' },
+          peak_guide: { type: 'string' as const, minLength: 80, description: '전성기 활용법. "첫째, ~ \\n\\n둘째, ~ \\n\\n셋째, ~" 형식으로, 항목마다 빈 줄로 구분하고 각 항목 1~2문장.' },
+          warning: { type: 'string' as const, minLength: 40, description: '가장 조심해야 할 것들. "⚠️ 첫째, ~ \\n\\n⚠️ 둘째, ~" 형식으로, 2~3개 항목을 \\n\\n으로 구분해서 각각 1~2문장씩 써라.' },
           final_word: { type: 'string' as const, minLength: 30, description: '캐릭터가 마지막으로 건네는 진심 어린 한마디 3~4문장, 감정과 응원 위주, 반말. 절대 비워두거나 생략하지 마라 — 필수 항목이다.' },
         },
         required: ['overview', 'golden_period', 'lifecycle', 'peak_guide', 'warning', 'final_word'],
       },
     }
 
+    // ✅ 신규: 사용자가 자유 입력으로 남긴 "콕 집어 궁금한 거"에 전용으로 답하는 도구.
+    // personalQuestion이 비어있으면 이 호출 자체를 안 하도록 아래 Promise.all에서 조건부 처리.
     const personalAnswerTool = {
       name: 'submit_personal_answer',
       description: '사용자가 직접 남긴 개인 질문에 대한 답변을 제출한다.',
       input_schema: {
         type: 'object' as const,
         properties: {
-          answer: { type: 'string' as const, minLength: 100, description: '500자 이상. 이 사람의 질문에 사주 근거를 들어 직접 답해라. 공감+비유+팩폭+행동팁 포함, 문단 구분은 "첫째, ~ 둘째, ~" 형식 활용 가능. 확정짓지 말고 확률적으로("~할 가능성이 높아") 답해라. 절대 비워두거나 짧게 얼버무리지 마라 — 필수 항목이다.' },
+          answer: { type: 'string' as const, description: '500~700자. 이 사람의 질문에 사주 근거를 들어 직접 답해라. 공감+비유+팩폭+행동팁 포함. 확정짓지 말고 확률적으로("~할 가능성이 높아") 답해라.' },
         },
         required: ['answer'],
       },
     }
     const makePersonalPrompt = (q: string) => `
-${voiceGuide}
-${sajuInfo}
-
 [이 사람이 직접 남긴 질문 — 이것에 집중해서 답해라]
 "${q}"
 
 ${getInterpretationRules('이 질문과 가장 직접적으로 관련된 명리 요소(질문 내용에 맞춰 오행/십성/신살/대운 중 적절한 것)', '')}
-${styleRules}
 
-이 사람의 질문에 사주를 근거로 직접 답하는 도구를 호출해. 질문과 상관없는 일반론 늘어놓지 말고, 정확히 이 질문에 대한 답을 해라.
+이 사람의 질문에 사주를 근거로 직접 답하는 도구를 호출해. 500~700자로, 질문과 상관없는 일반론 늘어놓지 말고 정확히 이 질문에 대한 답을 해라.
 ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 들어있다 — 질문이 그 사람과의 관계·궁합에 관한 것이라면, 반드시 두 사람의 사주를 같이 놓고 궁합 관점에서 답해라.' : ''}
 `
 
-    // ✅ 수정: 재시도는 "결과 검증 실패"와 "네트워크/서버 오류"만 대상으로 한다.
-    // 인증 오류(401)나 잘못된 요청(400)처럼 다시 시도해도 똑같이 실패할 오류는
-    // 즉시 던지고 재시도하지 않는다 — 이런 오류를 재시도로 반복하면 그만큼 시간만 날림.
-    // ✅ 수정: 진단 로그(elapsedMs, 토큰 수, stop_reason) 추가.
-    // ✅ 수정: stop_reason이 max_tokens면 결과가 잘린 것이므로 명시적으로 에러 처리.
+    const trimmedPersonalQ = typeof personalQuestion === 'string' ? personalQuestion.trim().slice(0, 200) : ''
+    console.log(JSON.stringify({
+      tag: '사주궁:personal',
+      phase: 'request',
+      requestId,
+      hasPersonalQuestion: trimmedPersonalQ.length > 0,
+      personalQuestionChars: trimmedPersonalQ.length,
+    }))
+    const retryAll = !retry || typeof retry !== 'object'
+    const retryGroups: number[] = retryAll
+      ? GROUP_IDS.map((_, i) => i)
+      : (Array.isArray(retry.groups) ? retry.groups.filter((g: unknown) => typeof g === 'number' && g >= 0 && g <= LAST_GROUP_INDEX) : [])
+    const retryStrategy = retryAll || retry.strategy === true
+    const retryPersonal = (retryAll ? !!trimmedPersonalQ : retry.personal === true) && !!trimmedPersonalQ
+
+    type ErrorKind = 'fatal' | 'transient' | 'validation' | 'truncation'
+
+    function classifyError(e: unknown): ErrorKind {
+      const status = (e as { status?: number; statusCode?: number }).status
+        ?? (e as { status?: number; statusCode?: number }).statusCode
+      const type = (e as { error?: { type?: string }; type?: string }).error?.type
+        ?? (e as { type?: string }).type
+      const msg = e instanceof Error ? e.message : String(e)
+      if (status === 400 || status === 401 || status === 403 || status === 404) return 'fatal'
+      if (type === 'authentication_error' || type === 'invalid_request_error' || type === 'permission_error') return 'fatal'
+      if (msg.includes('max_tokens') || msg.includes('토큰 한도')) return 'truncation'
+      if (
+        msg.includes('도구 호출 결과 없음')
+        || msg.includes('개수 불일치')
+        || msg.includes('ID 불일치')
+        || msg.includes('내용 부족')
+        || msg.includes('누락')
+        || msg.includes('너무 짧음')
+      ) return 'validation'
+      return 'transient'
+    }
+
+    function sleep(ms: number) {
+      return new Promise(resolve => setTimeout(resolve, ms))
+    }
+
+    const workAbort = new AbortController()
+    const onClientAbort = () => workAbort.abort()
+    if (req.signal.aborted) workAbort.abort()
+    else req.signal.addEventListener('abort', onClientAbort)
+
+    const deadlineAt = Date.now() + 270_000
+
     async function callWithRetry(
       params: Anthropic.MessageCreateParamsNonStreaming,
       label: string,
-      maxAttempts = 2,
       validate?: (result: Record<string, unknown>) => void,
     ) {
       let lastErr: unknown = null
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        const startedAt = Date.now()
-        try {
-          console.info('[사주궁] 요청 시작', { label, attempt })
-          const res = await client.messages.create(params)
-          const elapsedMs = Date.now() - startedAt
-          console.info('[사주궁] 응답 완료', {
-            label,
-            attempt,
-            elapsedMs,
-            inputTokens: res.usage.input_tokens,
-            outputTokens: res.usage.output_tokens,
-            stopReason: res.stop_reason,
-            requestId: (res as any)._request_id,
-          })
+      let lastKind: ErrorKind = 'transient'
+      const maxAttempts = 2
 
-          if (res.stop_reason === 'max_tokens') {
-            throw new Error('출력 토큰 한도에 도달해 결과가 잘렸습니다 (max_tokens 상향 검토 필요)')
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        if (workAbort.signal.aborted) throw new Error('aborted')
+        const remaining = deadlineAt - Date.now()
+        if (remaining < 8_000) {
+          throw lastErr instanceof Error ? lastErr : new Error('전체 제한시간 부족')
+        }
+
+        const callMaxTokens = attempt > 1 && lastKind === 'truncation'
+          ? Math.min((params.max_tokens ?? 6000) + 2000, 8192)
+          : params.max_tokens
+        const started = Date.now()
+
+        try {
+          const res = await client.messages.create(
+            { ...params, max_tokens: callMaxTokens },
+            { signal: workAbort.signal, maxRetries: 0 },
+          )
+          const stopReason = res.stop_reason
+          console.log(JSON.stringify({
+            tag: '사주궁',
+            requestId,
+            call: label,
+            attempt,
+            durationMs: Date.now() - started,
+            inputTokens: res.usage?.input_tokens,
+            outputTokens: res.usage?.output_tokens,
+            cacheCreation: res.usage?.cache_creation_input_tokens ?? 0,
+            cacheRead: res.usage?.cache_read_input_tokens ?? 0,
+            stopReason,
+            retries: attempt - 1,
+            ok: stopReason !== 'max_tokens',
+          }))
+
+          if (stopReason === 'max_tokens') {
+            lastKind = 'truncation'
+            throw new Error('토큰 한도(max_tokens)로 응답이 잘림')
           }
 
           const toolUse = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
@@ -479,161 +623,227 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
           return result
         } catch (e) {
           lastErr = e
-          const elapsedMs = Date.now() - startedAt
-          // 인증/잘못된 요청 오류는 재시도해도 동일하게 실패하므로 즉시 중단
-          const status = (e as any)?.status
-          const isRetryable = status === undefined || status === 429 || status >= 500
-          console.error(`[사주궁] ${label} 실패 (시도 ${attempt}/${maxAttempts}, ${elapsedMs}ms, status=${status ?? 'N/A'}):`, e instanceof Error ? e.message : e)
-          if (!isRetryable) break
+          if (workAbort.signal.aborted) throw e
+          lastKind = classifyError(e)
+          console.error(JSON.stringify({
+            tag: '사주궁',
+            requestId,
+            call: label,
+            attempt,
+            durationMs: Date.now() - started,
+            kind: lastKind,
+            retries: attempt - 1,
+            ok: false,
+            err: e instanceof Error ? e.message : String(e),
+          }))
+          if (lastKind === 'fatal') break
+          if (attempt < maxAttempts && lastKind === 'transient') {
+            const status = (e as { status?: number; statusCode?: number }).status
+              ?? (e as { status?: number; statusCode?: number }).statusCode
+            await sleep(status === 429 ? 1600 : 800)
+          }
         }
       }
+
       throw new Error(`${label} 생성 실패: ${lastErr instanceof Error ? lastErr.message : lastErr}`)
     }
 
-    const trimmedPersonalQ = typeof personalQuestion === 'string' ? personalQuestion.trim().slice(0, 200) : ''
-
-    // ✅ 신규(안전장치): 프롬프트를 고쳐도 모델이 가끔 실제 줄바꿈 대신
-    // 백슬래시+n 두 글자를 텍스트 그대로 출력하는 경우가 있을 수 있어, 클라이언트로
-    // 보내기 직전에 문자열 안의 리터럴 "\n"을 전부 실제 줄바꿈 문자로 강제 치환한다.
-    // 이미 진짜 줄바꿈인 경우는 이 치환의 영향을 받지 않는다(리터럴 문자만 매칭).
-    function sanitizeText(s: unknown): unknown {
-      if (typeof s !== 'string') return s
-      return s.replace(/\\n/g, '\n')
-    }
-    function sanitizeObject<T>(obj: T): T {
-      if (Array.isArray(obj)) return obj.map(sanitizeObject) as unknown as T
-      if (obj && typeof obj === 'object') {
-        const out: Record<string, unknown> = {}
-        for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
-          out[k] = typeof v === 'string' ? sanitizeText(v) : sanitizeObject(v)
-        }
-        return out as T
-      }
-      return obj
+    const encoder = new TextEncoder()
+    const sseHeaders = {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
     }
 
-    // ✅ 핵심 수정: Promise.all로 전부 기다리지 않고, 각 호출이 끝나는 즉시
-    // SSE 이벤트로 클라이언트에 전송한다. 스트림은 시작하자마자 열고 만세력부터 보낸다.
-    // 프론트엔드는 이제 { type: 'manse' | 'group' | 'strategy' | 'personal' | 'error' | 'done', ... }
-    // 형태의 이벤트를 순서 상관없이 받아서, 도착하는 대로 화면에 채워 넣어야 한다.
     const readable = new ReadableStream({
       async start(controller) {
-        const send = (obj: unknown) => {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`))
+        let closed = false
+        const send = (event: Record<string, unknown>) => {
+          if (closed || workAbort.signal.aborted) return
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ ...event, requestId })}\n\n`))
+        }
+        const finish = (withDone: boolean) => {
+          if (closed) return
+          closed = true
+          try {
+            if (withDone && !workAbort.signal.aborted) {
+              controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+            }
+            controller.close()
+          } catch { /* already closed */ }
+          req.signal.removeEventListener('abort', onClientAbort)
         }
 
-        send({ type: 'manse', data: manse })
+        try {
+          send({ type: 'meta', startedAt: Date.now(), retryAll, retryGroups, retryStrategy, retryPersonal })
+          try {
+            send({ type: 'manse', data: manse })
+          } catch (e) {
+            send({ type: 'error', part: 'fatal', message: publicErrorMessage(e), retryable: false, code: 'fatal' })
+          }
 
-        const tasks: Promise<void>[] = []
-
-        // 판결문 4그룹 — 각각 끝나는 대로 바로 전송
-        idGroups.forEach((ids, gi) => {
-          const task = callWithRetry({
-            model: 'claude-sonnet-4-6',
-            max_tokens: 6000,
-            system: systemPrompt,
-            tools: [judgmentTool],
-            tool_choice: { type: 'tool', name: 'submit_judgments' },
-            messages: [{ role: 'user', content: makeJudgmentPrompt(ids, FREE_IDS, categoryGroups[gi], toolGroups[gi], gi === 0 ? '' : toolGroups[0]) }],
-          }, `${gi + 1}번 그룹(${ids.join(',')})`, 2, (result) => {
-            const titles = result.titles
-            if (!Array.isArray(titles) || titles.length !== ids.length) {
-              throw new Error(`판결문 개수 불일치 — 기대: ${ids.length}개, 실제: ${Array.isArray(titles) ? titles.length : '배열 아님'}개`)
+          const tasks: Promise<void>[] = []
+          const runGroup = async (gi: number) => {
+            const ids = idGroups[gi]
+            if (!ids) {
+              send({ type: 'error', part: 'group', groupIndex: gi, message: '알 수 없는 그룹입니다.', retryable: false, code: 'fatal' })
+              return
             }
-          }).then((result) => {
-            const titles = (result.titles as any[]).map((t, j) => {
-              const forcedId = ids[j]
-              return sanitizeObject({ ...t, id: String(forcedId), is_free: FREE_IDS.includes(forcedId) })
-            })
-            send({ type: 'group', groupIndex: gi, titles })
-          }).catch((e) => {
-            send({ type: 'error', scope: 'group', groupIndex: gi, message: e instanceof Error ? e.message : String(e) })
-          })
-          tasks.push(task)
-        })
-
-        // 전략 — 끝나는 대로 바로 전송
-        tasks.push(
-          callWithRetry({
-            model: 'claude-sonnet-4-6',
-            max_tokens: 3500,
-            system: systemPrompt,
-            tools: [strategyTool],
-            tool_choice: { type: 'tool', name: 'submit_strategy' },
-            messages: [{ role: 'user', content: prompt3 }],
-          }, '전략', 2, (result) => {
-            const fw = result.final_word
-            if (typeof fw !== 'string' || fw.trim().length < 20) {
-              throw new Error(`final_word 누락 또는 너무 짧음 (${typeof fw === 'string' ? fw.length : 'undefined'}자)`)
+            try {
+                const result = await callWithRetry({
+                  model: 'claude-sonnet-4-6',
+                  max_tokens: 3200,
+                  system: cachedSystem,
+                  tools: [judgmentTool],
+                  tool_choice: { type: 'tool', name: 'submit_judgments' },
+                  messages: [{
+                    role: 'user',
+                    content: makeJudgmentPrompt(ids, FREE_IDS, categoryGroups[gi], toolGroups[gi], gi === 0 ? '' : toolPool[(gi - 1) % toolPool.length]),
+                  }],
+                }, `group${gi}`, (result) => {
+                  const titles = result.titles
+                  if (!Array.isArray(titles) || titles.length !== ids.length) {
+                    throw new Error(`판결문 개수 불일치 — 기대: ${ids.length}개, 실제: ${Array.isArray(titles) ? titles.length : '배열 아님'}개`)
+                  }
+                  const got = titles.map((t: { id?: unknown }) => String(t?.id ?? '')).sort()
+                  const expected = ids.map(String).sort()
+                  if (got.join(',') !== expected.join(',')) {
+                    throw new Error(`판결문 ID 불일치 — 기대: ${expected.join(',')}, 실제: ${got.join(',')}`)
+                  }
+                  for (const t of titles as Array<{ id?: unknown; title?: unknown; content?: unknown }>) {
+                    if (typeof t?.title !== 'string' || !t.title.trim() || typeof t.content !== 'string' || t.content.trim().length < 50) {
+                      throw new Error(`판결문 내용 부족 id=${t?.id}`)
+                    }
+                  }
+                })
+                send({ type: 'group', groupIndex: gi, titles: sanitizeJudgmentTitles(result.titles) })
+              } catch (e) {
+                if (workAbort.signal.aborted) return
+                const kind = classifyError(e)
+                send({
+                  type: 'error',
+                  part: 'group',
+                  groupIndex: gi,
+                  message: e instanceof Error ? e.message : String(e),
+                  retryable: kind !== 'fatal',
+                  code: kind,
+                })
             }
-          }).then((result) => {
-            send({ type: 'strategy', data: sanitizeObject(result) })
-          }).catch((e) => {
-            send({ type: 'error', scope: 'strategy', message: e instanceof Error ? e.message : String(e) })
+          }
+          const groupQueue = retryGroups.filter(gi => Array.isArray(idGroups[gi]))
+          const groupWorkers = Array.from({ length: Math.min(4, groupQueue.length) }, async () => {
+            while (groupQueue.length) {
+              const gi = groupQueue.shift()
+              if (gi === undefined) break
+              await runGroup(gi)
+            }
           })
-        )
+          tasks.push(...groupWorkers)
 
-        // 개인 질문 — 있을 때만, 끝나는 대로 바로 전송
-        if (trimmedPersonalQ) {
-          tasks.push(
-            callWithRetry({
-              model: 'claude-sonnet-4-6',
-              max_tokens: 2000,
-              system: systemPrompt,
-              tools: [personalAnswerTool],
-              tool_choice: { type: 'tool', name: 'submit_personal_answer' },
-              messages: [{ role: 'user', content: makePersonalPrompt(trimmedPersonalQ) }],
-            }, '개인질문', 2, (result) => {
-              const ans = result.answer
-              if (typeof ans !== 'string' || ans.trim().length < 50) {
-                throw new Error(`족집게 질문 답변 누락 또는 너무 짧음 (${typeof ans === 'string' ? ans.length : 'undefined'}자)`)
+          if (retryStrategy) {
+            tasks.push((async () => {
+              try {
+                const result = await callWithRetry({
+                  model: 'claude-sonnet-4-6',
+                  max_tokens: 2800,
+                  system: cachedSystem,
+                  tools: [strategyTool],
+                  tool_choice: { type: 'tool', name: 'submit_strategy' },
+                  messages: [{ role: 'user', content: prompt3 }],
+                }, 'strategy', (result) => {
+                  const fw = result.final_word
+                  if (typeof fw !== 'string' || fw.trim().length < 20) {
+                    throw new Error(`final_word 누락 또는 너무 짧음 (${typeof fw === 'string' ? fw.length : 'undefined'}자)`)
+                  }
+                })
+                send({ type: 'strategy', data: sanitizeStrategy(result) })
+              } catch (e) {
+                if (workAbort.signal.aborted) return
+                const kind = classifyError(e)
+                send({
+                  type: 'error',
+                  part: 'strategy',
+                  message: e instanceof Error ? e.message : String(e),
+                  retryable: kind !== 'fatal',
+                  code: kind,
+                })
               }
-            }).then((result) => {
-              send({ type: 'personal', question: trimmedPersonalQ, data: sanitizeObject(result) })
-            }).catch((e) => {
-              send({ type: 'error', scope: 'personal', message: e instanceof Error ? e.message : String(e) })
+            })())
+          }
+
+          if (retryPersonal) {
+            tasks.push((async () => {
+              try {
+                const result = await callWithRetry({
+                  model: 'claude-sonnet-4-6',
+                  max_tokens: 1600,
+                  system: cachedSystem,
+                  tools: [personalAnswerTool],
+                  tool_choice: { type: 'tool', name: 'submit_personal_answer' },
+                  messages: [{ role: 'user', content: makePersonalPrompt(trimmedPersonalQ) }],
+                }, 'personal', (result) => {
+                  if (typeof result.answer !== 'string' || result.answer.trim().length < 50) {
+                    throw new Error('개인질문 답변 누락 또는 너무 짧음')
+                  }
+                })
+                send({
+                  type: 'personal',
+                  question: trimmedPersonalQ,
+                  data: {
+                    question: trimmedPersonalQ,
+                    answer: sanitizeText(result.answer),
+                  },
+                })
+                console.log(JSON.stringify({
+                  tag: '사주궁:personal',
+                  phase: 'event_sent',
+                  requestId,
+                  answerChars: typeof result.answer === 'string' ? result.answer.length : 0,
+                }))
+              } catch (e) {
+                if (workAbort.signal.aborted) return
+                const kind = classifyError(e)
+                send({
+                  type: 'error',
+                  part: 'personal',
+                  message: e instanceof Error ? e.message : String(e),
+                  retryable: kind !== 'fatal',
+                  code: kind,
+                })
+              }
+            })())
+          }
+
+          await Promise.allSettled(tasks)
+          finish(!workAbort.signal.aborted)
+        } catch (e) {
+          if (!workAbort.signal.aborted) {
+            send({
+              type: 'error',
+              part: 'fatal',
+              message: publicErrorMessage(e),
+              retryable: false,
+              code: 'fatal',
             })
-          )
+          }
+          finish(!workAbort.signal.aborted)
         }
-
-        // 모든 태스크가 끝나면(성공/실패 무관) 종료 신호 전송
-        await Promise.allSettled(tasks)
-
-        send({
-          type: 'meta',
-          disclaimer: '본 풀이는 엔터테인먼트 및 참고 목적이며, 중요한 결정은 전문가와 상담하세요.',
-        })
-        controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-        controller.close()
+      },
+      cancel() {
+        workAbort.abort()
+        req.signal.removeEventListener('abort', onClientAbort)
       },
     })
 
-    return new NextResponse(readable, {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      },
-    })
+    return new NextResponse(readable, { headers: sseHeaders })
 
   } catch (e) {
-    console.error('[사주궁] 서버 오류:', e)
-    const errorStream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(encoder.encode(
-          `data: ${JSON.stringify({ type: 'error', scope: 'fatal', message: '분석 중 오류가 발생했습니다. 다시 시도해주세요.' })}\n\n`
-        ))
-        controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-        controller.close()
-      },
-    })
-    return new NextResponse(errorStream, {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      },
-    })
+    console.error(JSON.stringify({
+      tag: '사주궁',
+      phase: 'setup',
+      err: e instanceof Error ? e.message : String(e),
+    }))
+    return sseFailure(publicErrorMessage(e), setupRequestId, setupManse)
   }
 }

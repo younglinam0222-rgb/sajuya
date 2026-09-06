@@ -2,24 +2,32 @@
 
 import Script from 'next/script'
 
-// ✅ 신규: 카카오 JS SDK를 앱 전체에서 한 번만 로드·초기화.
-// 이게 없으면 카카오 공유 버튼이 항상 조용히 "링크 복사"로만 동작함.
-// NEXT_PUBLIC_KAKAO_JS_KEY는 카카오 로그인용 키(KAKAO_CLIENT_ID)와는 별개로,
-// 카카오 개발자 콘솔 > 앱 설정 > 앱 키 > "JavaScript 키"를 발급받아 넣어야 함.
+// NEXT_PUBLIC_KAKAO_JS_KEY는 카카오 로그인용 REST 키(KAKAO_CLIENT_ID)와 다르다.
+// 카카오 개발자 콘솔 > 앱 키 > JavaScript 키가 필요하다.
 export default function KakaoInit() {
   const jsKey = process.env.NEXT_PUBLIC_KAKAO_JS_KEY
   if (!jsKey) return null
+
+  const initKakao = () => {
+    const Kakao = (window as any).Kakao
+    if (!Kakao) return
+    try {
+      if (!Kakao.isInitialized()) Kakao.init(jsKey)
+    } catch (e) {
+      console.error(JSON.stringify({
+        tag: '사주궁:kakao',
+        event: 'init_failed',
+        err: e instanceof Error ? e.message : String(e),
+      }))
+    }
+  }
 
   return (
     <Script
       src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js"
       strategy="afterInteractive"
-      onLoad={() => {
-        const Kakao = (window as any).Kakao
-        if (Kakao && !Kakao.isInitialized()) {
-          Kakao.init(jsKey)
-        }
-      }}
+      onLoad={initKakao}
+      onReady={initKakao}
     />
   )
 }
