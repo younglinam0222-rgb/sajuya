@@ -14,11 +14,13 @@ function withSaveMeta(aiResult: unknown, isComplete: boolean, requestId?: unknow
     const parsed = JSON.parse(aiResult)
     if (!parsed || typeof parsed !== 'object') return aiResult
     const fallbackQ = typeof sajuData?.form?.personalQuestion === 'string' ? sajuData.form.personalQuestion.trim() : ''
-    if (parsed.personalAnswer && typeof parsed.personalAnswer === 'object') {
-      const pa = parsed.personalAnswer as { question?: unknown; answer?: unknown }
-      if ((!pa.question || typeof pa.question !== 'string' || !pa.question.trim()) && fallbackQ) {
-        parsed.personalAnswer = { ...pa, question: fallbackQ }
-      }
+    if (fallbackQ) {
+      const pa = parsed.personalAnswer && typeof parsed.personalAnswer === 'object'
+        ? parsed.personalAnswer as { question?: unknown; answer?: unknown }
+        : {}
+      const question = typeof pa.question === 'string' && pa.question.trim() ? pa.question.trim() : fallbackQ
+      const answer = typeof pa.answer === 'string' ? pa.answer : ''
+      parsed.personalAnswer = { question, answer }
     }
     parsed._meta = {
       ...(typeof parsed._meta === 'object' && parsed._meta ? parsed._meta : {}),

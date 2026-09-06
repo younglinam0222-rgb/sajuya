@@ -148,4 +148,41 @@ assert(fallbackShape?.question === '폼질문', 'missing question must use fallb
 assert(normalizePersonalAnswer({ type: 'personal', data: {} }) === null, 'personal without answer must be ignored')
 assert(!assessCompletion({ titles: titles12, strategy: baseStrategy, personal: null, requestedPersonal: true, receivedGroupIndexes: [0,1,2,3,4,5], gotDone: true }).complete, 'requested personal without answer must not be complete')
 
+function asRecord(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : null
+}
+function extractPersonalQuestion(payload, fallbackQuestion = '') {
+  const fallback = fallbackQuestion.trim()
+  if (typeof payload === 'string') return fallback
+  const o = asRecord(payload)
+  if (!o) return fallback
+  const data = asRecord(o.data)
+  const nested = asRecord(o.personalAnswer)
+  const questionRaw = [o.question, data?.question, nested?.question, fallback].find(v => typeof v === 'string' && v.trim())
+  return typeof questionRaw === 'string' ? questionRaw.trim() : ''
+}
+function readingPersonalView(aiResult, sajuData) {
+  const root = asRecord(sajuData)
+  const form = asRecord(root?.form)
+  const fallback = typeof form?.personalQuestion === 'string' ? form.personalQuestion.trim() : ''
+  const question = extractPersonalQuestion(aiResult, fallback)
+  const personal = normalizePersonalAnswer(aiResult?.personalAnswer ?? aiResult?.personal ?? aiResult, question || fallback)
+  const resolvedQuestion = (personal?.question || question || fallback).trim()
+  return { requested: resolvedQuestion.length > 0, question: resolvedQuestion, answer: personal?.answer ?? '' }
+}
+
+const savedWithAnswer = readingPersonalView(
+  { titles: titles12, personalAnswer: { question: '회사 계속 다닐까요?', answer: 'I'.repeat(60) } },
+  { form: { personalQuestion: '회사 계속 다닐까요?' } },
+)
+assert(savedWithAnswer.requested && savedWithAnswer.answer.length === 60, 'saved personalAnswer must appear on result view')
+const savedQuestionOnly = readingPersonalView(
+  { titles: titles12, personalAnswer: { question: '이직할까요?', answer: '' } },
+  { form: { personalQuestion: '이직할까요?' } },
+)
+assert(savedQuestionOnly.requested && savedQuestionOnly.question === '이직할까요?' && savedQuestionOnly.answer === '', 'question-only save must still show the card')
+const formOnly = readingPersonalView({ titles: titles12 }, { form: { personalQuestion: '올해 재물운은?' } })
+assert(formOnly.requested && formOnly.question === '올해 재물운은?' && formOnly.answer === '', 'form question without ai answer must still request the card')
+assert(!readingPersonalView({ titles: titles12 }, { form: { personalQuestion: '' } }).requested, 'no question must hide the card')
+
 console.log('saju sse/contract/sanitize tests passed')

@@ -4,8 +4,11 @@ import { useParams, useRouter } from 'next/navigation'
 import { useSession, signIn } from 'next-auth/react'
 import Link from 'next/link'
 import { UNLOCK_PRICE } from '@/lib/pricing'
+import PersonalQuestionCard from '@/components/PersonalQuestionCard'
 import { sanitizeText } from '@/lib/sajuSanitize'
-import { extractPersonalAnswer } from '@/lib/sajuContract'
+import { appendSseChunk, parseSseFrame } from '@/lib/sajuSse'
+import { normalizePersonalAnswer, PEAK_GUIDE_LABEL, readingPersonalView } from '@/lib/sajuContract'
+import { KOREA_REGIONS } from '@/lib/solarTime'
 import { ensureKakaoReady, getKakaoDiagnostics, KAKAO_READY_MESSAGE } from '@/lib/kakaoShare'
 
 interface Section { id: string; emoji: string; title: string; body: string }
@@ -75,6 +78,8 @@ export default function ResultPage() {
   const [sharing,     setSharing]     = useState(false)
   const [personalAnswer, setPersonalAnswer] = useState<{ question: string; answer: string } | null>(null)
   const [isCompleteResult, setIsCompleteResult] = useState(true)
+  const [personalRetrying, setPersonalRetrying] = useState(false)
+  const [personalRetryError, setPersonalRetryError] = useState('')
 
   useEffect(() => {
     if (authStatus === 'authenticated') fetchReading()
@@ -90,16 +95,13 @@ export default function ResultPage() {
       setCharacterId(data.character_id ?? 'baekhalma')
       setIsPaid(data.is_paid ?? false)
 
-      let fallbackQuestion = ''
+      let sajuParsed: any = null
       if (data.saju_data) {
-        const sajuParsed = typeof data.saju_data === 'string'
+        sajuParsed = typeof data.saju_data === 'string'
           ? JSON.parse(data.saju_data)
           : data.saju_data
         setFormInfo(sajuParsed.form ?? null)
         setSajuData(sajuParsed.saju ?? null)
-        if (typeof sajuParsed?.form?.personalQuestion === 'string') {
-          fallbackQuestion = sajuParsed.form.personalQuestion
-        }
       }
 
       if (data.ai_result) {
@@ -111,18 +113,91 @@ export default function ResultPage() {
           if (s !== -1 && e !== -1) clean = clean.slice(s, e + 1)
           const parsed = JSON.parse(clean)
           if (parsed.titles)   { setTitles(parsed.titles); setStrategy(parsed.strategy ?? null) }
-          const savedPersonal = extractPersonalAnswer(parsed, fallbackQuestion)
-          if (savedPersonal) setPersonalAnswer(savedPersonal)
+          const view = readingPersonalView(parsed, sajuParsed)
+          if (view.requested) setPersonalAnswer({ question: view.question, answer: view.answer })
+          else setPersonalAnswer(null)
           if (parsed.sections) { setSections(parsed.sections) }
           if (parsed._meta && parsed._meta.isComplete === false) setIsCompleteResult(false)
         } catch {
           setError('풀이 데이터를 불러오는 중 오류가 발생했습니다.')
         }
+      } else if (sajuParsed) {
+        const view = readingPersonalView(null, sajuParsed)
+        if (view.requested) setPersonalAnswer({ question: view.question, answer: view.answer })
       }
     } catch {
       setError('저장된 풀이를 찾을 수 없습니다.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const retryPersonalAnswer = async () => {
+    const question = (personalAnswer?.question || formInfo?.personalQuestion || '').trim()
+    if (!question || !formInfo) {
+      setPersonalRetryError('질문 정보가 없어 다시 생성할 수 없어요.')
+      return
+    }
+    setPersonalRetrying(true)
+    setPersonalRetryError('')
+    try {
+      const selectedRegion = KOREA_REGIONS.find(r => r.name === formInfo.birthPlace)
+      const res = await fetch('/api/saju', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...formInfo,
+          personalQuestion: question,
+          occupation: formInfo.occupation || '일반인',
+          characterId,
+          longitude: selectedRegion?.longitude,
+          retry: { groups: [], strategy: false, personal: true },
+        }),
+      })
+      if (!res.ok || !res.body) throw new Error('생성 요청에 실패했어요.')
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let nextAnswer: { question: string; answer: string } | null = null
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const stepped = appendSseChunk(buffer, decoder.decode(value, { stream: true }))
+        buffer = stepped.buffer
+        for (const frame of stepped.frames) {
+          const parsed = parseSseFrame(frame)
+          if (parsed.kind !== 'event') continue
+          if (parsed.data.type === 'personal' || parsed.data.type === 'personalAnswer') {
+            nextAnswer = normalizePersonalAnswer(parsed.data, question)
+          }
+        }
+      }
+      if (!nextAnswer?.answer) throw new Error('답변을 다시 받지 못했어요.')
+
+      setPersonalAnswer(nextAnswer)
+      const saveRes = await fetch('/api/readings/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shareId,
+          characterId,
+          occupationId: formInfo.occupation || 'general',
+          sajuData: { form: { ...formInfo, personalQuestion: question }, saju: sajuData },
+          aiResult: JSON.stringify({
+            titles,
+            strategy,
+            personalAnswer: nextAnswer,
+            disclaimer: '본 풀이는 엔터테인먼트 및 참고 목적이며, 중요한 결정은 전문가와 상담하세요.',
+          }),
+          isComplete: true,
+        }),
+      })
+      if (!saveRes.ok) throw new Error('답변은 받았지만 저장에 실패했어요.')
+    } catch (e) {
+      setPersonalRetryError(e instanceof Error ? e.message : '다시 생성에 실패했어요.')
+    } finally {
+      setPersonalRetrying(false)
     }
   }
 
@@ -337,24 +412,14 @@ export default function ResultPage() {
         </div>
       )}
 
-      {(personalAnswer || (typeof formInfo?.personalQuestion === 'string' && formInfo.personalQuestion.trim())) && (
-        <div className="mx-4 mt-4 rounded-2xl p-4 border" style={{ borderColor: charColor, background: `${charColor}18` }}>
-          <div className="font-bold text-sm mb-2" style={{ color: charColor }}>족집게 질문</div>
-          <p className="text-sm text-white font-medium mb-3">
-            “{sanitizeText(personalAnswer?.question || formInfo?.personalQuestion || '')}”
-          </p>
-          {personalAnswer?.answer ? (
-            <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line">{sanitizeText(personalAnswer.answer)}</p>
-          ) : (
-            <div className="space-y-3">
-              <p className="text-sm text-red-300">족집게 답변을 불러오지 못했어요.</p>
-              <Link href="/saju" className="block w-full py-2.5 rounded-xl text-sm font-bold text-center text-white" style={{ background: charColor }}>
-                다시 생성하기
-              </Link>
-            </div>
-          )}
-        </div>
-      )}
+      <PersonalQuestionCard
+        question={personalAnswer?.question || formInfo?.personalQuestion || ''}
+        answer={personalAnswer?.answer || ''}
+        charColor={charColor}
+        retrying={personalRetrying}
+        retryError={personalRetryError}
+        onRetry={retryPersonalAnswer}
+      />
 
       {/* 새 포맷: titles */}
       {titles.length > 0 && (
@@ -546,7 +611,7 @@ export default function ResultPage() {
               )}
               {strategy.peak_guide && (
                 <div className="rounded-2xl p-4 bg-[#111] border border-gray-800">
-                  <div className="flex items-center gap-2 mb-2"><span>🚀</span><span className="font-bold text-sm text-green-400">전성기 활용법</span></div>
+                  <div className="flex items-center gap-2 mb-2"><span>🚀</span><span className="font-bold text-sm text-green-400">{PEAK_GUIDE_LABEL}</span></div>
                   <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line">{sanitizeText(strategy.peak_guide)}</p>
                 </div>
               )}

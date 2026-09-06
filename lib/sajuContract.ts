@@ -54,7 +54,45 @@ export function isValidStrategy(strategy: unknown): strategy is SajuStrategyLike
     && Array.isArray(s.lifecycle) && s.lifecycle.length >= 3
 }
 
+export const PEAK_GUIDE_LABEL = '전성기 활용법'
+
 export type PersonalAnswer = { question: string; answer: string }
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+export function extractPersonalQuestion(payload: unknown, fallbackQuestion = ''): string {
+  const fallback = fallbackQuestion.trim()
+  if (typeof payload === 'string') return fallback
+  const o = asRecord(payload)
+  if (!o) return fallback
+  const data = asRecord(o.data)
+  const nested = asRecord(o.personalAnswer)
+  const questionRaw = [o.question, data?.question, nested?.question, fallback]
+    .find(v => typeof v === 'string' && v.trim())
+  return typeof questionRaw === 'string' ? questionRaw.trim() : ''
+}
+
+export function readingPersonalView(aiResult: unknown, sajuData: unknown): {
+  requested: boolean
+  question: string
+  answer: string
+} {
+  const root = asRecord(sajuData)
+  const form = asRecord(root?.form)
+  const fallback = typeof form?.personalQuestion === 'string' ? form.personalQuestion.trim() : ''
+  const question = extractPersonalQuestion(aiResult, fallback)
+  const personal = extractPersonalAnswer(aiResult, question || fallback)
+  const resolvedQuestion = (personal?.question || question || fallback).trim()
+  return {
+    requested: resolvedQuestion.length > 0,
+    question: resolvedQuestion,
+    answer: personal?.answer ?? '',
+  }
+}
 
 /** SSE `personal` 이벤트와 저장 JSON 양쪽 계약을 하나의 { question, answer }로 맞춘다. */
 export function normalizePersonalAnswer(source: unknown, fallbackQuestion = ''): PersonalAnswer | null {

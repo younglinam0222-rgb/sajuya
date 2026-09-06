@@ -8,7 +8,7 @@ import TimeNumberInput from '@/app/components/TimeNumberInput'
 import { KOREA_REGIONS } from '@/lib/solarTime'
 import { sanitizeText } from '@/lib/sajuSanitize'
 import { appendSseChunk, parseSseFrame } from '@/lib/sajuSse'
-import { assessCompletion, GROUP_IDS, LAST_GROUP_INDEX, normalizePersonalAnswer, sortTitlesById } from '@/lib/sajuContract'
+import { assessCompletion, GROUP_IDS, LAST_GROUP_INDEX, normalizePersonalAnswer, PEAK_GUIDE_LABEL, sortTitlesById } from '@/lib/sajuContract'
 
 interface SajuTitle {
   id: string; category?: string; title: string; teaser: string; is_free: boolean; content: string
@@ -350,17 +350,18 @@ export default function SajuPage() {
 
   const saveReading = async (requestId: string, complete: boolean) => {
     if (requestIdRef.current !== requestId) return
+    const askedQuestion = form.personalQuestion.trim()
     const personalAnswer = normalizePersonalAnswer(
       finalResultRef.current.personalAnswer,
-      form.personalQuestion,
-    ) ?? finalResultRef.current.personalAnswer
+      askedQuestion,
+    ) ?? (askedQuestion ? { question: askedQuestion, answer: '' } : undefined)
     const payload = {
       titles: mergeTitleList(),
       strategy: finalResultRef.current.strategy,
       ...(personalAnswer ? { personalAnswer } : {}),
       disclaimer: finalResultRef.current.disclaimer ?? '본 풀이는 엔터테인먼트 및 참고 목적이며, 중요한 결정은 전문가와 상담하세요.',
     }
-    const fingerprint = `${requestId}:${complete}:${payload.titles.map(t => t.id).join(',')}:${payload.strategy ? 1 : 0}`
+    const fingerprint = `${requestId}:${complete}:${payload.titles.map(t => t.id).join(',')}:${payload.strategy ? 1 : 0}:${personalAnswer?.answer ? 1 : 0}`
     if (saveFingerprintRef.current === fingerprint && savedShareIdRef.current) {
       clientLog('save_skipped_duplicate', { complete })
       if (complete) {
@@ -871,7 +872,7 @@ export default function SajuPage() {
               )}
               {result.strategy.peak_guide && (
                 <div className="rounded-2xl p-4 bg-[#111118] border border-gray-800">
-                  <div className="flex items-center gap-2 mb-2"><span>🚀</span><span className="font-bold text-sm text-green-400">전성기 활용법</span></div>
+                  <div className="flex items-center gap-2 mb-2"><span>🚀</span><span className="font-bold text-sm text-green-400">{PEAK_GUIDE_LABEL}</span></div>
                   <FormattedStrategyText text={result.strategy.peak_guide} highlightColor="#4ade80" />
                 </div>
               )}
