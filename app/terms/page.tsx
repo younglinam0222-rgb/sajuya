@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Footer from '@/app/components/Footer'
 
 export default function TermsPage() {
   return (
@@ -98,6 +99,7 @@ export default function TermsPage() {
 
         </div>
       </div>
+      <Footer />
     </div>
   )
 }

@@ -24,7 +24,7 @@ const PACKAGES: Package[] = [
     coins: 1,
     bonus: 0,
     price: NYANG_PRICE,
-    desc: '사주 풀이 1회',
+    desc: '1냥 충전',
   },
   {
     id: 'three',
@@ -34,7 +34,7 @@ const PACKAGES: Package[] = [
     bonus: 0,
     price: UNLOCK_PRICE,
     highlight: true,
-    desc: `사주 풀이 3회 · 낱개보다 ${(NYANG_PRICE * 3 - UNLOCK_PRICE).toLocaleString()}원 저렴`,
+    desc: `3냥 충전 · 낱개보다 ${(NYANG_PRICE * 3 - UNLOCK_PRICE).toLocaleString()}원 저렴`,
   },
 ]
 
@@ -110,8 +110,8 @@ export default function YeopjeunShop({ onClose, currentBalance = 0 }: YeopjeunSh
             </div>
             <div className="text-gray-700">↔</div>
             <div className="text-center flex-1">
-              <p className="text-purple-400 font-black text-lg">🔮 1풀이</p>
-              <p className="text-gray-500 text-xs">사주·궁합</p>
+              <p className="text-purple-400 font-black text-lg">🔮 2냥</p>
+              <p className="text-gray-500 text-xs">사주 전체보기</p>
             </div>
           </div>
         </div>

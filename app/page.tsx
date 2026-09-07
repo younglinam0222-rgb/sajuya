@@ -4,7 +4,8 @@ import { useSession, signIn } from 'next-auth/react'
 import Link from 'next/link'
 import { useState, useEffect, useRef } from 'react'
 import YeopjeunShop from '@/app/components/YeopjeunShop'
-import { servicePriceBadge, servicePriceLine } from '@/lib/priceDisplay'
+import Footer from '@/app/components/Footer'
+import { servicePriceBadge, servicePriceLine, DISPLAY_NYANG_WON } from '@/lib/priceDisplay'
 
 // ─── 타입 ────────────────────────────────────────────
 const CHAR_IMG: Record<string, string> = {
@@ -84,8 +85,8 @@ const MENUS: MenuItem[] = [
   { href: '/gunghap', label: '궁합 해설',   desc: '두 사람의 사주 궁합 분석',     emoji: '💞', badge: servicePriceBadge('gunghap'),   badgeColor: '#F59E0B', paid: true },
   { href: '/daeun',   label: '대운 해설',   desc: '10년 주기 큰 흐름',           emoji: '🌊', badge: servicePriceBadge('daeun'), badgeColor: '#F59E0B', paid: true },
   { href: '/taekil',  label: '택 · 일',    desc: '좋은 날짜 골라줌',            emoji: '📅', badge: servicePriceBadge('taekil'), badgeColor: '#F59E0B', paid: true },
-  { href: '/yearly',  label: '연도별 운세', desc: '특정 연도 운세 분석',          emoji: '📆', badge: '일부무료', badgeColor: '#10B981', paid: false },
-  { href: '/daily',   label: '일일 운세',   desc: '오늘 하루 기운',              emoji: '⭐', badge: servicePriceBadge('daily'),    badgeColor: '#F59E0B', paid: true },
+  { href: '/yearly',  label: '연도별 운세', desc: '특정 연도 운세 분석',          emoji: '📆', badge: servicePriceBadge('yearly'), badgeColor: '#F59E0B', paid: true },
+  { href: '/daily',   label: '일일 운세',   desc: '오늘 하루 기운',              emoji: '⭐', badge: servicePriceBadge('daily'),    badgeColor: '#10B981', paid: false },
 ]
 
 // ─── 캐러셀 컴포넌트 ─────────────────────────────────
@@ -329,7 +330,7 @@ export default function HomePage() {
                 { icon: '🪙', title: `${servicePriceLine('saju')} 사주 풀이`, desc: '타고난 성격, 재물운, 직업운까지 직설로 분석' },
                 { icon: '💞', title: `궁합 · ${servicePriceLine('gunghap')}`, desc: '꼭 커플만 궁합 보란 법 있나요? 자유롭게 조합해보세요' },
                 { icon: '🌊', title: `대운 풀이 · ${servicePriceLine('daeun')}`, desc: '10년 단위 인생의 큰 흐름 해설' },
-                { icon: '📆', title: '연도별 운세', desc: '올해 총운, 월별 운세를 한눈에' },
+                { icon: '📆', title: `연도별 운세 · ${servicePriceLine('yearly')}`, desc: '올해 총운, 월별 운세를 한눈에' },
                 { icon: '⭐', title: `오늘의 운세 · ${servicePriceLine('daily')}`, desc: '오늘 하루 기운을 만세력으로 확인' },
                 { icon: '📅', title: `택일 · ${servicePriceLine('taekil')}`, desc: '이사, 결혼, 개업 등 좋은 날짜 추천' },
               ].map(item => (
@@ -373,12 +374,12 @@ export default function HomePage() {
           <div className="rounded-2xl p-4 bg-[#111118] border border-gray-800 flex items-center justify-between">
             <div className="text-center">
               <p className="text-2xl font-black text-yellow-400">🪙 1냥</p>
-              <p className="text-xs text-gray-500">= 1900원</p>
+              <p className="text-xs text-gray-500">= {DISPLAY_NYANG_WON.toLocaleString('ko-KR')}원</p>
             </div>
             <p className="text-gray-600 text-lg">=</p>
             <div className="text-center">
-              <p className="text-sm font-bold text-gray-300">☕ 커피 한 잔값</p>
-              <p className="text-xs text-gray-500">으로 사주 풀이</p>
+              <p className="text-sm font-bold text-gray-300">표시 환산 기준</p>
+              <p className="text-xs text-gray-500">사주 전체보기 2냥</p>
             </div>
             <button onClick={() => session ? setShowShop(true) : setShowLoginModal(true)}
               className="px-3 py-2 rounded-xl text-xs font-bold text-black"
@@ -388,22 +389,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* 법적 푸터 */}
-        <div className="px-4 mb-6">
-          <div className="border-t border-gray-900 pt-4">
-            <div className="flex flex-wrap gap-x-4 gap-y-1.5 justify-center mb-3">
-              <Link href="/terms" className="text-xs text-gray-600 hover:text-gray-400">이용약관</Link>
-              <Link href="/privacy" className="text-xs text-gray-600 hover:text-gray-400">개인정보처리방침</Link>
-              <Link href="/refund" className="text-xs text-gray-600 hover:text-gray-400">환불정책</Link>
-              <a href="mailto:sajuya.help@gmail.com" className="text-xs text-gray-600 hover:text-gray-400">고객센터</a>
-            </div>
-            <p className="text-center text-[10px] text-gray-700 leading-relaxed">
-              본 서비스는 사주명리학 기반 엔터테인먼트 콘텐츠입니다.<br />
-              의료·법률·재정 판단을 대체하지 않으며, 만 14세 이상 이용 가능합니다.
-            </p>
-            <p className="text-center text-[10px] text-gray-800 mt-1">© 2025 사주궁 · sajuya.help@gmail.com</p>
-          </div>
-        </div>
+        <Footer />
 
       </div>
 

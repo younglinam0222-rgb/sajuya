@@ -3,11 +3,15 @@ import Anthropic from '@anthropic-ai/sdk'
 import { randomUUID } from 'crypto'
 import { CHARACTERS } from '@/lib/characters'
 import { correctToTrueSolarTime } from '@/lib/solarTime'
-import { GROUP_IDS, LAST_GROUP_INDEX } from '@/lib/sajuContract'
+import { SAMPLE_JUDGMENT_GROUPS, PAID_JUDGMENT_GROUPS, FREE_TITLE_IDS, PAID_TITLE_IDS } from '@/lib/sajuContract'
+import { getPaidGeneration, paidTitlesPresent, withPaidGeneration } from '@/lib/sajuAccess'
 import { sanitizeJudgmentTitles, sanitizeStrategy, sanitizeText } from '@/lib/sajuSanitize'
 import { birthPromptLine, resolveBirthFromRequest } from '@/lib/birthInput'
 import { normalizeMaritalStatus, resolveOccupation } from '@/lib/profileOptions'
 import { buildServiceContextPrompt } from '@/lib/serviceContextPrompt'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/app/api/auth/[...nextauth]/route'
+import { createServerSupabase } from '@/lib/supabase'
 import LunarJS from 'lunar-javascript'
 
 // ✅ 수정(재발): 120초로도 부족해서 타임아웃 발생 (Vercel Runtime Timeout Error, 504)
@@ -284,7 +288,9 @@ export async function POST(req: NextRequest) {
       name, year, month, day, hour, gender, characterId, occupation,
       maritalStatus, questionIntent, partnerInfo, longitude, personalQuestion,
       requestId: clientRequestId, retry, calType, isLeapMonth, timeMode, timePeriod, birthPlace,
+      stage: rawStage, shareId,
     } = body
+    const stage = rawStage === 'paid' ? 'paid' : 'sample'
     const requestId = typeof clientRequestId === 'string' && clientRequestId.length > 0 && clientRequestId.length < 80
       ? clientRequestId
       : randomUUID()
@@ -316,6 +322,63 @@ export async function POST(req: NextRequest) {
     setupManse = manse
     if (!process.env.ANTHROPIC_API_KEY) {
       return sseFailure('분석 서버 설정이 없어 풀이를 만들 수 없어요.', requestId, manse)
+    }
+
+    let sampleContext = ''
+    if (stage === 'paid') {
+      const session = await getServerSession(authOptions)
+      const userId = (session?.user as { id?: string } | undefined)?.id
+      if (!userId || typeof shareId !== 'string' || shareId.length < 8) {
+        return sseFailure('전체보기 권한이 없어 나머지 풀이를 만들 수 없어요.', requestId, manse)
+      }
+      const supabase = createServerSupabase()
+      const { data: reading } = await supabase
+        .from('readings')
+        .select('user_id, is_paid, ai_result')
+        .eq('share_id', shareId)
+        .maybeSingle()
+      if (!reading || reading.user_id !== userId || reading.is_paid !== true) {
+        return sseFailure('전체보기 권한이 없어 나머지 풀이를 만들 수 없어요.', requestId, manse)
+      }
+      const paidCount = paidTitlesPresent(reading.ai_result)
+      const paidGen = getPaidGeneration(reading.ai_result)
+      const retryObj = retry && typeof retry === 'object' ? retry as { groups?: unknown; strategy?: unknown; personal?: unknown } : null
+      const isPartialRetry = !!retryObj && (
+        (Array.isArray(retryObj.groups) && retryObj.groups.length > 0)
+        || retryObj.strategy === true
+        || retryObj.personal === true
+      )
+      if (paidCount >= PAID_TITLE_IDS.length && !isPartialRetry) {
+        return sseFailure('이미 전체보기가 생성되어 있어요. 결과 화면을 새로고침해주세요.', requestId, manse)
+      }
+      if (
+        paidGen?.status === 'pending'
+        && typeof paidGen.startedAt === 'number'
+        && Date.now() - paidGen.startedAt < 180_000
+        && paidGen.requestId
+        && paidGen.requestId !== requestId
+      ) {
+        return sseFailure('전체보기를 만드는 중이에요. 잠시 후 새로고침해주세요.', requestId, manse)
+      }
+      await supabase
+        .from('readings')
+        .update({
+          ai_result: withPaidGeneration(reading.ai_result, {
+            status: 'pending',
+            requestId,
+            startedAt: Date.now(),
+          }),
+        })
+        .eq('share_id', shareId)
+        .eq('user_id', userId)
+      try {
+        const parsed = typeof reading.ai_result === 'string' ? JSON.parse(reading.ai_result) : reading.ai_result
+        const existing = Array.isArray(parsed?.titles) ? parsed.titles : []
+        const freeOnly = existing.filter((t: { id?: unknown }) => FREE_TITLE_IDS.includes(String(t?.id ?? '') as typeof FREE_TITLE_IDS[number]))
+        if (freeOnly.length) {
+          sampleContext = `\n[이미 작성된 무료 샘플 3개 — 같은 입력·만세력·캐릭터를 유지하고, 아래와 중복되거나 모순되지 않게 이어서 써라]\n${JSON.stringify(freeOnly.map((t: { id?: unknown; category?: unknown; title?: unknown; content?: unknown }) => ({ id: t.id, category: t.category, title: t.title, content: t.content })))}\n`
+        }
+      } catch { /* ignore parse */ }
     }
 
     // 현재 나이 계산
@@ -370,6 +433,7 @@ ${nextYearSeun.year}년(내년): 연간지 ${nextYearSeun.ganzhi} (십성: ${nex
 사주 기운: ${elementDesc}
 핵심 기운(일간): ${manse.dayPillar.stem}(${manse.dayPillar.stemKr}) — ${manse.dayPillar.stemElement} 기운
 ${seunInfo}
+${sampleContext}
 [시기 언급 규칙 — 반드시 지킬 것]
 "올해", "내년", "조만간" 같은 막연한 말 대신, 위에 계산된 실제 연도와 상반기/하반기를 구체적으로 짚어서 말해라.
 예: "2027년 상반기쯤 큰 기회가 올 가능성이 높아" (○) / "언젠가 좋은 일이 생길 거야" (✗ 너무 막연함)
@@ -431,15 +495,10 @@ ${lifecycleRows}
 `
 
     const FREE_IDS = [1, 2, 3]
-    const idGroups = GROUP_IDS.map(g => [...g])
-    const categoryGroups = [
-      ['성격', '재물운'],
-      ['애정운', '직업운'],
-      ['건강운', '인간관계'],
-      ['대운', '인생흐름'],
-      ['어울리는 지역', '올해 총운'],
-      ['위기관리', '결혼운'],
-    ]
+    const judgmentGroups = stage === 'paid' ? PAID_JUDGMENT_GROUPS : SAMPLE_JUDGMENT_GROUPS
+    const idGroups = judgmentGroups.map(g => [...g.ids])
+    const categoryGroups = judgmentGroups.map(g => [...g.categories])
+    const lastGi = idGroups.length - 1
     const toolPool = [
       '오행 균형(목·화·토·금·수 과다·부족)',
       '십성 구조(비겁·식상·재성·관성·인성의 조합과 힘)',
@@ -459,7 +518,7 @@ ${lifecycleRows}
         properties: {
           titles: {
             type: 'array' as const,
-            minItems: 2,
+            minItems: 1,
             maxItems: 2,
             items: {
               type: 'object' as const,
@@ -541,10 +600,10 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
     }))
     const retryAll = !retry || typeof retry !== 'object'
     const retryGroups: number[] = retryAll
-      ? GROUP_IDS.map((_, i) => i)
-      : (Array.isArray(retry.groups) ? retry.groups.filter((g: unknown) => typeof g === 'number' && g >= 0 && g <= LAST_GROUP_INDEX) : [])
-    const retryStrategy = retryAll || retry.strategy === true
-    const retryPersonal = (retryAll ? !!trimmedPersonalQ : retry.personal === true) && !!trimmedPersonalQ
+      ? idGroups.map((_, i) => i)
+      : (Array.isArray(retry.groups) ? retry.groups.filter((g: unknown) => typeof g === 'number' && g >= 0 && g <= lastGi) : [])
+    const retryStrategy = stage === 'paid' && (retryAll || retry.strategy === true)
+    const retryPersonal = stage === 'paid' && (retryAll ? !!trimmedPersonalQ : retry.personal === true) && !!trimmedPersonalQ
 
     type ErrorKind = 'fatal' | 'transient' | 'validation' | 'truncation'
 

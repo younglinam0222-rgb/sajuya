@@ -1,18 +1,19 @@
 'use client'
-import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useEffect, useRef, useState } from 'react'
+import { useParams } from 'next/navigation'
 import { useSession, signIn } from 'next-auth/react'
 import Link from 'next/link'
-import { UNLOCK_PRICE } from '@/lib/pricing'
+import { sajuFullViewButtonLabel, sajuFullViewHint } from '@/lib/priceDisplay'
 import PersonalQuestionCard from '@/components/PersonalQuestionCard'
 import { sanitizeText } from '@/lib/sajuSanitize'
 import { appendSseChunk, parseSseFrame } from '@/lib/sajuSse'
-import { normalizePersonalAnswer, PEAK_GUIDE_LABEL, readingPersonalView } from '@/lib/sajuContract'
+import { normalizePersonalAnswer, PEAK_GUIDE_LABEL, readingPersonalView, FREE_TITLE_IDS } from '@/lib/sajuContract'
 import { KOREA_REGIONS } from '@/lib/solarTime'
 import { ensureKakaoReady, getKakaoDiagnostics, KAKAO_READY_MESSAGE } from '@/lib/kakaoShare'
+import type { AccessLevel, PaidGenerationState } from '@/lib/sajuAccess'
 
 interface Section { id: string; emoji: string; title: string; body: string }
-interface SajuTitle { id: string; category?: string; title: string; teaser: string; is_free: boolean; content: string }
+interface SajuTitle { id: string; category?: string; title: string; teaser: string; is_free: boolean; content: string; locked?: boolean }
 
 const CHARACTER_IMG: Record<string, string> = {
   baekhalma: '/characters/baekhalma.png',
@@ -59,7 +60,6 @@ const elementBg    = (el: string) => ({ '木':'rgba(34,197,94,.12)','火':'rgba(
 
 export default function ResultPage() {
   const params  = useParams()
-  const router  = useRouter()
   const shareId = params.shareId as string
   const { status: authStatus } = useSession()
 
@@ -73,58 +73,77 @@ export default function ResultPage() {
   const [formInfo,    setFormInfo]    = useState<any>(null)
   const [sajuData,    setSajuData]    = useState<any>(null)
   const [isPaid,      setIsPaid]      = useState(false)
+  const [access,      setAccess]      = useState<AccessLevel>('public')
   const [copied,      setCopied]      = useState(false)
   const [shareError,  setShareError]  = useState('')
   const [sharing,     setSharing]     = useState(false)
-  const [personalAnswer, setPersonalAnswer] = useState<{ question: string; answer: string } | null>(null)
+  const [personalAnswer, setPersonalAnswer] = useState<{ question: string; answer: string; locked?: boolean } | null>(null)
   const [isCompleteResult, setIsCompleteResult] = useState(true)
   const [personalRetrying, setPersonalRetrying] = useState(false)
   const [personalRetryError, setPersonalRetryError] = useState('')
+  const [unlockError, setUnlockError] = useState('')
+  const [paidBusy, setPaidBusy] = useState(false)
+  const [paidGeneration, setPaidGeneration] = useState<PaidGenerationState | null>(null)
+  const paidBusyRef = useRef(false)
+  const autoPaidRef = useRef(false)
 
   useEffect(() => {
-    if (authStatus === 'authenticated') fetchReading()
+    if (authStatus === 'loading') return
+    fetchReading()
   }, [shareId, authStatus])
+
+  const applyReadingPayload = (data: any) => {
+    setCharacterId(data.character_id ?? 'baekhalma')
+    setIsPaid(data.is_paid === true)
+    setAccess(data.access ?? (data.is_paid ? 'owner_paid' : 'public'))
+    setPaidGeneration(data.paid_generation ?? null)
+
+    let sajuParsed: any = null
+    if (data.saju_data) {
+      sajuParsed = typeof data.saju_data === 'string'
+        ? JSON.parse(data.saju_data)
+        : data.saju_data
+      setFormInfo(sajuParsed.form ?? null)
+      setSajuData(sajuParsed.saju ?? null)
+    }
+
+    if (data.ai_result) {
+      try {
+        let clean = (typeof data.ai_result === 'string' ? data.ai_result : JSON.stringify(data.ai_result))
+          .trim()
+          .replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim()
+        const s = clean.indexOf('{'), e = clean.lastIndexOf('}')
+        if (s !== -1 && e !== -1) clean = clean.slice(s, e + 1)
+        const parsed = JSON.parse(clean)
+        if (parsed.titles)   { setTitles(parsed.titles); setStrategy(parsed.strategy ?? null) }
+        const view = readingPersonalView(parsed, sajuParsed)
+        const lockedPersonal = parsed.personalAnswer?.locked === true
+        if (view.requested || lockedPersonal) {
+          setPersonalAnswer({
+            question: view.question || parsed.personalAnswer?.question || '',
+            answer: lockedPersonal ? '' : view.answer,
+            locked: lockedPersonal,
+          })
+        } else setPersonalAnswer(null)
+        if (parsed.sections) { setSections(parsed.sections) }
+        if (parsed._meta && parsed._meta.isComplete === false) setIsCompleteResult(false)
+        else setIsCompleteResult(true)
+      } catch {
+        setError('풀이 데이터를 불러오는 중 오류가 발생했습니다.')
+      }
+    } else if (sajuParsed) {
+      const view = readingPersonalView(null, sajuParsed)
+      if (view.requested) setPersonalAnswer({ question: view.question, answer: view.answer })
+    }
+  }
 
   const fetchReading = async () => {
     try {
-      // ✅ 수정: /api/result → /api/readings
-      const res = await fetch(`/api/readings/${shareId}`)
+      const url = authStatus === 'authenticated' ? `/api/readings/${shareId}` : `/api/result/${shareId}`
+      const res = await fetch(url)
       if (!res.ok) throw new Error('not found')
       const data = await res.json()
-
-      setCharacterId(data.character_id ?? 'baekhalma')
-      setIsPaid(data.is_paid ?? false)
-
-      let sajuParsed: any = null
-      if (data.saju_data) {
-        sajuParsed = typeof data.saju_data === 'string'
-          ? JSON.parse(data.saju_data)
-          : data.saju_data
-        setFormInfo(sajuParsed.form ?? null)
-        setSajuData(sajuParsed.saju ?? null)
-      }
-
-      if (data.ai_result) {
-        try {
-          let clean = (typeof data.ai_result === 'string' ? data.ai_result : JSON.stringify(data.ai_result))
-            .trim()
-            .replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim()
-          const s = clean.indexOf('{'), e = clean.lastIndexOf('}')
-          if (s !== -1 && e !== -1) clean = clean.slice(s, e + 1)
-          const parsed = JSON.parse(clean)
-          if (parsed.titles)   { setTitles(parsed.titles); setStrategy(parsed.strategy ?? null) }
-          const view = readingPersonalView(parsed, sajuParsed)
-          if (view.requested) setPersonalAnswer({ question: view.question, answer: view.answer })
-          else setPersonalAnswer(null)
-          if (parsed.sections) { setSections(parsed.sections) }
-          if (parsed._meta && parsed._meta.isComplete === false) setIsCompleteResult(false)
-        } catch {
-          setError('풀이 데이터를 불러오는 중 오류가 발생했습니다.')
-        }
-      } else if (sajuParsed) {
-        const view = readingPersonalView(null, sajuParsed)
-        if (view.requested) setPersonalAnswer({ question: view.question, answer: view.answer })
-      }
+      applyReadingPayload(data)
     } catch {
       setError('저장된 풀이를 찾을 수 없습니다.')
     } finally {
@@ -134,8 +153,8 @@ export default function ResultPage() {
 
   const retryPersonalAnswer = async () => {
     const question = (personalAnswer?.question || formInfo?.personalQuestion || '').trim()
-    if (!question || !formInfo) {
-      setPersonalRetryError('질문 정보가 없어 다시 생성할 수 없어요.')
+    if (!isPaid || !question || !formInfo) {
+      setPersonalRetryError('전체보기 권한이 없어 답변을 다시 생성할 수 없어요.')
       return
     }
     setPersonalRetrying(true)
@@ -151,6 +170,8 @@ export default function ResultPage() {
           occupation: formInfo.occupation || '일반인',
           characterId,
           longitude: selectedRegion?.longitude,
+          shareId,
+          stage: 'paid',
           retry: { groups: [], strategy: false, personal: true },
         }),
       })
@@ -200,6 +221,172 @@ export default function ResultPage() {
       setPersonalRetrying(false)
     }
   }
+
+  const savePaidSnapshot = async (
+    nextTitles: SajuTitle[],
+    nextStrategy: any,
+    nextPersonal: { question: string; answer: string } | null,
+    status: 'completed' | 'failed',
+    paidError?: string,
+  ) => {
+    if (!formInfo) return
+    await fetch('/api/readings/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        shareId,
+        characterId,
+        occupationId: formInfo.occupation || 'general',
+        sajuData: { form: formInfo, saju: sajuData },
+        aiResult: JSON.stringify({
+          titles: nextTitles,
+          strategy: nextStrategy,
+          personalAnswer: nextPersonal,
+          disclaimer: '본 풀이는 엔터테인먼트 및 참고 목적이며, 중요한 결정은 전문가와 상담하세요.',
+          _meta: {
+            paidGeneration: {
+              status,
+              error: paidError ?? null,
+              updatedAt: Date.now(),
+            },
+          },
+        }),
+        isComplete: status === 'completed',
+      }),
+    })
+  }
+
+  const generatePaid = async (retry?: { groups: number[]; strategy: boolean; personal: boolean }) => {
+    if (!isPaid && access !== 'owner_paid') return
+    if (!formInfo) return
+    if (paidBusyRef.current) return
+    paidBusyRef.current = true
+    autoPaidRef.current = true
+    setPaidBusy(true)
+    setUnlockError('')
+    const requestId = crypto.randomUUID()
+    const titlesById = new Map(titles.filter(t => !t.locked).map(t => [String(t.id), t]))
+    let nextStrategy = strategy
+    let nextPersonal = personalAnswer && !personalAnswer.locked
+      ? { question: personalAnswer.question, answer: personalAnswer.answer }
+      : (formInfo.personalQuestion ? { question: String(formInfo.personalQuestion), answer: '' } : null)
+    try {
+      const selectedRegion = KOREA_REGIONS.find(r => r.name === formInfo.birthPlace)
+      const res = await fetch('/api/saju', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...formInfo,
+          personalQuestion: formInfo.personalQuestion || nextPersonal?.question || '',
+          occupation: formInfo.occupation || '일반인',
+          characterId,
+          longitude: selectedRegion?.longitude,
+          shareId,
+          stage: 'paid',
+          requestId,
+          retry,
+        }),
+      })
+      if (!res.ok || !res.body) throw new Error(res.status === 403 ? '전체보기 권한이 없어요.' : '전체보기 생성 요청에 실패했어요.')
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let failed = false
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const stepped = appendSseChunk(buffer, decoder.decode(value, { stream: true }))
+        buffer = stepped.buffer
+        for (const frame of stepped.frames) {
+          const parsed = parseSseFrame(frame)
+          if (parsed.kind !== 'event') continue
+          if (parsed.data.type === 'error') {
+            failed = true
+            setUnlockError(typeof parsed.data.message === 'string' ? parsed.data.message : '일부 풀이 생성에 실패했어요.')
+          }
+          if (parsed.data.type === 'group' && Array.isArray(parsed.data.titles)) {
+            for (const title of parsed.data.titles as SajuTitle[]) {
+              if (title?.id != null) titlesById.set(String(title.id), { ...title, locked: false })
+            }
+            setTitles([...titlesById.values()])
+          }
+          if (parsed.data.type === 'strategy') {
+            nextStrategy = parsed.data.data
+            setStrategy(nextStrategy)
+          }
+          if (parsed.data.type === 'personal' || parsed.data.type === 'personalAnswer') {
+            nextPersonal = normalizePersonalAnswer(parsed.data, nextPersonal?.question || formInfo.personalQuestion || '')
+            if (nextPersonal) setPersonalAnswer(nextPersonal)
+          }
+        }
+      }
+      const nextTitles = [...titlesById.values()]
+      const paidReady = nextTitles.filter(t => !FREE_TITLE_IDS.includes(String(t.id) as typeof FREE_TITLE_IDS[number]) && (t.content || '').length >= 50).length >= 9
+      if (failed || !paidReady) {
+        await savePaidSnapshot(nextTitles, nextStrategy, nextPersonal, 'failed', '전체보기 생성 실패')
+        setPaidGeneration({ status: 'failed' })
+      } else {
+        await savePaidSnapshot(nextTitles, nextStrategy, nextPersonal, 'completed')
+        setPaidGeneration({ status: 'completed' })
+        await fetchReading()
+      }
+    } catch (e) {
+      setUnlockError(e instanceof Error ? e.message : '전체보기 생성에 실패했어요.')
+      setPaidGeneration({ status: 'failed' })
+      await savePaidSnapshot([...titlesById.values()], nextStrategy, nextPersonal, 'failed', e instanceof Error ? e.message : 'failed')
+    } finally {
+      paidBusyRef.current = false
+      setPaidBusy(false)
+    }
+  }
+
+  const handleUnlock = async () => {
+    if (paidBusyRef.current) return
+    paidBusyRef.current = true
+    setPaidBusy(true)
+    setUnlockError('')
+    try {
+      const res = await fetch(`/api/readings/${shareId}/unlock`, { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setUnlockError(typeof data.error === 'string' ? data.error : '전체보기를 구매할 수 없어요.')
+        return
+      }
+      if (data.ok !== true) {
+        setUnlockError('전체보기를 구매할 수 없어요.')
+        return
+      }
+      setIsPaid(true)
+      setAccess('owner_paid')
+      paidBusyRef.current = false
+      await generatePaid()
+    } catch {
+      setUnlockError('전체보기 구매 요청에 실패했어요.')
+    } finally {
+      if (paidBusyRef.current) {
+        paidBusyRef.current = false
+        setPaidBusy(false)
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (loading || error || !formInfo) return
+    if (access !== 'owner_paid') return
+    const paidReady = titles.filter(t =>
+      !(FREE_TITLE_IDS as readonly string[]).includes(String(t.id)) && (t.content || '').trim().length >= 50
+    ).length >= 9
+    const question = (personalAnswer?.question || formInfo.personalQuestion || '').trim()
+    const needPersonal = !!question && !(personalAnswer?.answer || '').trim()
+    if (paidReady && strategy && !needPersonal) return
+    if (autoPaidRef.current || paidBusyRef.current) return
+    autoPaidRef.current = true
+    if (paidReady) {
+      void generatePaid({ groups: [], strategy: !strategy, personal: needPersonal })
+      return
+    }
+    void generatePaid()
+  }, [loading, error, access, formInfo, titles, strategy])
 
   const charImg   = CHARACTER_IMG[characterId]   ?? '/characters/baekhalma.png'
   const charColor = CHARACTER_COLOR[characterId] ?? '#8B5CF6'
@@ -258,43 +445,11 @@ export default function ResultPage() {
     }
   }
 
-  // ✅ 수정: 결제(Toss) 보류 — 로그인 여부만으로 전체 판결 공개 여부를 결정.
-  // 데이터 로딩/에러 체크보다 먼저 와야 함 (비로그인 상태에선 fetchReading 자체를 안 돌림)
+  // 데이터 로딩/에러 체크보다 먼저 와야 함
   if (authStatus === 'loading') {
     return (
       <div className="bg-[#0a0a0a] min-h-screen flex items-center justify-center text-gray-500 text-sm">
         불러오는 중...
-      </div>
-    )
-  }
-
-  if (authStatus === 'unauthenticated') {
-    return (
-      <div className="bg-[#0a0a0a] min-h-screen flex flex-col items-center justify-center text-white px-6 text-center max-w-[430px] mx-auto">
-        <div className="text-5xl mb-5">🔒</div>
-        <div className="text-xl font-black mb-2">로그인하고 결과 확인하기</div>
-        <div className="text-sm text-gray-500 mb-8 leading-relaxed">
-          사주 풀이 결과는 로그인 후 볼 수 있어요<br />
-          <span className="text-yellow-400 font-bold">가입 즉시 🪙 1엽전 지급!</span>
-        </div>
-        <div className="w-full max-w-xs space-y-3">
-          <button onClick={() => signIn('kakao', { callbackUrl: `/result/${shareId}` })}
-            className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
-            style={{ background: '#fee500', color: '#3c1e1e' }}>
-            <span className="text-xl">💬</span> 카카오로 시작하기
-          </button>
-          <button onClick={() => signIn('google', { callbackUrl: `/result/${shareId}` })}
-            className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
-            style={{ background: '#fff', color: '#333', border: '1px solid #e5e7eb' }}>
-            <span style={{ fontSize: '18px', fontWeight: 900, color: '#4285F4' }}>G</span> 구글로 시작하기
-          </button>
-          <button onClick={() => signIn('naver', { callbackUrl: `/result/${shareId}` })}
-            className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
-            style={{ background: '#03c75a', color: '#fff' }}>
-            <span className="text-xl font-black">N</span> 네이버로 시작하기
-          </button>
-        </div>
-        <Link href="/" className="mt-6 text-xs text-gray-600">← 홈으로 돌아가기</Link>
       </div>
     )
   }
@@ -328,9 +483,9 @@ export default function ResultPage() {
     { label: '연주', pillar: sajuData.yearPillar },
   ] : []
 
-  // ✅ 수정: 결제(Toss) 보류 — 로그인 게이트를 이미 통과했으므로 전체 판결을 그냥 다 공개
-  const freeTitles = titles
-  const paidTitles: SajuTitle[] = []
+  // 무료 샘플 3개만 본문 공개. 유료 본문은 서버가 내려주지 않는다.
+  const freeTitles = titles.filter(t => (FREE_TITLE_IDS as readonly string[]).includes(String(t.id)) && !t.locked)
+  const paidTitles = titles.filter(t => !(FREE_TITLE_IDS as readonly string[]).includes(String(t.id)))
 
   return (
     <div className="bg-[#0a0a0a] min-h-screen text-white max-w-[430px] mx-auto pb-8">
@@ -413,12 +568,13 @@ export default function ResultPage() {
       )}
 
       <PersonalQuestionCard
-        question={personalAnswer?.question || formInfo?.personalQuestion || ''}
-        answer={personalAnswer?.answer || ''}
+        question={personalAnswer?.question || (access === 'owner_free' || access === 'owner_paid' ? formInfo?.personalQuestion : '') || ''}
+        answer={personalAnswer?.locked ? '' : (personalAnswer?.answer || '')}
+        locked={access !== 'owner_paid' && !!(personalAnswer?.question || formInfo?.personalQuestion)}
         charColor={charColor}
         retrying={personalRetrying}
         retryError={personalRetryError}
-        onRetry={retryPersonalAnswer}
+        onRetry={isPaid ? retryPersonalAnswer : undefined}
       />
 
       {/* 새 포맷: titles */}
@@ -426,7 +582,7 @@ export default function ResultPage() {
         <div className="px-4 pt-4">
 
           {/* 무료 판결 */}
-          <div className="text-xs font-bold text-[#555] mb-3">✦ 무료 판결 {freeTitles.length}가지</div>
+          <div className="text-xs font-bold text-[#555] mb-3">✦ 무료 풀이 3개</div>
           <div className="space-y-3 mb-4">
             {freeTitles.map((t, i) => (
               <div key={t.id} className="rounded-2xl overflow-hidden border" style={{ borderColor: `${charColor}40`, background: '#111' }}>
@@ -497,18 +653,15 @@ export default function ResultPage() {
                   </div>
                 </>
               ) : (
-                // 미결제 → 잠금
                 <>
                   <div className="text-xs font-bold text-[#555] mb-3">🔒 잠긴 판결 {paidTitles.length}개</div>
                   <div className="space-y-2">
                     {paidTitles.map((t, i) => (
                       <div key={t.id} className="rounded-2xl overflow-hidden border border-gray-800 bg-[#111]">
                         <div className="p-4">
-                          <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center justify-between mb-1">
                             <div className="flex items-center gap-1.5">
-                              <span className="text-xs font-bold px-2 py-1 rounded-full bg-gray-800 text-gray-500">
-                                {i + freeTitles.length + 1}
-                              </span>
+                              <span className="text-xs font-bold px-2 py-1 rounded-full bg-gray-800 text-gray-500">잠김</span>
                               {t.category && (
                                 <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-gray-800 text-gray-500">
                                   {t.category}
@@ -517,39 +670,52 @@ export default function ResultPage() {
                             </div>
                             <span className="text-gray-600 text-lg">🔒</span>
                           </div>
-                          <p className="font-bold text-base leading-snug text-white">{t.title}</p>
-                          {t.teaser && <p className="text-xs text-gray-600 mt-1">{t.teaser}</p>}
-                          <div className="mt-3 h-14 rounded-xl overflow-hidden relative">
-                            <div className="text-gray-600 text-sm leading-relaxed blur-sm select-none">
-                              {t.content?.slice(0, 80) ?? '풀이 내용이 잠겨있어요.'}
-                            </div>
-                            <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#111]" />
-                          </div>
+                          <p className="text-sm text-gray-500">전체보기 후 이 카테고리 풀이를 확인할 수 있어요</p>
                         </div>
                       </div>
                     ))}
                   </div>
-                  <button
-                    onClick={() => {
-                      if (authStatus !== 'authenticated') {
-                        signIn(undefined, { callbackUrl: `/pay/${shareId}` })
-                      } else {
-                        router.push(`/pay/${shareId}`)
-                      }
-                    }}
-                    className="w-full mt-3 py-3.5 rounded-2xl font-bold text-sm text-white"
-                    style={{ background: `linear-gradient(135deg, ${charColor}, ${charColor}bb)` }}>
-                    {authStatus === 'authenticated'
-                      ? `🔓 전체 ${paidTitles.length}개 열기 — ${UNLOCK_PRICE.toLocaleString()}원`
-                      : `🔒 로그인하고 전체 ${paidTitles.length}개 열기`}
-                  </button>
+                  {access === 'owner_free' && (
+                    <div className="mt-3">
+                      <button
+                        type="button"
+                        disabled={paidBusy}
+                        onClick={() => {
+                          if (authStatus !== 'authenticated') {
+                            signIn(undefined, { callbackUrl: `/result/${shareId}` })
+                            return
+                          }
+                          void handleUnlock()
+                        }}
+                        className="w-full py-3.5 rounded-2xl font-bold text-sm text-white disabled:opacity-60"
+                        style={{ background: `linear-gradient(135deg, ${charColor}, ${charColor}bb)` }}>
+                        {paidBusy ? '전체보기를 준비하는 중...' : sajuFullViewButtonLabel()}
+                      </button>
+                      <p className="text-center text-xs text-gray-500 mt-2">{sajuFullViewHint()}</p>
+                      {unlockError && <p className="text-center text-xs text-red-300 mt-2">{unlockError}</p>}
+                    </div>
+                  )}
                 </>
               )}
             </div>
           )}
 
+          {isPaid && (paidBusy || paidGeneration?.status === 'pending' || paidGeneration?.status === 'failed') && (
+            <div className="mb-4 px-3 py-3 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 text-xs space-y-2">
+              {paidBusy || paidGeneration?.status === 'pending'
+                ? <p>나머지 풀이 9개와 족집게 답변을 만들고 있어요. 새로고침해도 이어서 확인할 수 있어요.</p>
+                : <p>전체보기 생성에 실패했어요. 이미 공개된 무료 풀이는 그대로 두고, 재시도해도 추가로 차감하지 않아요.</p>}
+              {paidGeneration?.status === 'failed' && !paidBusy && (
+                <button type="button" onClick={() => { autoPaidRef.current = true; void generatePaid() }} className="w-full py-2 rounded-xl bg-yellow-500/20 font-bold">
+                  전체보기 다시 생성
+                </button>
+              )}
+              {unlockError && <p className="text-red-300">{unlockError}</p>}
+            </div>
+          )}
+
           {/* 전략 섹션 */}
-          {strategy && (
+          {isPaid && strategy && (
             <div className="space-y-3 mb-4">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-lg">⚔️</span>
@@ -633,7 +799,7 @@ export default function ResultPage() {
       )}
 
       {/* 구 포맷: sections */}
-      {sections.length > 0 && (
+      {isPaid && sections.length > 0 && (
         <div className="px-4 pt-4">
           <div className="text-xs font-bold text-[#555] mb-3">✦ 저장된 풀이</div>
           {sections.map((sec, idx) => {

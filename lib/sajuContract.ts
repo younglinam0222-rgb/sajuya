@@ -7,10 +7,40 @@ export const GROUP_IDS = [
   [11, 12],
 ] as const
 
+export const FREE_TITLE_IDS = ['1', '2', '3'] as const
+export const PAID_TITLE_IDS = ['4', '5', '6', '7', '8', '9', '10', '11', '12'] as const
+
+export const PAID_TITLE_SLOTS = [
+  { id: '4', category: '직업운' },
+  { id: '5', category: '건강운' },
+  { id: '6', category: '인간관계' },
+  { id: '7', category: '대운' },
+  { id: '8', category: '인생흐름' },
+  { id: '9', category: '어울리는 지역' },
+  { id: '10', category: '올해 총운' },
+  { id: '11', category: '위기관리' },
+  { id: '12', category: '결혼운' },
+] as const
+
+export const SAMPLE_JUDGMENT_GROUPS = [
+  { ids: [1, 2], categories: ['성격', '재물운'] },
+  { ids: [3], categories: ['애정운'] },
+] as const
+
+export const PAID_JUDGMENT_GROUPS = [
+  { ids: [4], categories: ['직업운'] },
+  { ids: [5, 6], categories: ['건강운', '인간관계'] },
+  { ids: [7, 8], categories: ['대운', '인생흐름'] },
+  { ids: [9, 10], categories: ['어울리는 지역', '올해 총운'] },
+  { ids: [11, 12], categories: ['위기관리', '결혼운'] },
+] as const
+
 export const REQUIRED_TITLE_IDS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'] as const
 
 export const REQUIRED_GROUP_INDEXES = [0, 1, 2, 3, 4, 5] as const
 export const LAST_GROUP_INDEX = 5
+export const SAMPLE_LAST_GROUP_INDEX = SAMPLE_JUDGMENT_GROUPS.length - 1
+export const PAID_LAST_GROUP_INDEX = PAID_JUDGMENT_GROUPS.length - 1
 
 export function groupIndexForId(id: string | number): number | null {
   const n = Number(id)
@@ -143,6 +173,31 @@ export type CompletionReport = {
   strategyOk: boolean
   personalOk: boolean
   receivedGroupIndexes: number[]
+}
+
+export function assessSampleCompletion(input: {
+  titles: unknown[]
+  receivedGroupIndexes: Iterable<number>
+  gotDone: boolean
+}): CompletionReport {
+  const byId = new Map<string, unknown>()
+  for (const item of input.titles) {
+    if (item && typeof item === 'object' && 'id' in item) {
+      byId.set(String((item as { id: unknown }).id), item)
+    }
+  }
+  const missingIds = FREE_TITLE_IDS.filter(id => !isValidTitle(byId.get(id)))
+  const received = [...new Set(input.receivedGroupIndexes)].filter(g => g >= 0 && g <= 1).sort((a, b) => a - b)
+  const missingGroups = [0, 1].filter(g => !received.includes(g))
+  return {
+    complete: input.gotDone && missingIds.length === 0 && missingGroups.length === 0,
+    gotDone: input.gotDone,
+    missingIds: [...missingIds],
+    missingGroups,
+    strategyOk: true,
+    personalOk: true,
+    receivedGroupIndexes: received,
+  }
 }
 
 export function assessCompletion(input: {

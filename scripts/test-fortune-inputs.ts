@@ -63,10 +63,12 @@ const daeunPrompt = buildServiceContextPrompt({ service: 'daeun', maritalStatus:
 ok('daily and daeun marital copy are not identical', dailyPrompt !== daeunPrompt)
 
 ok('price saju 2냥', servicePriceBadge('saju') === '2냥' && SERVICE_PRICE_NYANG.saju === 2)
-ok('price gunghap 2냥', SERVICE_PRICE_NYANG.gunghap === 2)
-ok('price daeun 2냥', SERVICE_PRICE_NYANG.daeun === 2)
+ok('price gunghap 1냥', SERVICE_PRICE_NYANG.gunghap === 1)
+ok('price daeun 1냥', SERVICE_PRICE_NYANG.daeun === 1)
 ok('price taekil 1냥', SERVICE_PRICE_NYANG.taekil === 1)
-ok('price daily 1냥', SERVICE_PRICE_NYANG.daily === 1)
-ok('display conversion 990', formatNyangWon(2) === '2냥 (1,980원)')
+ok('price yearly 1냥', SERVICE_PRICE_NYANG.yearly === 1)
+ok('price daily 1냥 extra', SERVICE_PRICE_NYANG.daily === 1)
+ok('daily badge is free first', servicePriceBadge('daily') === '하루 1회 무료')
+ok('display conversion 1900', formatNyangWon(2) === '2냥 (3,800원)')
 
 console.log('all fortune-input tests passed')

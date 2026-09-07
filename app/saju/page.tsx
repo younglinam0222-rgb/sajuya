@@ -10,7 +10,8 @@ import OccupationField from '@/app/components/OccupationField'
 import { KOREA_REGIONS } from '@/lib/solarTime'
 import { sanitizeText } from '@/lib/sajuSanitize'
 import { appendSseChunk, parseSseFrame } from '@/lib/sajuSse'
-import { assessCompletion, GROUP_IDS, LAST_GROUP_INDEX, normalizePersonalAnswer, PEAK_GUIDE_LABEL, sortTitlesById } from '@/lib/sajuContract'
+import { assessSampleCompletion, SAMPLE_LAST_GROUP_INDEX, FREE_TITLE_IDS, normalizePersonalAnswer, PEAK_GUIDE_LABEL, sortTitlesById } from '@/lib/sajuContract'
+import { sajuFullViewHint } from '@/lib/priceDisplay'
 
 interface SajuTitle {
   id: string; category?: string; title: string; teaser: string; is_free: boolean; content: string
@@ -315,22 +316,17 @@ export default function SajuPage() {
 
   const mergeTitleList = (): SajuTitle[] => sortTitlesById([...titlesByIdRef.current.values()])
 
-  const currentAssessment = () => assessCompletion({
+  const currentAssessment = () => assessSampleCompletion({
     titles: mergeTitleList(),
-    strategy: finalResultRef.current.strategy,
-    personal: finalResultRef.current.personalAnswer,
-    requestedPersonal: requestedPersonalRef.current,
     receivedGroupIndexes: receivedGroupsRef.current,
     gotDone: gotDoneRef.current,
   })
 
-  const hintFromReport = (report: ReturnType<typeof assessCompletion>) => {
+  const hintFromReport = (report: ReturnType<typeof assessSampleCompletion>) => {
     const hints: string[] = []
     if (!report.gotDone) hints.push('서버 완료 신호([DONE]) 없음')
     if (report.missingGroups.length) hints.push(`그룹 ${report.missingGroups.map(g => g + 1).join(', ')}`)
     if (report.missingIds.length) hints.push(`판결문 ${report.missingIds.join(', ')}번`)
-    if (!report.strategyOk) hints.push('인생 전략')
-    if (!report.personalOk) hints.push('족집게 질문')
     return hints
   }
 
@@ -486,9 +482,9 @@ export default function SajuPage() {
           groups: [...new Set([
             ...reportNow.missingGroups,
             ...failedParts.filter(p => p.part === 'group' && typeof p.groupIndex === 'number').map(p => p.groupIndex as number),
-          ])].filter(g => g >= 0 && g <= LAST_GROUP_INDEX),
-          strategy: !reportNow.strategyOk,
-          personal: requestedPersonalRef.current && !reportNow.personalOk,
+          ])].filter(g => g >= 0 && g <= SAMPLE_LAST_GROUP_INDEX),
+          strategy: false,
+          personal: false,
         }
       : undefined
 
@@ -508,6 +504,7 @@ export default function SajuPage() {
           longitude: selectedRegion?.longitude,
           requestId,
           retry,
+          stage: 'sample',
         }),
       })
       if (requestIdRef.current !== requestId) return
@@ -564,7 +561,7 @@ export default function SajuPage() {
           return
         }
         if (parsed.type === 'group') {
-          if (typeof parsed.groupIndex !== 'number' || parsed.groupIndex < 0 || parsed.groupIndex > LAST_GROUP_INDEX) {
+          if (typeof parsed.groupIndex !== 'number' || parsed.groupIndex < 0 || parsed.groupIndex > SAMPLE_LAST_GROUP_INDEX) {
             clientLog('invalid_group_index', { groupIndex: parsed.groupIndex ?? null })
             return
           }
@@ -816,45 +813,26 @@ export default function SajuPage() {
             </div>
           )}
 
-          {(result.personalAnswer || form.personalQuestion.trim()) && (
+          {(form.personalQuestion.trim()) && (
             <div className="mb-4 rounded-2xl p-4 border-2" style={{ background: `${selectedChar.color}18`, borderColor: selectedChar.color }}>
               <div className="flex items-center gap-2 mb-2">
                 <span>🔮</span>
                 <span className="font-bold text-sm" style={{ color: selectedChar.color }}>족집게 질문</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-800 text-gray-400">잠김</span>
               </div>
               <p className="text-sm text-white font-medium mb-3">
-                “{sanitizeText(result.personalAnswer?.question || form.personalQuestion)}”
+                “{sanitizeText(form.personalQuestion)}”
               </p>
-              {result.personalAnswer?.answer ? (
-                <FormattedStrategyText text={result.personalAnswer.answer} highlightColor={selectedChar.color} />
-              ) : (
-                <div className="space-y-3">
-                  <p className="text-sm text-gray-400">
-                    {generating
-                      ? '질문에 대한 답변을 작성하는 중...'
-                      : failedParts.some(p => p.part === 'personal')
-                        ? '족집게 답변 생성에 실패했어요.'
-                        : '족집게 답변이 아직 도착하지 않았어요.'}
-                  </p>
-                  {!generating && (
-                    <button
-                      onClick={() => handleSubmit('retry')}
-                      className="w-full py-2.5 rounded-xl text-sm font-bold text-white"
-                      style={{ background: selectedChar.color }}>
-                      이 질문만 다시 생성
-                    </button>
-                  )}
-                </div>
-              )}
+              <p className="text-sm text-gray-400">전체보기를 구매하면 답변을 확인할 수 있어요</p>
             </div>
           )}
 
           {manse && <ManseTable manse={manse} charColor={selectedChar.color} />}
 
           <div className="mb-2">
-            <p className="text-xs text-gray-500 mb-2 font-medium">✨ 판결 {allTitles.length}가지{generating ? ' · 도착하는 대로 표시' : ''}</p>
+            <p className="text-xs text-gray-500 mb-2 font-medium">✨ 무료 풀이 3개{generating ? ' · 도착하는 대로 표시' : ''}</p>
             <div className="space-y-3">
-              {GROUP_IDS.flat().map((id, i) => {
+              {FREE_TITLE_IDS.map((id, i) => {
                 const item = titleMap.get(String(id))
                 if (item) return <TitleCard key={item.id} item={item} charColor={selectedChar.color} idx={i} />
                 return (
@@ -928,7 +906,7 @@ export default function SajuPage() {
           <Link href="/" className="text-gray-400 text-xl">←</Link>
           <div>
             <h1 className="text-xl font-bold">사주 풀이</h1>
-            <p className="text-gray-500 text-xs mt-0.5">로그인하면 전체 무료 공개</p>
+            <p className="text-gray-500 text-xs mt-0.5">무료 풀이 3개 · {sajuFullViewHint()}</p>
           </div>
         </div>
 
@@ -1058,7 +1036,7 @@ export default function SajuPage() {
           style={{ background: `linear-gradient(135deg, ${selectedChar.color}, ${selectedChar.color}bb)` }}>
           {selectedChar.name}에게 물어보기 →
         </button>
-        <p className="text-center text-gray-600 text-xs mt-3">로그인하면 전체 무료 공개</p>
+        <p className="text-center text-gray-600 text-xs mt-3">무료 풀이 3개 공개 · 전체보기는 결과 화면에서 2냥</p>
       </div>
     </div>
   )
