@@ -302,7 +302,7 @@ export default function HomePage() {
             <div className="w-10 h-1 bg-gray-700 rounded-full mx-auto mb-5" />
             <div className="text-center mb-5">
               <p className="text-lg font-black mb-1">🪙 가입하면 1냥 즉시 지급</p>
-              <p className="text-gray-400 text-sm">오늘의 일일운세도 무료로 바로 확인</p>
+              <p className="text-gray-400 text-sm">오늘의 운세도 바로 확인할 수 있어요</p>
             </div>
             <div className="space-y-2">
               <button onClick={() => signIn('kakao')}
