@@ -1,92 +1,56 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useSession, signIn } from 'next-auth/react'
 import Link from 'next/link'
-import { loadTossPayments, ANONYMOUS, type TossPaymentsWidgets } from '@tosspayments/tosspayments-sdk'
-import { UNLOCK_PRICE } from '@/lib/pricing'
+import { SAJU_UNLOCK_NYANG } from '@/lib/pricing'
+import YeopjeunShop from '@/app/components/YeopjeunShop'
 
 export default function PayPage() {
   const params = useParams()
   const router = useRouter()
   const shareId = params.shareId as string
   const { data: session, status } = useSession()
-
-  const widgetsRef = useRef<TossPaymentsWidgets | null>(null)
-  const [ready, setReady] = useState(false)
-  const [paying, setPaying] = useState(false)
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [agreed, setAgreed] = useState(false)
+  const [showShop, setShowShop] = useState(false)
+  const balance = (session?.user as { yeobjeun_balance?: number })?.yeobjeun_balance ?? 0
 
-  useEffect(() => {
-    if (status !== 'authenticated') return
-    let cancelled = false
-
-    ;(async () => {
-      try {
-        const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY
-        if (!clientKey) {
-          setError('결제 설정이 완료되지 않았어요. 잠시 후 다시 시도해주세요.')
-          return
-        }
-        const tossPayments = await loadTossPayments(clientKey)
-        const userId = (session?.user as { id?: string })?.id
-        const customerKey = userId ?? ANONYMOUS
-        const widgets = tossPayments.widgets({ customerKey })
-        if (cancelled) return
-        widgetsRef.current = widgets
-
-        await widgets.setAmount({ currency: 'KRW', value: UNLOCK_PRICE })
-        await widgets.renderPaymentMethods({ selector: '#toss-payment-method' })
-        await widgets.renderAgreement({ selector: '#toss-agreement' })
-        if (!cancelled) setReady(true)
-      } catch (e) {
-        console.error('[사주궁] 토스 위젯 초기화 실패:', e)
-        if (!cancelled) setError('결제 화면을 불러오지 못했어요. 새로고침해주세요.')
-      }
-    })()
-
-    return () => { cancelled = true }
-  }, [status, (session?.user as { id?: string })?.id])
-
-  const handlePay = async () => {
-    if (!widgetsRef.current || !agreed) return
-    setPaying(true)
+  const unlock = async () => {
+    if (balance < SAJU_UNLOCK_NYANG) {
+      setShowShop(true)
+      return
+    }
+    setBusy(true)
     setError('')
     try {
-      const orderId = `unlock_${shareId}_${Date.now()}`
-      await widgetsRef.current.requestPayment({
-        orderId,
-        orderName: '사주궁 전체 판결문 열기',
-        successUrl: `${window.location.origin}/pay/success`,
-        failUrl: `${window.location.origin}/pay/fail`,
-        customerEmail: session?.user?.email ?? undefined,
-        customerName: session?.user?.name ?? undefined,
-      })
-      // 성공/실패 시 Toss가 successUrl/failUrl로 리다이렉트하므로 여기 이후 코드는 보통 실행되지 않음
-    } catch (e: any) {
-      console.error('[사주궁] 결제 요청 실패:', e)
-      if (e?.code !== 'USER_CANCEL') {
-        setError(e?.message || '결제 요청 중 오류가 발생했어요.')
+      const res = await fetch(`/api/readings/${shareId}/unlock`, { method: 'POST' })
+      const data = await res.json()
+      if (res.status === 402 || data.code === 'insufficient') {
+        setShowShop(true)
+        setError('엽전이 부족해요. 충전 후 전체보기를 다시 눌러주세요.')
+        return
       }
-      setPaying(false)
+      if (!res.ok) {
+        setError(data.error || '전체보기에 실패했어요.')
+        return
+      }
+      router.replace(`/result/${shareId}?unlocked=1`)
+    } catch {
+      setError('전체보기 요청 중 오류가 났어요.')
+    } finally {
+      setBusy(false)
     }
   }
 
   if (status === 'loading') {
-    return (
-      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center text-gray-500 text-sm">
-        불러오는 중...
-      </div>
-    )
+    return <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center text-gray-500 text-sm">불러오는 중...</div>
   }
-
   if (status === 'unauthenticated') {
     return (
       <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center text-white px-6 text-center">
-        <div className="text-5xl mb-5">🔒</div>
-        <div className="text-xl font-black mb-2">로그인 후 결제할 수 있어요</div>
+        <p className="text-xl font-black mb-2">로그인 후 전체보기할 수 있어요</p>
         <button onClick={() => signIn(undefined, { callbackUrl: `/pay/${shareId}` })}
           className="mt-4 px-6 py-3 rounded-2xl font-bold text-sm text-white"
           style={{ background: '#7c3aed' }}>
@@ -102,51 +66,30 @@ export default function PayPage() {
       <div className="px-4 py-5 border-b border-gray-800 flex items-center gap-3">
         <Link href={`/result/${shareId}`} className="text-gray-400 text-xl">←</Link>
         <div>
-          <p className="font-bold text-base">전체 판결문 열기</p>
-          <p className="text-xs text-gray-500 mt-0.5">잠긴 판결문을 모두 확인할 수 있어요</p>
+          <p className="font-bold text-base">사주 전체보기</p>
+          <p className="text-xs text-gray-500 mt-0.5">엽전 {SAJU_UNLOCK_NYANG}냥 차감 · 이후 무료 재열람</p>
         </div>
       </div>
-
       <div className="px-4 pt-5">
-        <div className="rounded-2xl p-4 mb-4 bg-[#111118] border border-gray-800 flex items-center justify-between">
-          <span className="text-sm text-gray-400">결제 금액</span>
-          <span className="text-xl font-black text-yellow-400">{UNLOCK_PRICE.toLocaleString()}원</span>
+        <div className="rounded-2xl p-4 mb-4 bg-[#111118] border border-gray-800 space-y-1.5 text-sm">
+          <div className="flex justify-between"><span className="text-gray-400">차감</span><span className="text-yellow-400 font-black">{SAJU_UNLOCK_NYANG}냥</span></div>
+          <div className="flex justify-between"><span className="text-gray-400">보유</span><span>{balance}냥</span></div>
         </div>
-
         {error && (
-          <div className="mb-4 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
-            {error}
-          </div>
+          <div className="mb-4 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs">{error}</div>
         )}
-
-        <div id="toss-payment-method" />
-        <div id="toss-agreement" className="mt-3" />
-
-        {/* ✅ 추가: 청약철회 제한 사전 고지 + 명시적 동의 체크박스
-            전자상거래법상 "제공 개시 시 청약철회 불가"를 주장하려면
-            결제 전에 이용자가 명확히 인지·동의했다는 기록이 중요함 */}
-        <label className="flex items-start gap-2.5 mt-4 px-3.5 py-3 rounded-2xl bg-[#111118] border border-gray-800 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={agreed}
-            onChange={e => setAgreed(e.target.checked)}
-            className="mt-0.5 w-4 h-4 accent-purple-500 flex-shrink-0"
-          />
-          <span className="text-xs text-gray-400 leading-relaxed">
-            결제와 동시에 판결문(디지털 콘텐츠)이 즉시 제공되며, 콘텐츠 제공이 개시되면
-            「전자상거래법」 제17조 2항 5호에 따라 청약철회(환불)가 제한된다는 점을 확인했습니다.
-            <Link href="/terms" target="_blank" className="text-purple-400 underline ml-1">환불정책 보기</Link>
-          </span>
-        </label>
-
+        <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+          신규 전체보기는 4,900원 결제가 아닙니다. 이미 연 풀이는 다시 차감하지 않습니다.
+        </p>
         <button
-          onClick={handlePay}
-          disabled={!ready || paying || !agreed}
-          className="w-full mt-3 py-4 rounded-2xl font-bold text-base text-white disabled:opacity-40 transition-all active:scale-95"
+          onClick={unlock}
+          disabled={busy}
+          className="w-full py-4 rounded-2xl font-bold text-base text-white disabled:opacity-40"
           style={{ background: 'linear-gradient(135deg, #7c3aed, #a78bfa)' }}>
-          {paying ? '결제 처리 중...' : !agreed ? '위 내용에 동의해주세요' : `${UNLOCK_PRICE.toLocaleString()}원 결제하기`}
+          {busy ? '처리 중...' : balance < SAJU_UNLOCK_NYANG ? '충전하고 전체보기' : '1냥으로 전체보기'}
         </button>
       </div>
+      {showShop && <YeopjeunShop onClose={() => setShowShop(false)} currentBalance={balance} />}
     </div>
   )
 }

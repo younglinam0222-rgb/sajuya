@@ -79,7 +79,7 @@ interface MenuItem {
 }
 
 const MENUS: MenuItem[] = [
-  { href: '/saju',    label: '사주 풀이',   desc: '생년월일시로 보는 종합 사주',  emoji: '🔮', icon: '/icons/saju.png', badge: '1900원',   badgeColor: '#F59E0B', paid: true },
+  { href: '/saju',    label: '사주 풀이',   desc: '생년월일시로 보는 종합 사주',  emoji: '🔮', icon: '/icons/saju.png', badge: '1냥',   badgeColor: '#F59E0B', paid: true },
   { href: '/gunghap', label: '궁합 해설',   desc: '두 사람의 사주 궁합 분석',     emoji: '💞', badge: '1900원',   badgeColor: '#F59E0B', paid: true },
   { href: '/daeun',   label: '대운 해설',   desc: '10년 주기 큰 흐름',           emoji: '🌊', badge: '일부무료', badgeColor: '#10B981', paid: false },
   { href: '/taekil',  label: '택 · 일',    desc: '좋은 날짜 골라줌',            emoji: '📅', badge: '일부무료', badgeColor: '#10B981', paid: false },
@@ -325,7 +325,7 @@ export default function HomePage() {
             <p className="text-sm font-bold mb-3">🔮 사주궁에서 할 수 있는 것들</p>
             <div className="space-y-2.5">
               {[
-                { icon: '🪙', title: '1900원 사주 풀이', desc: '타고난 성격, 재물운, 직업운까지 직설로 분석' },
+                { icon: '🪙', title: '1냥 사주 풀이', desc: '타고난 성격, 재물운, 직업운까지 직설로 분석' },
                 { icon: '💞', title: '궁합', desc: '꼭 커플만 궁합 보란 법 있나요? 자유롭게 조합해보세요' },
                 { icon: '🌊', title: '대운 풀이', desc: '10년 단위 인생의 큰 흐름 해설' },
                 { icon: '📆', title: '연도별 운세', desc: '올해 총운, 월별 운세를 한눈에' },

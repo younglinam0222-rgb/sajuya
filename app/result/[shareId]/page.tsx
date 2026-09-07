@@ -1,9 +1,11 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import { useSession, signIn } from 'next-auth/react'
 import Link from 'next/link'
-import { UNLOCK_PRICE } from '@/lib/pricing'
+import { SAJU_UNLOCK_NYANG } from '@/lib/pricing'
+import YeopjeunShop from '@/app/components/YeopjeunShop'
+import { titleIsFree } from '@/lib/readingAccess'
 import PersonalQuestionCard from '@/components/PersonalQuestionCard'
 import { sanitizeText } from '@/lib/sajuSanitize'
 import { appendSseChunk, parseSseFrame } from '@/lib/sajuSse'
@@ -59,9 +61,9 @@ const elementBg    = (el: string) => ({ '木':'rgba(34,197,94,.12)','火':'rgba(
 
 export default function ResultPage() {
   const params  = useParams()
-  const router  = useRouter()
   const shareId = params.shareId as string
-  const { status: authStatus } = useSession()
+  const { data: session, status: authStatus, update: updateSession } = useSession()
+  const balance = (session?.user as { yeobjeun_balance?: number })?.yeobjeun_balance ?? 0
 
   const [loading,     setLoading]     = useState(true)
   const [error,       setError]       = useState('')
@@ -80,6 +82,9 @@ export default function ResultPage() {
   const [isCompleteResult, setIsCompleteResult] = useState(true)
   const [personalRetrying, setPersonalRetrying] = useState(false)
   const [personalRetryError, setPersonalRetryError] = useState('')
+  const [unlocking, setUnlocking] = useState(false)
+  const [unlockError, setUnlockError] = useState('')
+  const [showShop, setShowShop] = useState(false)
 
   useEffect(() => {
     if (authStatus === 'authenticated') fetchReading()
@@ -258,8 +263,34 @@ export default function ResultPage() {
     }
   }
 
-  // ✅ 수정: 결제(Toss) 보류 — 로그인 여부만으로 전체 판결 공개 여부를 결정.
-  // 데이터 로딩/에러 체크보다 먼저 와야 함 (비로그인 상태에선 fetchReading 자체를 안 돌림)
+  const unlockWithNyang = async () => {
+    if (balance < SAJU_UNLOCK_NYANG) {
+      setShowShop(true)
+      return
+    }
+    setUnlocking(true)
+    setUnlockError('')
+    try {
+      const res = await fetch(`/api/readings/${shareId}/unlock`, { method: 'POST' })
+      const data = await res.json()
+      if (res.status === 402 || data.code === 'insufficient') {
+        setShowShop(true)
+        setUnlockError('엽전이 부족해요. 충전 후 다시 눌러주세요.')
+        return
+      }
+      if (!res.ok) {
+        setUnlockError(data.error || '전체보기에 실패했어요.')
+        return
+      }
+      await fetchReading()
+      await updateSession()
+    } catch {
+      setUnlockError('전체보기 요청 중 오류가 났어요.')
+    } finally {
+      setUnlocking(false)
+    }
+  }
+
   if (authStatus === 'loading') {
     return (
       <div className="bg-[#0a0a0a] min-h-screen flex items-center justify-center text-gray-500 text-sm">
@@ -328,9 +359,9 @@ export default function ResultPage() {
     { label: '연주', pillar: sajuData.yearPillar },
   ] : []
 
-  // ✅ 수정: 결제(Toss) 보류 — 로그인 게이트를 이미 통과했으므로 전체 판결을 그냥 다 공개
-  const freeTitles = titles
-  const paidTitles: SajuTitle[] = []
+  // 신규 전체보기는 1냥 차감. 기존 is_paid 권한은 그대로 무료 재열람.
+  const freeTitles = titles.filter((t, i) => titleIsFree(t, i, titles))
+  const paidTitles = titles.filter((t, i) => !titleIsFree(t, i, titles))
 
   return (
     <div className="bg-[#0a0a0a] min-h-screen text-white max-w-[430px] mx-auto pb-8">
@@ -415,11 +446,11 @@ export default function ResultPage() {
 
       <PersonalQuestionCard
         question={personalAnswer?.question || formInfo?.personalQuestion || ''}
-        answer={personalAnswer?.answer || ''}
+        answer={isPaid ? (personalAnswer?.answer || '') : ''}
         charColor={charColor}
         retrying={personalRetrying}
-        retryError={personalRetryError}
-        onRetry={retryPersonalAnswer}
+        retryError={isPaid ? personalRetryError : ''}
+        onRetry={isPaid ? retryPersonalAnswer : undefined}
       />
 
       {/* 새 포맷: titles */}
@@ -530,27 +561,48 @@ export default function ResultPage() {
                       </div>
                     ))}
                   </div>
+                  {unlockError && (
+                    <p className="text-xs text-red-400 mt-2">{unlockError}</p>
+                  )}
                   <button
-                    onClick={() => {
-                      if (authStatus !== 'authenticated') {
-                        signIn(undefined, { callbackUrl: `/pay/${shareId}` })
-                      } else {
-                        router.push(`/pay/${shareId}`)
-                      }
-                    }}
-                    className="w-full mt-3 py-3.5 rounded-2xl font-bold text-sm text-white"
+                    onClick={unlockWithNyang}
+                    disabled={unlocking}
+                    className="w-full mt-3 py-3.5 rounded-2xl font-bold text-sm text-white disabled:opacity-40"
                     style={{ background: `linear-gradient(135deg, ${charColor}, ${charColor}bb)` }}>
-                    {authStatus === 'authenticated'
-                      ? `🔓 전체 ${paidTitles.length}개 열기 — ${UNLOCK_PRICE.toLocaleString()}원`
-                      : `🔒 로그인하고 전체 ${paidTitles.length}개 열기`}
+                    {unlocking ? '엽전 차감 중...' : `🔓 전체보기 — 엽전 ${SAJU_UNLOCK_NYANG}냥`}
                   </button>
+                  <p className="text-[11px] text-gray-600 text-center mt-2">이후 같은 풀이는 무료로 다시 볼 수 있어요</p>
                 </>
               )}
             </div>
           )}
 
+          {!isPaid && paidTitles.length === 0 && (
+            <div className="mb-4">
+              {unlockError && <p className="text-xs text-red-400 mb-2">{unlockError}</p>}
+              <button
+                onClick={unlockWithNyang}
+                disabled={unlocking}
+                className="w-full py-3.5 rounded-2xl font-bold text-sm text-white disabled:opacity-40"
+                style={{ background: `linear-gradient(135deg, ${charColor}, ${charColor}bb)` }}>
+                {unlocking ? '엽전 차감 중...' : `🔓 전체보기 — 엽전 ${SAJU_UNLOCK_NYANG}냥`}
+              </button>
+              <p className="text-[11px] text-gray-600 text-center mt-2">이후 같은 풀이는 무료로 다시 볼 수 있어요</p>
+            </div>
+          )}
+
+          {strategy && !isPaid && (
+            <div className="mb-4 rounded-2xl p-4 bg-[#111] border border-gray-800">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-sm">⚔️ 인생 전략 분석</span>
+                <span className="text-gray-600">🔒</span>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">전체보기 후 확인할 수 있어요.</p>
+            </div>
+          )}
+
           {/* 전략 섹션 */}
-          {strategy && (
+          {strategy && isPaid && (
             <div className="space-y-3 mb-4">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-lg">⚔️</span>
@@ -636,6 +688,7 @@ export default function ResultPage() {
         <div className="px-4 pt-4">
           <div className="text-xs font-bold text-[#555] mb-3">✦ 저장된 풀이</div>
           {sections.map((sec, idx) => {
+            const locked = !isPaid && idx >= 3
             const isWarning = sec.id === 'warning'
             const isOpen    = openIdx.includes(idx)
             return (
@@ -647,6 +700,7 @@ export default function ResultPage() {
                   onClick={() => setOpenIdx(prev => prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx])}>
                   <SectionIcon id={sec.id} />
                   <span className={`flex-1 text-sm font-bold ${isWarning ? 'text-red-300' : 'text-white'} leading-snug`}>{sec.title}</span>
+                  {locked && <span className="text-gray-600">🔒</span>}
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2" strokeLinecap="round"
                     style={{ transform: isOpen ? 'rotate(180deg)' : '', transition: 'transform .2s', flexShrink: 0 }}>
                     <path d="M19 9l-7 7-7-7" />
@@ -654,12 +708,23 @@ export default function ResultPage() {
                 </button>
                 {isOpen && (
                   <div className="px-4 pb-5 border-t" style={{ borderColor: isWarning ? 'rgba(239,68,68,.12)' : '#1e1e1e' }}>
-                    <p className="text-sm leading-[1.95] pt-4 whitespace-pre-line" style={{ color: isWarning ? '#fca5a5' : '#bbb' }}>{sec.body}</p>
+                    <p className="text-sm leading-[1.95] pt-4 whitespace-pre-line" style={{ color: isWarning ? '#fca5a5' : '#bbb' }}>
+                      {locked ? '전체보기 후 확인할 수 있어요.' : sec.body}
+                    </p>
                   </div>
                 )}
               </div>
             )
           })}
+          {!isPaid && (
+            <button
+              onClick={unlockWithNyang}
+              disabled={unlocking}
+              className="w-full mt-2 py-3.5 rounded-2xl font-bold text-sm text-white disabled:opacity-40"
+              style={{ background: `linear-gradient(135deg, ${charColor}, ${charColor}bb)` }}>
+              {unlocking ? '엽전 차감 중...' : `🔓 전체보기 — 엽전 ${SAJU_UNLOCK_NYANG}냥`}
+            </button>
+          )}
         </div>
       )}
 
@@ -690,6 +755,7 @@ export default function ResultPage() {
           본 서비스는 사주명리학 이론을 기반으로 분석한 참고용 엔터테인먼트 콘텐츠입니다. 실제 투자·재무·의료·법률 등 중요한 의사결정의 근거로 사용하지 마십시오. © 사주궁
         </p>
       </div>
+      {showShop && <YeopjeunShop onClose={() => setShowShop(false)} currentBalance={balance} />}
     </div>
   )
 }

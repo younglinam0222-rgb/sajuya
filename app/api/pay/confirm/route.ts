@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 import { createServerSupabase } from '@/lib/supabase'
-import { UNLOCK_PRICE } from '@/lib/pricing'
+import { LEGACY_UNLOCK_PRICE } from '@/lib/pricing'
 import { isChargeOrderId, isUnlockOrderId } from '@/lib/chargePackages'
 import { confirmChargeOrder } from '@/lib/chargeOrders'
 
 async function confirmUnlock(paymentKey: string, orderId: string, amount: number) {
-  if (amount !== UNLOCK_PRICE) {
+  if (amount !== LEGACY_UNLOCK_PRICE) {
     return NextResponse.json({ error: '결제 금액이 올바르지 않습니다' }, { status: 400 })
   }
   const tossResponse = await fetch('https://api.tosspayments.com/v1/payments/confirm', {
@@ -15,7 +15,7 @@ async function confirmUnlock(paymentKey: string, orderId: string, amount: number
       Authorization: `Basic ${Buffer.from(`${process.env.TOSS_SECRET_KEY}:`).toString('base64')}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ paymentKey, orderId, amount: UNLOCK_PRICE }),
+    body: JSON.stringify({ paymentKey, orderId, amount: LEGACY_UNLOCK_PRICE }),
   })
   const tossData = await tossResponse.json()
   if (!tossResponse.ok) {
@@ -35,7 +35,7 @@ async function confirmUnlock(paymentKey: string, orderId: string, amount: number
   const { error: payError } = await supabase.from('payments').insert({
     order_id: orderId,
     toss_payment_key: paymentKey,
-    amount: UNLOCK_PRICE,
+    amount: LEGACY_UNLOCK_PRICE,
     status: 'done',
   })
   if (payError) {

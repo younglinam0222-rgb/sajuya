@@ -43,7 +43,7 @@ function withSaveMeta(aiResult: unknown, isComplete: boolean, requestId?: unknow
 export async function POST(req: NextRequest) {
   try {
     const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
-    const { characterId, occupationId, sajuData, aiResult, isPaid, shareId: existingShareId, requestId, isComplete } = await req.json()
+    const { characterId, occupationId, sajuData, aiResult, shareId: existingShareId, requestId, isComplete } = await req.json()
     const storedResult = withSaveMeta(aiResult, !!isComplete, requestId, sajuData)
 
     if (typeof existingShareId === 'string' && existingShareId.length >= 8 && existingShareId.length <= 32) {
@@ -57,7 +57,6 @@ export async function POST(req: NextRequest) {
           occupation_id: occupationId ?? 'general',
           saju_data: sajuData,
           ai_result: storedResult,
-          is_paid: isPaid ?? false,
         })
         .eq('share_id', existingShareId)
         .eq('user_id', token.sub)
@@ -78,7 +77,7 @@ export async function POST(req: NextRequest) {
       occupation_id: occupationId ?? 'general',
       saju_data:    sajuData,
       ai_result:    storedResult,
-      is_paid:      isPaid ?? false,
+      is_paid:      false,
     })
 
     if (error) throw error

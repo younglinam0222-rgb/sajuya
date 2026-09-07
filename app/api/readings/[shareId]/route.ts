@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/app/api/auth/[...nextauth]/route'
+import { redactUnpaidReading } from '@/lib/readingAccess'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,7 +32,7 @@ export async function GET(
       return NextResponse.json({ error: '풀이를 찾을 수 없습니다' }, { status: 404 })
     }
 
-    return NextResponse.json(data)
+    return NextResponse.json(redactUnpaidReading(data))
   } catch {
     return NextResponse.json({ error: '서버 오류' }, { status: 500 })
   }

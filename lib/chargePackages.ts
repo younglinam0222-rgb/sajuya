@@ -30,7 +30,7 @@ const SALE: Record<ChargePackageId, ChargePackage> = {
   },
   'nyang-5': {
     id: 'nyang-5',
-    name: '5냥',
+    name: '5+1냥',
     paidNyang: 5,
     bonusNyang: 1,
     amountKrw: 5 * NYANG_PRICE,
@@ -40,7 +40,7 @@ const SALE: Record<ChargePackageId, ChargePackage> = {
   },
   'nyang-10': {
     id: 'nyang-10',
-    name: '10냥',
+    name: '10+2냥',
     paidNyang: 10,
     bonusNyang: 2,
     amountKrw: 10 * NYANG_PRICE,

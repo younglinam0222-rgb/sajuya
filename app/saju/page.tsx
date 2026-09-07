@@ -9,6 +9,8 @@ import { KOREA_REGIONS } from '@/lib/solarTime'
 import { sanitizeText } from '@/lib/sajuSanitize'
 import { appendSseChunk, parseSseFrame } from '@/lib/sajuSse'
 import { assessCompletion, GROUP_IDS, LAST_GROUP_INDEX, normalizePersonalAnswer, PEAK_GUIDE_LABEL, sortTitlesById } from '@/lib/sajuContract'
+import { titleIsFree } from '@/lib/readingAccess'
+import { SAJU_UNLOCK_NYANG } from '@/lib/pricing'
 
 interface SajuTitle {
   id: string; category?: string; title: string; teaser: string; is_free: boolean; content: string
@@ -183,7 +185,7 @@ function LifecycleChart({ data }: { data: LifecycleItem[] }) {
 }
 
 // ✅ 수정: 데드코드(open state) 제거
-function TitleCard({ item, charColor, idx }: { item: SajuTitle; charColor: string; idx: number }) {
+function TitleCard({ item, charColor, idx, locked }: { item: SajuTitle; charColor: string; idx: number; locked?: boolean }) {
   return (
     <div className="rounded-2xl overflow-hidden border" style={{ borderColor: `${charColor}40`, background: '#111118' }}>
       <div className="p-4">
@@ -195,9 +197,15 @@ function TitleCard({ item, charColor, idx }: { item: SajuTitle; charColor: strin
               {item.category}
             </span>
           )}
+          {locked && <span className="ml-auto text-gray-600">🔒</span>}
         </div>
         <p className="font-bold text-base leading-snug text-white">{sanitizeText(item.title)}</p>
-        {item.content && (
+        {locked ? (
+          <>
+            {item.teaser && <p className="text-xs text-gray-500 mt-1">{sanitizeText(item.teaser)}</p>}
+            <p className="text-xs text-gray-600 mt-3">전체보기는 결과 화면에서 엽전 {SAJU_UNLOCK_NYANG}냥으로 열 수 있어요.</p>
+          </>
+        ) : item.content ? (
           <div className="text-gray-300 text-sm leading-relaxed mt-4">
             {sanitizeText(item.content).split('\n').map((line, i) => (
               line.startsWith('⚠️')
@@ -207,7 +215,7 @@ function TitleCard({ item, charColor, idx }: { item: SajuTitle; charColor: strin
                   : <p key={i}>{line}</p>
             ))}
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   )
@@ -822,7 +830,7 @@ export default function SajuPage() {
                 “{sanitizeText(result.personalAnswer?.question || form.personalQuestion)}”
               </p>
               {result.personalAnswer?.answer ? (
-                <FormattedStrategyText text={result.personalAnswer.answer} highlightColor={selectedChar.color} />
+                <p className="text-sm text-gray-500">족집게 답변은 결과 화면에서 엽전 {SAJU_UNLOCK_NYANG}냥으로 전체보기할 수 있어요.</p>
               ) : (
                 <div className="space-y-3">
                   <p className="text-sm text-gray-400">
@@ -852,7 +860,11 @@ export default function SajuPage() {
             <div className="space-y-3">
               {GROUP_IDS.flat().map((id, i) => {
                 const item = titleMap.get(String(id))
-                if (item) return <TitleCard key={item.id} item={item} charColor={selectedChar.color} idx={i} />
+                if (item) {
+                  const titleIndex = allTitles.findIndex(t => String(t.id) === String(item.id))
+                  const locked = !titleIsFree(item, titleIndex >= 0 ? titleIndex : i, allTitles)
+                  return <TitleCard key={item.id} item={item} charColor={selectedChar.color} idx={i} locked={locked} />
+                }
                 return (
                   <div key={`pending-${id}`} className="rounded-2xl border border-dashed border-gray-800 bg-[#111118] p-4 text-xs text-gray-500">
                     {id}번 판결문 {generating ? '작성 중...' : '아직 도착하지 않았어요'}
@@ -863,50 +875,24 @@ export default function SajuPage() {
           </div>
 
           {result.strategy && (
-            <div className="mt-6 space-y-3">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-lg">⚔️</span>
-                <h2 className="font-bold text-base">인생 전략 분석</h2>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">책사 모드</span>
+            <div className="mt-6 rounded-2xl p-4 bg-[#111118] border border-gray-800">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">⚔️</span>
+                  <h2 className="font-bold text-base">인생 전략 분석</h2>
+                </div>
+                <span className="text-gray-600">🔒</span>
               </div>
-              {result.strategy.overview && (
-                <div className="rounded-2xl p-4 bg-[#111118] border border-gray-800">
-                  <div className="flex items-center gap-2 mb-2"><span>🌌</span><span className="font-bold text-sm">인생의 큰 그림</span></div>
-                  <p className="text-gray-300 text-sm leading-relaxed">{result.strategy.overview}</p>
-                </div>
-              )}
-              {result.strategy.lifecycle?.length > 0 && <LifecycleChart data={result.strategy.lifecycle} />}
-              {result.strategy.golden_period && (
-                <div className="rounded-2xl p-4 bg-[#111118] border border-yellow-900/30">
-                  <div className="flex items-center gap-2 mb-2"><span>🏆</span><span className="font-bold text-sm text-yellow-400">기운이 잘 쓰이는 방향</span><span className="text-[10px] text-gray-500">해석</span></div>
-                  <FormattedStrategyText text={result.strategy.golden_period} />
-                </div>
-              )}
-              {result.strategy.peak_guide && (
-                <div className="rounded-2xl p-4 bg-[#111118] border border-gray-800">
-                  <div className="flex items-center gap-2 mb-2"><span>🚀</span><span className="font-bold text-sm text-green-400">{PEAK_GUIDE_LABEL}</span></div>
-                  <FormattedStrategyText text={result.strategy.peak_guide} highlightColor="#4ade80" />
-                </div>
-              )}
-              {result.strategy.warning && (
-                <div className="rounded-2xl p-4 bg-[#111118] border border-yellow-700/40">
-                  <div className="flex items-center gap-2 mb-2"><span>⚠️</span><span className="font-bold text-sm text-yellow-400">조심할 시기</span></div>
-                  <FormattedStrategyText text={result.strategy.warning} highlightColor="#fbbf24" />
-                </div>
-              )}
-              {result.strategy.final_word && (() => {
-                const fw = FINAL_WORD_LABEL[selectedChar.id] ?? { icon: '💬', label: '마지막 한마디' }
-                return (
-                  <div className="rounded-2xl p-4 border" style={{ background: `${selectedChar.color}14`, borderColor: `${selectedChar.color}55` }}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <span>{fw.icon}</span>
-                      <span className="font-bold text-sm" style={{ color: selectedChar.color }}>{fw.label}</span>
-                    </div>
-                    <p className="text-gray-200 text-sm leading-relaxed">{sanitizeText(result.strategy.final_word)}</p>
-                  </div>
-                )
-              })()}
+              <p className="text-xs text-gray-500">전체보기는 결과 화면에서 엽전 {SAJU_UNLOCK_NYANG}냥입니다.</p>
             </div>
+          )}
+
+          {savedShareId && (
+            <Link href={`/result/${savedShareId}`}
+              className="block w-full mt-4 py-3.5 rounded-2xl font-bold text-sm text-white text-center"
+              style={{ background: selectedChar.color }}>
+              결과에서 전체보기 (1냥)
+            </Link>
           )}
 
           {result.disclaimer && <p className="text-gray-600 text-xs text-center mt-6">{result.disclaimer}</p>}
@@ -924,7 +910,7 @@ export default function SajuPage() {
           <Link href="/" className="text-gray-400 text-xl">←</Link>
           <div>
             <h1 className="text-xl font-bold">사주 풀이</h1>
-            <p className="text-gray-500 text-xs mt-0.5">로그인하면 전체 무료 공개</p>
+            <p className="text-gray-500 text-xs mt-0.5">전체보기는 엽전 1냥</p>
           </div>
         </div>
 
@@ -1170,7 +1156,7 @@ export default function SajuPage() {
           style={{ background: `linear-gradient(135deg, ${selectedChar.color}, ${selectedChar.color}bb)` }}>
           {selectedChar.name}에게 물어보기 →
         </button>
-        <p className="text-center text-gray-600 text-xs mt-3">로그인하면 전체 무료 공개</p>
+        <p className="text-center text-gray-600 text-xs mt-3">전체보기는 엽전 1냥 · 이후 무료 재열람</p>
       </div>
     </div>
   )
