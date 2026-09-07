@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { rejectCrossSiteCookieMutation } from '@/lib/requestGuard'
 import {
   SHARED_INTERP_GUARDS,
   calcManse,
@@ -13,6 +14,8 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
 export async function POST(req: NextRequest) {
   try {
+    const csrf = rejectCrossSiteCookieMutation(req)
+    if (csrf) return csrf
     const {
       name1, year1, month1, day1, hour1, gender1,
       name2, year2, month2, day2, hour2, gender2,

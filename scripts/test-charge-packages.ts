@@ -29,11 +29,11 @@ function ok(name: string, cond: boolean) {
 const sale = listSalePackages()
 ok('three sale packages', sale.length === 3)
 ok('1냥 1900 유상1 보너스0 총1', sale[0].id === 'nyang-1' && sale[0].amountKrw === 1900 && sale[0].paidNyang === 1 && sale[0].bonusNyang === 0 && totalNyang(sale[0]) === 1)
-ok('5냥 9500 유상5 보너스1 총6', sale[1].id === 'nyang-5' && sale[1].amountKrw === 9500 && sale[1].paidNyang === 5 && sale[1].bonusNyang === 1 && totalNyang(sale[1]) === 6)
-ok('10냥 19000 유상10 보너스2 총12', sale[2].id === 'nyang-10' && sale[2].amountKrw === 19000 && sale[2].paidNyang === 10 && sale[2].bonusNyang === 2 && totalNyang(sale[2]) === 12)
+ok('5냥 9000 유상5 보너스0 500원 할인', sale[1].id === 'nyang-5' && sale[1].amountKrw === 9000 && sale[1].paidNyang === 5 && sale[1].bonusNyang === 0 && sale[1].discountKrw === 500 && sale[1].listPriceKrw === 9500 && totalNyang(sale[1]) === 5)
+ok('10냥 18000 유상10 보너스0 1000원 할인', sale[2].id === 'nyang-10' && sale[2].amountKrw === 18000 && sale[2].paidNyang === 10 && sale[2].bonusNyang === 0 && sale[2].discountKrw === 1000 && sale[2].listPriceKrw === 19000 && totalNyang(sale[2]) === 10)
 ok('sale version stamped', sale.every(p => p.version === CHARGE_PACKAGE_VERSION && p.forSale))
 
-ok('legacy three not for sale', LEGACY_CHARGE_PACKAGES.some(p => p.id === 'three' && p.amountKrw === 4900 && !p.forSale))
+ok('legacy bonus packs not for sale', LEGACY_CHARGE_PACKAGES.some(p => p.bonusNyang === 1 && !p.forSale) && LEGACY_CHARGE_PACKAGES.some(p => p.bonusNyang === 2 && !p.forSale))
 ok('legacy one not for sale', LEGACY_CHARGE_PACKAGES.some(p => p.id === 'one' && !p.forSale))
 ok('getSalePackage rejects three', getSalePackage('three') === null)
 ok('getSalePackage rejects one', getSalePackage('one') === null)
@@ -90,7 +90,7 @@ ok('audit truncates failure reason', (audit.failureReason || '').length === 180)
 ok('audit has no raw body field', !('rawBody' in audit) && !('authorization' in audit))
 
 ok('unlock cost is 1 nyang', SAJU_UNLOCK_NYANG === 1)
-ok('sale names 5+1 and 10+2', sale[1].name === '5+1냥' && sale[2].name === '10+2냥')
+ok('sale names discount packs', sale[1].name === '5냥' && sale[2].name === '10냥')
 ok('accounting tiebreak is not bonus-first', ACCOUNTING_TIEBREAK === 'paid_then_bonus')
 
 ok('unclassified first from leftover total', JSON.stringify(chooseDebitBuckets({ total: 3, paid: 0, bonus: 0 })) === JSON.stringify({ unclassified: 1, paid: 0, bonus: 0 }))
@@ -100,16 +100,17 @@ ok('mixed paid+bonus uses paid for accounting', JSON.stringify(chooseDebitBucket
 ok('insufficient null', chooseDebitBuckets({ total: 0, paid: 0, bonus: 0 }) === null)
 
 const titles = [
-  { is_free: true, title: 'a', content: 'A' },
-  { is_free: false, title: 'b', content: 'B' },
-  { is_free: false, title: 'c', content: 'C' },
+  { id: '1', is_free: true, title: 'a', content: 'A' },
+  { id: '4', is_free: false, title: 'b', content: 'B' },
+  { id: '5', is_free: false, title: 'c', content: 'C' },
 ]
 ok('first flagged title free', titleIsFree(titles[0], 0, titles))
 ok('paid title not free', !titleIsFree(titles[1], 1, titles))
+ok('category 성격 is free even later index', titleIsFree({ category: '성격', content: 'X' }, 8, titles))
 
 const redacted = redactUnpaidReading({
   is_paid: false,
-  ai_result: JSON.stringify({ titles: titles.map((t, i) => ({ id: String(i + 1), ...t })), strategy: { overview: 'hello world overview text here', warning: 'secret' }, personalAnswer: { question: 'q', answer: 'secret' } }),
+  ai_result: JSON.stringify({ titles: titles.map(t => ({ ...t })), strategy: { overview: 'hello world overview text here', warning: 'secret' }, personalAnswer: { question: 'q', answer: 'secret' } }),
 })
 const redactedParsed = JSON.parse(redacted.ai_result as string)
 ok('redact keeps free content', redactedParsed.titles[0].content === 'A')

@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/app/api/auth/[...nextauth]/route'
 import { createServerSupabase } from '@/lib/supabase'
+import { rejectCrossSiteCookieMutation } from '@/lib/requestGuard'
 import { assertNoElementCitationMismatch } from '@/lib/elementCitationCheck'
 import {
   calcDayPillar,
@@ -64,6 +65,8 @@ const CHARACTER_VOICE: Record<string, string> = {
 
 export async function POST(req: NextRequest) {
   try {
+    const csrf = rejectCrossSiteCookieMutation(req)
+    if (csrf) return csrf
     const { name, year, month, day, hour, gender, characterId, calType, longitude, birthPlace } = await req.json()
     // ✅ 추가: 로그인 여부 확인 (비로그인이어도 기존처럼 그대로 무료 이용 가능, 저장만 안 됨)
     const session = await getServerSession(authOptions)

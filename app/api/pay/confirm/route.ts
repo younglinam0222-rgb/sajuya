@@ -4,6 +4,7 @@ import { createServerSupabase } from '@/lib/supabase'
 import { LEGACY_UNLOCK_PRICE } from '@/lib/pricing'
 import { isChargeOrderId, isUnlockOrderId } from '@/lib/chargePackages'
 import { confirmChargeOrder } from '@/lib/chargeOrders'
+import { rejectCrossSiteCookieMutation } from '@/lib/requestGuard'
 
 async function confirmUnlock(paymentKey: string, orderId: string, amount: number) {
   if (amount !== LEGACY_UNLOCK_PRICE) {
@@ -54,6 +55,8 @@ async function confirmUnlock(paymentKey: string, orderId: string, amount: number
 
 export async function POST(req: NextRequest) {
   try {
+    const csrf = rejectCrossSiteCookieMutation(req)
+    if (csrf) return csrf
     const { paymentKey, orderId, amount } = await req.json()
     if (typeof paymentKey !== 'string' || typeof orderId !== 'string' || typeof amount !== 'number') {
       return NextResponse.json({ error: '결제 정보가 올바르지 않습니다' }, { status: 400 })

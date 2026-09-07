@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { useSession, signIn } from 'next-auth/react'
 import Link from 'next/link'
@@ -85,20 +85,23 @@ export default function ResultPage() {
   const [unlocking, setUnlocking] = useState(false)
   const [unlockError, setUnlockError] = useState('')
   const [showShop, setShowShop] = useState(false)
+  const [paidGenerating, setPaidGenerating] = useState(false)
+  const [reservationExpiresAt, setReservationExpiresAt] = useState<string | null>(null)
+  const paidGenLockRef = useRef(false)
 
   useEffect(() => {
-    if (authStatus === 'authenticated') fetchReading()
+    if (authStatus === 'authenticated') fetchReading({ resume: true })
   }, [shareId, authStatus])
 
-  const fetchReading = async () => {
+  const fetchReading = async (opts?: { resume?: boolean }) => {
     try {
-      // ✅ 수정: /api/result → /api/readings
       const res = await fetch(`/api/readings/${shareId}`)
       if (!res.ok) throw new Error('not found')
       const data = await res.json()
 
       setCharacterId(data.character_id ?? 'baekhalma')
       setIsPaid(data.is_paid ?? false)
+      if (data.reservation?.expiresAt) setReservationExpiresAt(data.reservation.expiresAt)
 
       let sajuParsed: any = null
       if (data.saju_data) {
@@ -129,6 +132,14 @@ export default function ResultPage() {
       } else if (sajuParsed) {
         const view = readingPersonalView(null, sajuParsed)
         if (view.requested) setPersonalAnswer({ question: view.question, answer: view.answer })
+      }
+      if (
+        opts?.resume
+        && !data.is_paid
+        && (data.reservation?.status === 'reserved' || data.reservation?.status === 'generating')
+        && sajuParsed?.form
+      ) {
+        void runPaidGeneration(sajuParsed.form, data.character_id ?? 'baekhalma', sajuParsed.saju)
       }
     } catch {
       setError('저장된 풀이를 찾을 수 없습니다.')
@@ -263,6 +274,65 @@ export default function ResultPage() {
     }
   }
 
+  const runPaidGeneration = async (form: any, charId: string, saju: any) => {
+    if (paidGenLockRef.current || !form) return
+    paidGenLockRef.current = true
+    setPaidGenerating(true)
+    setUnlockError('')
+    try {
+      const selectedRegion = KOREA_REGIONS.find(r => r.name === form.birthPlace)
+      const res = await fetch('/api/saju', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...form,
+          personalQuestion: form.personalQuestion,
+          occupation: form.occupation,
+          characterId: charId,
+          longitude: selectedRegion?.longitude,
+          phase: 'paid',
+          shareId,
+        }),
+      })
+      if (!res.ok || !res.body) {
+        setUnlockError(res.status === 401 ? '로그인 후 다시 시도해주세요.' : '유료 풀이 생성 요청에 실패했어요.')
+        return
+      }
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let paidCode = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const stepped = appendSseChunk(buffer, decoder.decode(value, { stream: true }))
+        buffer = stepped.buffer
+        for (const frame of stepped.frames) {
+          const parsed = parseSseFrame(frame)
+          if (parsed.kind !== 'event') continue
+          if (parsed.data.type === 'paid_status' && typeof parsed.data.code === 'string') {
+            paidCode = parsed.data.code
+          }
+          if (parsed.data.type === 'error' && parsed.data.part === 'fatal') {
+            setUnlockError(typeof parsed.data.message === 'string' ? parsed.data.message : '유료 풀이 생성에 실패했어요.')
+          }
+        }
+      }
+      if (paidCode === 'discarded') {
+        setUnlockError('예약이 만료되어 엽전을 돌려드렸어요. 다시 전체보기를 눌러주세요.')
+      } else if (paidCode === 'incomplete') {
+        setUnlockError('유료 풀이가 아직 끝나지 않았어요. 같은 화면에서 다시 시도할 수 있어요.')
+      }
+      await fetchReading()
+      await updateSession()
+    } catch {
+      setUnlockError('유료 풀이 생성 중 오류가 났어요.')
+    } finally {
+      paidGenLockRef.current = false
+      setPaidGenerating(false)
+    }
+  }
+
   const unlockWithNyang = async () => {
     if (balance < SAJU_UNLOCK_NYANG) {
       setShowShop(true)
@@ -282,8 +352,14 @@ export default function ResultPage() {
         setUnlockError(data.error || '전체보기에 실패했어요.')
         return
       }
-      await fetchReading()
+      if (data.already) {
+        await fetchReading()
+        await updateSession()
+        return
+      }
+      if (data.expiresAt) setReservationExpiresAt(data.expiresAt)
       await updateSession()
+      await runPaidGeneration(formInfo, characterId, sajuData)
     } catch {
       setUnlockError('전체보기 요청 중 오류가 났어요.')
     } finally {
@@ -566,12 +642,15 @@ export default function ResultPage() {
                   )}
                   <button
                     onClick={unlockWithNyang}
-                    disabled={unlocking}
+                    disabled={unlocking || paidGenerating}
                     className="w-full mt-3 py-3.5 rounded-2xl font-bold text-sm text-white disabled:opacity-40"
                     style={{ background: `linear-gradient(135deg, ${charColor}, ${charColor}bb)` }}>
-                    {unlocking ? '엽전 차감 중...' : `🔓 전체보기 — 엽전 ${SAJU_UNLOCK_NYANG}냥`}
+                    {unlocking || paidGenerating ? (paidGenerating ? '유료 풀이 생성 중...' : '엽전 차감 중...') : `🔓 전체보기 — 엽전 ${SAJU_UNLOCK_NYANG}냥`}
                   </button>
                   <p className="text-[11px] text-gray-600 text-center mt-2">이후 같은 풀이는 무료로 다시 볼 수 있어요</p>
+                  {reservationExpiresAt && (
+                    <p className="text-[10px] text-gray-700 text-center mt-1">서버 예약 만료 시각: {reservationExpiresAt}</p>
+                  )}
                 </>
               )}
             </div>
@@ -580,12 +659,15 @@ export default function ResultPage() {
           {!isPaid && paidTitles.length === 0 && (
             <div className="mb-4">
               {unlockError && <p className="text-xs text-red-400 mb-2">{unlockError}</p>}
+              {paidGenerating && (
+                <p className="text-xs text-purple-300 mb-2">유료 판결문을 생성하고 있어요. 창을 닫아도 서버에서 이어서 처리합니다.</p>
+              )}
               <button
                 onClick={unlockWithNyang}
-                disabled={unlocking}
+                disabled={unlocking || paidGenerating}
                 className="w-full py-3.5 rounded-2xl font-bold text-sm text-white disabled:opacity-40"
                 style={{ background: `linear-gradient(135deg, ${charColor}, ${charColor}bb)` }}>
-                {unlocking ? '엽전 차감 중...' : `🔓 전체보기 — 엽전 ${SAJU_UNLOCK_NYANG}냥`}
+                {unlocking || paidGenerating ? (paidGenerating ? '유료 풀이 생성 중...' : '엽전 차감 중...') : `🔓 전체보기 — 엽전 ${SAJU_UNLOCK_NYANG}냥`}
               </button>
               <p className="text-[11px] text-gray-600 text-center mt-2">이후 같은 풀이는 무료로 다시 볼 수 있어요</p>
             </div>

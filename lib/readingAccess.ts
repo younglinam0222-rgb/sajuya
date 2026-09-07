@@ -1,4 +1,5 @@
 import { FREE_TITLE_COUNT } from './pricing'
+import { isFreeCategory, isFreeTitleId } from './sajuScope'
 
 type TitleLike = {
   id?: unknown
@@ -10,6 +11,7 @@ type TitleLike = {
 }
 
 export function titleIsFree(title: TitleLike, index: number, titles: TitleLike[]) {
+  if (isFreeCategory(title.category) || isFreeTitleId(title.id)) return true
   const flagged = titles
     .map((t, i) => ({ i, free: t.is_free === true }))
     .filter(t => t.free)

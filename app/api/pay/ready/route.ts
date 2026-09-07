@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 import { getSalePackage, listSalePackages } from '@/lib/chargePackages'
 import { createChargeOrder, packageView } from '@/lib/chargeOrders'
+import { rejectCrossSiteCookieMutation } from '@/lib/requestGuard'
 
 export async function GET() {
   return NextResponse.json({ packages: listSalePackages().map(packageView) })
@@ -9,6 +10,8 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const csrf = rejectCrossSiteCookieMutation(req)
+    if (csrf) return csrf
     const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
     if (!token?.sub) {
       return NextResponse.json({ error: '로그인이 필요합니다' }, { status: 401 })

@@ -1,10 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { randomUUID } from 'crypto'
+import { getToken } from 'next-auth/jwt'
 import { CHARACTERS } from '@/lib/characters'
-import { GROUP_IDS, LAST_GROUP_INDEX } from '@/lib/sajuContract'
 import { sanitizeJudgmentTitles, sanitizeStrategy, sanitizeText } from '@/lib/sajuSanitize'
 import { assertNoElementCitationMismatch } from '@/lib/elementCitationCheck'
+import {
+  FREE_ID_GROUPS,
+  FREE_CATEGORY_GROUPS,
+  PAID_ID_GROUPS,
+  PAID_CATEGORY_GROUPS,
+  mergePaidIntoFree,
+} from '@/lib/sajuScope'
+import {
+  clipSajuInput,
+  localBurstGuard,
+  rejectCrossSiteCookieMutation,
+  rejectOversizedJson,
+} from '@/lib/requestGuard'
+import { completeFullview, startFullviewJob, tryUserRate } from '@/lib/fullviewDb'
+import { createServerSupabase } from '@/lib/supabase'
 import {
   CALC_VERSION,
   PROMPT_VERSION,
@@ -190,36 +205,109 @@ export async function POST(req: NextRequest) {
   let setupRequestId: string | undefined
   let setupManse: unknown = null
   try {
-    const body = await req.json()
+    const csrf = rejectCrossSiteCookieMutation(req)
+    if (csrf) return csrf
+    const oversized = rejectOversizedJson(req)
+    if (oversized) return oversized
+
+    const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
+    if (!token?.sub) {
+      return sseFailure('로그인 후 이용할 수 있어요.')
+    }
+    if (!localBurstGuard(`saju:${token.sub}`, 4, 60_000)) {
+      return sseFailure('요청이 잦아요. 잠시 후 다시 시도해주세요.')
+    }
+    const rateOk = await tryUserRate(token.sub, 'saju', 8, 600)
+    if (!rateOk) {
+      return sseFailure('요청이 잦아요. 잠시 후 다시 시도해주세요.')
+    }
+
+    const raw = await req.text()
+    if (raw.length > 40_000) {
+      return sseFailure('요청이 너무 큽니다.')
+    }
+    let parsedBody: Record<string, unknown>
+    try {
+      parsedBody = JSON.parse(raw) as Record<string, unknown>
+    } catch {
+      return sseFailure('요청을 읽지 못했어요.')
+    }
+    const body = clipSajuInput(parsedBody) as {
+      name?: string
+      year?: string
+      month?: string
+      day?: string
+      hour?: string | number | null
+      gender?: string
+      characterId?: string
+      occupation?: string
+      maritalStatus?: string
+      questionIntent?: string
+      partnerInfo?: {
+        name?: string
+        year?: string
+        month?: string
+        day?: string
+        hour?: string | number | null
+        gender?: string
+      }
+      longitude?: number
+      personalQuestion?: string
+      requestId?: string
+      retry?: { groups?: number[]; strategy?: boolean; personal?: boolean }
+      phase?: string
+      shareId?: string
+    }
     const {
       name, year, month, day, hour, gender, characterId, occupation,
       maritalStatus, questionIntent, partnerInfo, longitude, personalQuestion,
-      requestId: clientRequestId, retry,
+      requestId: clientRequestId, retry, phase: rawPhase, shareId: rawShareId,
     } = body
+    const phase = rawPhase === 'paid' ? 'paid' : 'free'
+    const shareId = typeof rawShareId === 'string' ? rawShareId : ''
+    const characterKey = typeof characterId === 'string' ? characterId : 'doRyeong'
+    const yearStr = String(year ?? '')
+    const monthStr = String(month ?? '')
+    const dayStr = String(day ?? '')
+    let activeJobId: string | null = null
     const requestId = typeof clientRequestId === 'string' && clientRequestId.length > 0 && clientRequestId.length < 80
       ? clientRequestId
       : randomUUID()
     setupRequestId = requestId
 
-    const character = CHARACTERS[characterId] ?? CHARACTERS['doRyeong']
+    const character = CHARACTERS[characterKey] ?? CHARACTERS['doRyeong']
     if (!character) {
       return sseFailure('선택한 신령 정보를 찾지 못했어요.', requestId)
     }
     const genderStr = gender === 'male' ? '남성' : '여성'
-    const voiceGuide = CHARACTER_VOICE[characterId] ?? CHARACTER_VOICE['doRyeong']
+    const voiceGuide = CHARACTER_VOICE[characterKey] ?? CHARACTER_VOICE['doRyeong']
     const styleRules = getStyleRules()
 
     const marital = normalizeMaritalStatus(maritalStatus)
     const job = normalizeOccupation(occupation)
     const clock = generationClock()
-    const manse = calcManse(parseInt(year), parseInt(month), parseInt(day), hourInputToHm(hour), typeof longitude === 'number' ? longitude : undefined)
+    const manse = calcManse(parseInt(yearStr), parseInt(monthStr), parseInt(dayStr), hourInputToHm(hour), typeof longitude === 'number' ? longitude : undefined)
     setupManse = manse
     if (!process.env.ANTHROPIC_API_KEY) {
       return sseFailure('분석 서버 설정이 없어 풀이를 만들 수 없어요.', requestId, manse)
     }
 
+    if (phase === 'paid') {
+      if (!shareId || shareId.length < 8) {
+        return sseFailure('예약된 풀이를 찾을 수 없어요.', requestId, manse)
+      }
+      const started = await startFullviewJob(shareId, token.sub)
+      if (!started.ok || !started.job_id) {
+        const msg = started.code === 'expired' || started.code === 'no_reservation'
+          ? '예약이 만료되었어요. 전체보기를 다시 눌러주세요.'
+          : '유료 생성을 시작할 수 없어요.'
+        return sseFailure(msg, requestId, manse)
+      }
+      activeJobId = started.job_id
+    }
+
     const currentYear = clock.currentYear
-    const currentAge = currentYear - parseInt(year) + 1
+    const currentAge = currentYear - parseInt(yearStr) + 1
     const thisYearSeun = formatSeunForPrompt(manse.dayPillar.stemIdx, currentYear)
     const nextYearSeun = formatSeunForPrompt(manse.dayPillar.stemIdx, currentYear + 1)
     const seunInfo = `
@@ -290,7 +378,7 @@ ${SHARED_INTERP_GUARDS}
       '인생 전반': '이 사람 사주에서 가장 특징적인 게 뭔지, 어떤 인생 흐름인지 알려줘. 점수나 세부 전성기 나이는 쓰지 마라',
       '건강':      '생활 리듬과 컨디션 관리 조언만. 질환·증상을 겪는다고 단정하거나 치료·처방처럼 말하지 마라',
     }
-    const intentInstruction = intentGuide[questionIntent] ?? '이 사람 사주에서 가장 중요한 걸 찾아서 알려줘'
+    const intentInstruction = intentGuide[typeof questionIntent === 'string' ? questionIntent : ''] ?? '이 사람 사주에서 가장 중요한 걸 찾아서 알려줘'
 
     const CATEGORY_ROLES: Record<string, string> = {
       '성격': '판단·감정 반응에만 집중. 재물·직업 조언 반복 금지.',
@@ -320,7 +408,7 @@ ${SHARED_INTERP_GUARDS}
       { type: 'text', text: sharedContext, cache_control: { type: 'ephemeral' } },
     ]
 
-    const makeJudgmentPrompt = (ids: number[], isFreeIds: number[], categoryHints: string[], primaryTool: string, avoidTools: string) => `
+    const makeJudgmentPrompt = (ids: number[], isFreeIds: number[], categoryHints: readonly string[], primaryTool: string, avoidTools: string) => `
 [현재 상황] 이 사람은 지금 ${currentAge}세야. 이미 지난 나이대는 과거로만 짧게, 지금과 앞으로에 집중.
 
 [궁금한 것]: ${questionIntent}
@@ -355,15 +443,9 @@ ${lifecycleRows}
 `
 
     const FREE_IDS = [1, 2, 3]
-    const idGroups = GROUP_IDS.map(g => [...g])
-    const categoryGroups = [
-      ['성격', '재물운'],
-      ['애정운', '직업운'],
-      ['건강운', '인간관계'],
-      ['대운', '인생흐름'],
-      ['어울리는 지역', '올해 총운'],
-      ['위기관리', '결혼운'],
-    ]
+    const idGroups = (phase === 'paid' ? PAID_ID_GROUPS : FREE_ID_GROUPS).map(g => [...g])
+    const categoryGroups = [...(phase === 'paid' ? PAID_CATEGORY_GROUPS : FREE_CATEGORY_GROUPS)]
+    const lastGroupIndex = idGroups.length - 1
     const toolPool = [
       '오행 균형(목·화·토·금·수 과다·부족)',
       '십성 구조(비겁·식상·재성·관성·인성의 조합과 힘)',
@@ -372,10 +454,7 @@ ${lifecycleRows}
     ]
     const toolGroups = idGroups.map((_, gi) => toolPool[gi % toolPool.length])
 
-    // ✅ 신규(핵심 안정화): 텍스트로 "JSON처럼 써줘"라고 부탁하는 대신, Anthropic의
-    // Tool Use로 출력 형식을 API 차원에서 강제함. AI가 형식을 "어길 수 있는" 여지 자체를
-    // 없애는 근본적인 해결책 — 재시도(안전망)는 남겨두되, 이제 진짜 예외 상황(네트워크 등)에만 걸림.
-    const judgmentTool = {
+    const makeJudgmentTool = (count: number) => ({
       name: 'submit_judgments',
       description: '작성한 사주 판결문들을 제출한다.',
       input_schema: {
@@ -383,8 +462,8 @@ ${lifecycleRows}
         properties: {
           titles: {
             type: 'array' as const,
-            minItems: 2,
-            maxItems: 2,
+            minItems: count,
+            maxItems: count,
             items: {
               type: 'object' as const,
               properties: {
@@ -401,7 +480,7 @@ ${lifecycleRows}
         },
         required: ['titles'],
       },
-    }
+    })
 
     const strategyTool = {
       name: 'submit_strategy',
@@ -468,10 +547,10 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
     }))
     const retryAll = !retry || typeof retry !== 'object'
     const retryGroups: number[] = retryAll
-      ? GROUP_IDS.map((_, i) => i)
-      : (Array.isArray(retry.groups) ? retry.groups.filter((g: unknown) => typeof g === 'number' && g >= 0 && g <= LAST_GROUP_INDEX) : [])
-    const retryStrategy = retryAll || retry.strategy === true
-    const retryPersonal = (retryAll ? !!trimmedPersonalQ : retry.personal === true) && !!trimmedPersonalQ
+      ? idGroups.map((_, i) => i)
+      : (Array.isArray(retry.groups) ? retry.groups.filter((g: unknown) => typeof g === 'number' && g >= 0 && g <= lastGroupIndex) : [])
+    const retryStrategy = phase === 'paid' && (retryAll || retry.strategy === true)
+    const retryPersonal = phase === 'paid' && (retryAll ? !!trimmedPersonalQ : retry.personal === true) && !!trimmedPersonalQ
 
     type ErrorKind = 'fatal' | 'transient' | 'validation' | 'truncation'
 
@@ -502,8 +581,11 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
 
     const workAbort = new AbortController()
     const onClientAbort = () => workAbort.abort()
-    if (req.signal.aborted) workAbort.abort()
-    else req.signal.addEventListener('abort', onClientAbort)
+    const followClientAbort = phase !== 'paid'
+    if (followClientAbort) {
+      if (req.signal.aborted) workAbort.abort()
+      else req.signal.addEventListener('abort', onClientAbort)
+    }
 
     const deadlineAt = Date.now() + 270_000
 
@@ -613,6 +695,12 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
           req.signal.removeEventListener('abort', onClientAbort)
         }
 
+        const paidAcc: { titles: unknown[]; strategy: unknown; personalAnswer: unknown } = {
+          titles: [],
+          strategy: null,
+          personalAnswer: null,
+        }
+
         try {
           send({ type: 'meta', startedAt: Date.now(), retryAll, retryGroups, retryStrategy, retryPersonal })
           try {
@@ -633,7 +721,7 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
                   model: 'claude-sonnet-4-6',
                   max_tokens: 3200,
                   system: cachedSystem,
-                  tools: [judgmentTool],
+                  tools: [makeJudgmentTool(ids.length)],
                   tool_choice: { type: 'tool', name: 'submit_judgments' },
                   messages: [{
                     role: 'user',
@@ -656,7 +744,9 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
                     assertNoElementCitationMismatch(String(t.content), manse.elementCount)
                   }
                 })
-                send({ type: 'group', groupIndex: gi, titles: sanitizeJudgmentTitles(result.titles) })
+                const titles = sanitizeJudgmentTitles(result.titles)
+                paidAcc.titles.push(...titles)
+                send({ type: 'group', groupIndex: gi, titles })
               } catch (e) {
                 if (workAbort.signal.aborted) return
                 const kind = classifyError(e)
@@ -697,7 +787,9 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
                   }
                   assertNoElementCitationMismatch(collectGeneratedText([result]), manse.elementCount)
                 })
-                send({ type: 'strategy', data: sanitizeStrategy(result) })
+                const strategy = sanitizeStrategy(result)
+                paidAcc.strategy = strategy
+                send({ type: 'strategy', data: strategy })
               } catch (e) {
                 if (workAbort.signal.aborted) return
                 const kind = classifyError(e)
@@ -728,13 +820,15 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
                   }
                   assertNoElementCitationMismatch(String(result.answer), manse.elementCount)
                 })
+                const personal = {
+                  question: trimmedPersonalQ,
+                  answer: sanitizeText(result.answer),
+                }
+                paidAcc.personalAnswer = personal
                 send({
                   type: 'personal',
                   question: trimmedPersonalQ,
-                  data: {
-                    question: trimmedPersonalQ,
-                    answer: sanitizeText(result.answer),
-                  },
+                  data: personal,
                 })
                 console.log(JSON.stringify({
                   tag: '사주궁:personal',
@@ -757,6 +851,30 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
           }
 
           await Promise.allSettled(tasks)
+          if (phase === 'paid' && activeJobId) {
+            const paidTitleCount = paidAcc.titles.length
+            const paidReady = paidTitleCount >= 9 && !!paidAcc.strategy && (!retryPersonal || !!paidAcc.personalAnswer)
+            if (paidReady) {
+              const supabase = createServerSupabase()
+              const { data: reading } = await supabase
+                .from('readings')
+                .select('ai_result, user_id')
+                .eq('share_id', shareId)
+                .maybeSingle()
+              if (reading && reading.user_id === token.sub) {
+                const merged = mergePaidIntoFree(String(reading.ai_result ?? ''), paidAcc)
+                const done = await completeFullview(activeJobId, merged)
+                send({ type: 'paid_status', code: done.code })
+                if (done.code !== 'completed' && done.code !== 'already_completed') {
+                  workAbort.abort()
+                }
+              } else {
+                send({ type: 'paid_status', code: 'discarded' })
+              }
+            } else {
+              send({ type: 'paid_status', code: 'incomplete' })
+            }
+          }
           finish(!workAbort.signal.aborted)
         } catch (e) {
           if (!workAbort.signal.aborted) {

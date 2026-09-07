@@ -399,6 +399,8 @@ export function packageView(pkg: ChargePackage) {
     id: pkg.id,
     name: pkg.name,
     amountKrw: pkg.amountKrw,
+    listPriceKrw: pkg.listPriceKrw,
+    discountKrw: pkg.discountKrw,
     paidNyang: pkg.paidNyang,
     bonusNyang: pkg.bonusNyang,
     totalNyang: totalNyang(pkg),

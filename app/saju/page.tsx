@@ -8,7 +8,8 @@ import TimeNumberInput from '@/app/components/TimeNumberInput'
 import { KOREA_REGIONS } from '@/lib/solarTime'
 import { sanitizeText } from '@/lib/sajuSanitize'
 import { appendSseChunk, parseSseFrame } from '@/lib/sajuSse'
-import { assessCompletion, GROUP_IDS, LAST_GROUP_INDEX, normalizePersonalAnswer, PEAK_GUIDE_LABEL, sortTitlesById } from '@/lib/sajuContract'
+import { assessFreeStage, FREE_TITLE_IDS } from '@/lib/sajuScope'
+import { normalizePersonalAnswer, PEAK_GUIDE_LABEL, sortTitlesById } from '@/lib/sajuContract'
 import { titleIsFree } from '@/lib/readingAccess'
 import { SAJU_UNLOCK_NYANG } from '@/lib/pricing'
 
@@ -318,16 +319,13 @@ export default function SajuPage() {
 
   const mergeTitleList = (): SajuTitle[] => sortTitlesById([...titlesByIdRef.current.values()])
 
-  const currentAssessment = () => assessCompletion({
+  const currentAssessment = () => assessFreeStage({
     titles: mergeTitleList(),
-    strategy: finalResultRef.current.strategy,
-    personal: finalResultRef.current.personalAnswer,
-    requestedPersonal: requestedPersonalRef.current,
     receivedGroupIndexes: receivedGroupsRef.current,
     gotDone: gotDoneRef.current,
   })
 
-  const hintFromReport = (report: ReturnType<typeof assessCompletion>) => {
+  const hintFromReport = (report: ReturnType<typeof assessFreeStage>) => {
     const hints: string[] = []
     if (!report.gotDone) hints.push('서버 완료 신호([DONE]) 없음')
     if (report.missingGroups.length) hints.push(`그룹 ${report.missingGroups.map(g => g + 1).join(', ')}`)
@@ -489,9 +487,9 @@ export default function SajuPage() {
           groups: [...new Set([
             ...reportNow.missingGroups,
             ...failedParts.filter(p => p.part === 'group' && typeof p.groupIndex === 'number').map(p => p.groupIndex as number),
-          ])].filter(g => g >= 0 && g <= LAST_GROUP_INDEX),
-          strategy: !reportNow.strategyOk,
-          personal: requestedPersonalRef.current && !reportNow.personalOk,
+          ])].filter(g => g === 0),
+          strategy: false,
+          personal: false,
         }
       : undefined
 
@@ -512,6 +510,7 @@ export default function SajuPage() {
           longitude: selectedRegion?.longitude,
           requestId,
           retry,
+          phase: 'free',
         }),
       })
       if (requestIdRef.current !== requestId) return
@@ -568,7 +567,7 @@ export default function SajuPage() {
           return
         }
         if (parsed.type === 'group') {
-          if (typeof parsed.groupIndex !== 'number' || parsed.groupIndex < 0 || parsed.groupIndex > LAST_GROUP_INDEX) {
+          if (typeof parsed.groupIndex !== 'number' || parsed.groupIndex !== 0) {
             clientLog('invalid_group_index', { groupIndex: parsed.groupIndex ?? null })
             return
           }
@@ -858,7 +857,7 @@ export default function SajuPage() {
           <div className="mb-2">
             <p className="text-xs text-gray-500 mb-2 font-medium">✨ 판결 {allTitles.length}가지{generating ? ' · 도착하는 대로 표시' : ''}</p>
             <div className="space-y-3">
-              {GROUP_IDS.flat().map((id, i) => {
+              {FREE_TITLE_IDS.map((id, i) => {
                 const item = titleMap.get(String(id))
                 if (item) {
                   const titleIndex = allTitles.findIndex(t => String(t.id) === String(item.id))

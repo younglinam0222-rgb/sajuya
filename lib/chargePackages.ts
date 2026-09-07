@@ -1,10 +1,9 @@
 import { NYANG_PRICE } from './pricing'
 
-/** 신규 판매 카탈로그 버전. 주문에 스냅샷으로 저장하고, 이후 카탈로그 변경이 기존 주문을 바꾸지 않는다. */
-export const CHARGE_PACKAGE_VERSION = 'charge-v3-20260907'
+/** 신규 판매 카탈로그. 주문 스냅샷이 이후 카탈로그 변경에 영향받지 않는다. */
+export const CHARGE_PACKAGE_VERSION = 'charge-v4-discount-20260907'
 
 export type ChargePackageId = 'nyang-1' | 'nyang-5' | 'nyang-10'
-export type LegacyChargePackageId = 'one' | 'three'
 
 export type ChargePackage = {
   id: string
@@ -12,6 +11,8 @@ export type ChargePackage = {
   paidNyang: number
   bonusNyang: number
   amountKrw: number
+  listPriceKrw: number
+  discountKrw: number
   currency: 'KRW'
   forSale: boolean
   version: string
@@ -23,34 +24,40 @@ const SALE: Record<ChargePackageId, ChargePackage> = {
     name: '1냥',
     paidNyang: 1,
     bonusNyang: 0,
-    amountKrw: 1 * NYANG_PRICE,
+    amountKrw: NYANG_PRICE,
+    listPriceKrw: NYANG_PRICE,
+    discountKrw: 0,
     currency: 'KRW',
     forSale: true,
     version: CHARGE_PACKAGE_VERSION,
   },
   'nyang-5': {
     id: 'nyang-5',
-    name: '5+1냥',
+    name: '5냥',
     paidNyang: 5,
-    bonusNyang: 1,
-    amountKrw: 5 * NYANG_PRICE,
+    bonusNyang: 0,
+    amountKrw: 9000,
+    listPriceKrw: 5 * NYANG_PRICE,
+    discountKrw: 500,
     currency: 'KRW',
     forSale: true,
     version: CHARGE_PACKAGE_VERSION,
   },
   'nyang-10': {
     id: 'nyang-10',
-    name: '10+2냥',
+    name: '10냥',
     paidNyang: 10,
-    bonusNyang: 2,
-    amountKrw: 10 * NYANG_PRICE,
+    bonusNyang: 0,
+    amountKrw: 18000,
+    listPriceKrw: 10 * NYANG_PRICE,
+    discountKrw: 1000,
     currency: 'KRW',
     forSale: true,
     version: CHARGE_PACKAGE_VERSION,
   },
 }
 
-/** 신규 판매에서 제외. 과거 주문 조회·취소용으로만 보존. 신규 주문 생성에 쓰지 않는다. */
+/** 신규 판매 제외. 과거 주문 조회·기존 보너스 잔액 보존용. */
 export const LEGACY_CHARGE_PACKAGES: ChargePackage[] = [
   {
     id: 'one',
@@ -58,6 +65,8 @@ export const LEGACY_CHARGE_PACKAGES: ChargePackage[] = [
     paidNyang: 1,
     bonusNyang: 0,
     amountKrw: 1900,
+    listPriceKrw: 1900,
+    discountKrw: 0,
     currency: 'KRW',
     forSale: false,
     version: 'legacy-v1',
@@ -68,9 +77,35 @@ export const LEGACY_CHARGE_PACKAGES: ChargePackage[] = [
     paidNyang: 3,
     bonusNyang: 0,
     amountKrw: 4900,
+    listPriceKrw: 5700,
+    discountKrw: 800,
     currency: 'KRW',
     forSale: false,
     version: 'legacy-v1',
+  },
+  {
+    id: 'nyang-5',
+    name: '5+1냥 (구 보너스)',
+    paidNyang: 5,
+    bonusNyang: 1,
+    amountKrw: 9500,
+    listPriceKrw: 9500,
+    discountKrw: 0,
+    currency: 'KRW',
+    forSale: false,
+    version: 'charge-v3-20260907',
+  },
+  {
+    id: 'nyang-10',
+    name: '10+2냥 (구 보너스)',
+    paidNyang: 10,
+    bonusNyang: 2,
+    amountKrw: 19000,
+    listPriceKrw: 19000,
+    discountKrw: 0,
+    currency: 'KRW',
+    forSale: false,
+    version: 'charge-v3-20260907',
   },
 ]
 

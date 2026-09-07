@@ -96,7 +96,10 @@ export default function YeopjeunShop({ onClose, currentBalance = 0 }: YeopjeunSh
                     </div>
                     <p className="text-[11px] text-gray-400 mt-1">
                       결제 {pkg.amountKrw.toLocaleString()}원 · 유상 {pkg.paidNyang}냥
-                      {pkg.bonusNyang > 0 ? ` · 보너스 ${pkg.bonusNyang}냥` : ' · 보너스 없음'} · 총 {total}냥
+                      {pkg.discountKrw > 0
+                        ? ` · ${pkg.discountKrw.toLocaleString()}원 할인(정가 ${pkg.listPriceKrw.toLocaleString()}원)`
+                        : ''}
+                      {pkg.bonusNyang > 0 ? ` · 보너스 ${pkg.bonusNyang}냥` : ''} · 총 {total}냥
                     </p>
                   </div>
                   <div className="text-right flex-shrink-0">
