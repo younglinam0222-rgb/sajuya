@@ -1,14 +1,15 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { useSession } from 'next-auth/react'
+import { useSession, signIn } from 'next-auth/react'
 import BirthProfileFields from '@/app/components/BirthProfileFields'
 import EntertainmentConsent from '@/app/components/EntertainmentConsent'
 import MaritalStatusField from '@/app/components/MaritalStatusField'
 import OccupationField from '@/app/components/OccupationField'
 import { servicePriceLine } from '@/lib/priceDisplay'
 import { CONSENT_REQUIRED_MESSAGE } from '@/lib/entertainmentConsent'
+import { DAILY_FREE_USED_MESSAGE, DAILY_LOGIN_REQUIRED_MESSAGE } from '@/lib/dailyQuota'
 
 // ─── 타입 ─────────────────────────────────────────────
 interface DailyResult {
@@ -251,6 +252,13 @@ export default function DailyPage() {
     occupation: '직장인',
   })
   const [checkingCache, setCheckingCache] = useState(false)
+  const [paymentsEnabled, setPaymentsEnabled] = useState(false)
+  const [canGenerateFree, setCanGenerateFree] = useState(true)
+  const [hasCachedResult, setHasCachedResult] = useState(false)
+  const [quotaMessage, setQuotaMessage] = useState<string | null>(null)
+  const [confirmPaid, setConfirmPaid] = useState(false)
+  const requestIdRef = useRef<string | null>(null)
+  const inFlightRef = useRef(false)
   const todayStr = getTodayKST()
 
   // ✅ 추가: 로그인된 사용자면 오늘자 캐시가 있는지 먼저 확인.
@@ -287,6 +295,12 @@ export default function DailyPage() {
             if (char) setSelectedChar(char)
           }
         }
+        if (typeof data.paymentsEnabled === 'boolean') setPaymentsEnabled(data.paymentsEnabled)
+        if (data.quota) {
+          setCanGenerateFree(!!data.quota.canGenerateFree)
+          setHasCachedResult(!!data.quota.hasCachedResult)
+          setQuotaMessage(typeof data.quota.message === 'string' ? data.quota.message : null)
+        }
       })
       .catch(() => {})
       .finally(() => setCheckingCache(false))
@@ -294,10 +308,27 @@ export default function DailyPage() {
 
   const handleSubmit = async () => {
     if (!form.name) return
+    if (status !== 'authenticated') {
+      setErrorMsg(DAILY_LOGIN_REQUIRED_MESSAGE)
+      return
+    }
     if (!agreed) {
       setErrorMsg(CONSENT_REQUIRED_MESSAGE)
       return
     }
+    if (!canGenerateFree) {
+      if (!paymentsEnabled) {
+        setErrorMsg(quotaMessage || DAILY_FREE_USED_MESSAGE)
+        return
+      }
+      if (!confirmPaid) {
+        setErrorMsg('다른 결과로 다시 생성하려면 1냥 사용에 동의해야 합니다.')
+        return
+      }
+    }
+    if (inFlightRef.current) return
+    inFlightRef.current = true
+    if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID()
     setErrorMsg(null)
     setStage('loading')
     setResult({})
@@ -307,12 +338,22 @@ export default function DailyPage() {
       const res = await fetch('/api/daily', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, characterId: selectedChar.id, agreedEntertainment: true }),
+        body: JSON.stringify({
+          ...form,
+          characterId: selectedChar.id,
+          agreedEntertainment: true,
+          requestId: requestIdRef.current,
+          confirmPaidRegenerate: paymentsEnabled && !canGenerateFree && confirmPaid,
+        }),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
         setErrorMsg(typeof err.error === 'string' ? err.error : `서버 오류(${res.status})`)
-        setStage('input')
+        if (res.status !== 500) requestIdRef.current = null
+        if (res.status === 403 || res.status === 409) {
+          setCanGenerateFree(false)
+        }
+        setStage(hasCachedResult ? 'result' : 'input')
         return
       }
       if (!res.body) return
@@ -344,10 +385,15 @@ export default function DailyPage() {
           } catch {}
         }
       }
+      setCanGenerateFree(false)
+      setHasCachedResult(true)
+      requestIdRef.current = null
       setStage('result')
     } catch (e) {
       console.error(e)
       setStage('input')
+    } finally {
+      inFlightRef.current = false
     }
   }
 
@@ -467,7 +513,7 @@ export default function DailyPage() {
 
           <button onClick={() => setStage('input')}
             className="w-full mt-6 py-3 rounded-2xl text-sm text-gray-400 border border-gray-800">
-            다시 보기
+            입력 화면으로
           </button>
           <Link href="/" className="block mt-3 text-center text-gray-500 text-sm">홈으로</Link>
         </div>
@@ -512,7 +558,27 @@ export default function DailyPage() {
           </div>
         </div>
 
-        {/* 입력 폼 */}
+        {hasCachedResult && (
+          <div className="mb-4 rounded-2xl border border-gray-800 bg-[#111118] p-4">
+            <p className="text-sm text-gray-300 mb-3">{quotaMessage || DAILY_FREE_USED_MESSAGE}</p>
+            <button onClick={() => setStage('result')}
+              className="w-full py-3 rounded-2xl text-sm font-bold text-white"
+              style={{ background: selectedChar.color }}>
+              오늘 결과 다시 보기
+            </button>
+          </div>
+        )}
+
+        {status !== 'authenticated' && status !== 'loading' && (
+          <div className="mb-4 rounded-2xl border border-gray-800 bg-[#111118] p-4">
+            <p className="text-sm text-gray-300 mb-3">로그인하면 하루에 한 번 오늘의 운세를 볼 수 있어요.</p>
+            <button onClick={() => signIn('kakao', { callbackUrl: '/daily' })}
+              className="w-full py-3 rounded-2xl font-bold text-sm text-black"
+              style={{ background: '#FEE500' }}>
+              카카오로 로그인
+            </button>
+          </div>
+        )}
         <div className="bg-[#111118] rounded-2xl p-4 mb-4 border border-gray-800 space-y-3">
           <p className="text-xs font-medium" style={{ color: selectedChar.color }}>✨ 오늘 하루의 운세를 확인하세요</p>
 
@@ -546,11 +612,31 @@ export default function DailyPage() {
         {errorMsg && (
           <p className="mb-3 text-xs text-red-400">{errorMsg}</p>
         )}
+        {!canGenerateFree && !paymentsEnabled && !hasCachedResult && (
+          <p className="mb-3 text-xs text-amber-300">{quotaMessage || DAILY_FREE_USED_MESSAGE}</p>
+        )}
+        {paymentsEnabled && !canGenerateFree && (
+          <label className="mb-3 flex items-start gap-2 text-sm text-gray-200">
+            <input type="checkbox" checked={confirmPaid} onChange={e => setConfirmPaid(e.target.checked)}
+              className="mt-0.5 accent-yellow-500" />
+            <span>1냥을 사용하여 다른 결과로 다시 생성합니다.</span>
+          </label>
+        )}
         <EntertainmentConsent agreed={agreed} onChange={setAgreed} />
-        <button onClick={handleSubmit} disabled={!form.name || !agreed}
+        <button onClick={handleSubmit} disabled={
+          !form.name
+          || !agreed
+          || status !== 'authenticated'
+          || (!canGenerateFree && !paymentsEnabled)
+          || (!canGenerateFree && paymentsEnabled && !confirmPaid)
+        }
           className="w-full py-4 rounded-2xl font-bold text-base text-white disabled:opacity-40 disabled:cursor-not-allowed"
           style={{ background: `linear-gradient(135deg, ${selectedChar.color}, ${selectedChar.color}bb)` }}>
-          {selectedChar.name}에게 오늘 운세 묻기 ✨
+          {status !== 'authenticated'
+            ? '로그인 후 오늘 운세 보기'
+            : !canGenerateFree && !paymentsEnabled
+              ? '오늘은 이용을 완료했어요'
+              : `${selectedChar.name}에게 오늘 운세 묻기 ✨`}
         </button>
         <p className="text-center text-gray-600 text-xs mt-3">만세력 기반 분석 · {servicePriceLine('daily')}</p>
       </div>

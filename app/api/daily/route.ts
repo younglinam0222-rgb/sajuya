@@ -8,42 +8,95 @@ import { birthPromptLine, resolveBirthFromRequest } from '@/lib/birthInput'
 import { CONSENT_REQUIRED_MESSAGE, hasEntertainmentConsent } from '@/lib/entertainmentConsent'
 import { normalizeMaritalStatus, resolveOccupation } from '@/lib/profileOptions'
 import { buildServiceContextPrompt } from '@/lib/serviceContextPrompt'
+import { kstYmd } from '@/lib/kstDate'
+import { isPaymentsEnabled } from '@/lib/paymentFlags'
+import { createSupabaseDailyQuotaStore } from '@/lib/dailyQuotaSupabase'
+import {
+  DAILY_LOGIN_REQUIRED_MESSAGE,
+  completeDailyGeneration,
+  failDailyGeneration,
+  getDailyQuotaStatus,
+  reserveDailyGeneration,
+  type DailyUsageRow,
+} from '@/lib/dailyQuota'
 import LunarJS from 'lunar-javascript'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
-function getTodayDateKST() {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }))
-  const y = now.getFullYear()
-  const m = String(now.getMonth() + 1).padStart(2, '0')
-  const d = String(now.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
+function sessionUserId(session: unknown): string | null {
+  const user = (session as { user?: { id?: string } } | null)?.user
+  return user?.id ?? null
+}
+
+function quotaErrorStatus(code: string): number {
+  if (code === 'IN_PROGRESS') return 409
+  if (code === 'INVALID_REQUEST') return 400
+  return 403
+}
+
+function sseFromResult(manse: unknown, parsed: unknown) {
+  const encoder = new TextEncoder()
+  const readable = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode(
+        `data: ${JSON.stringify({ type: 'manse', data: manse })}\n\n`,
+      ))
+      const jsonStr = JSON.stringify(parsed)
+      const chunkSize = 200
+      for (let i = 0; i < jsonStr.length; i += chunkSize) {
+        controller.enqueue(encoder.encode(
+          `data: ${JSON.stringify({ text: jsonStr.slice(i, i + chunkSize) })}\n\n`,
+        ))
+      }
+      controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+      controller.close()
+    },
+  })
+  return new NextResponse(readable, {
+    headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' },
+  })
 }
 
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user) {
-      return NextResponse.json({ cached: null, birthProfile: null })
+    const userId = sessionUserId(session)
+    if (!userId) {
+      return NextResponse.json({
+        cached: null,
+        birthProfile: null,
+        quota: null,
+        paymentsEnabled: isPaymentsEnabled(),
+      })
     }
-    const userId = (session.user as { id?: string }).id
-    if (!userId) return NextResponse.json({ cached: null, birthProfile: null })
 
+    const store = createSupabaseDailyQuotaStore()
     const supabase = createServerSupabase()
-    const today = getTodayDateKST()
-
-    const [{ data: cached }, { data: userRow }] = await Promise.all([
-      supabase.from('daily_readings').select('*').eq('user_id', userId).eq('reading_date', today).maybeSingle(),
+    const now = new Date()
+    const [quota, userRow] = await Promise.all([
+      getDailyQuotaStatus(store, userId, now),
       supabase.from('users').select('birth_profile').eq('id', userId).maybeSingle(),
     ])
 
     return NextResponse.json({
-      cached: cached ? { manse: cached.manse_data, result: cached.result, characterId: cached.character_id } : null,
-      birthProfile: userRow?.birth_profile ?? null,
+      cached: quota.cached
+        ? { manse: quota.cached.manse, result: quota.cached.result, characterId: quota.cached.characterId }
+        : null,
+      birthProfile: userRow.data?.birth_profile ?? null,
+      quota: {
+        usageDate: quota.usageDate,
+        freeStatus: quota.freeStatus,
+        canGenerateFree: quota.canGenerateFree,
+        hasCachedResult: quota.hasCachedResult,
+        message: quota.canGenerateFree ? null : (quota.freeStatus === 'pending'
+          ? '오늘의 운세를 이미 생성 중이에요. 잠시 후 다시 확인해주세요.'
+          : '오늘 무료 이용을 완료했어요. 기존 결과를 확인하거나 내일 다시 이용해주세요'),
+      },
+      paymentsEnabled: isPaymentsEnabled(),
     })
   } catch (e) {
     console.error('[사주궁] 일일운세 조회 오류:', e)
-    return NextResponse.json({ cached: null, birthProfile: null })
+    return NextResponse.json({ cached: null, birthProfile: null, quota: null, paymentsEnabled: isPaymentsEnabled() })
   }
 }
 
@@ -76,9 +129,9 @@ function calcHourPillar(year: number, month: number, day: number, h: number, m: 
   const lunar = LunarJS.Solar.fromYmdHms(year, month, day, h, m, 0).getLunar()
   return ganZhiToPillar(lunar.getTimeInGanZhi())
 }
-function calcTodayPillar() {
-  const now = new Date()
-  return calcDayPillar(now.getFullYear(), now.getMonth() + 1, now.getDate())
+function calcTodayPillar(now: Date) {
+  const { year, month, day } = kstYmd(now)
+  return calcDayPillar(year, month, day)
 }
 function calcManse(year: number, month: number, day: number, hourStr?: string, longitude?: number) {
   let y = year, mo = month, d = day, hm = hourStr
@@ -112,6 +165,8 @@ const CHARACTER_VOICE: Record<string, string> = {
 }
 
 export async function POST(req: NextRequest) {
+  let reservedUsage: DailyUsageRow | null = null
+  let store: ReturnType<typeof createSupabaseDailyQuotaStore> | null = null
   try {
     const body = await req.json()
     if (!hasEntertainmentConsent(body.agreedEntertainment)) {
@@ -123,15 +178,45 @@ export async function POST(req: NextRequest) {
     const marital = normalizeMaritalStatus(body.maritalStatus)
     const occupation = resolveOccupation(body.occupation) || '미입력'
     const session = await getServerSession(authOptions)
-    const userId = (session?.user as { id?: string } | undefined)?.id
+    const userId = sessionUserId(session)
+    if (!userId) {
+      return NextResponse.json({ error: DAILY_LOGIN_REQUIRED_MESSAGE }, { status: 401 })
+    }
 
-    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }))
-    const todayStr  = `${now.getFullYear()}년 ${now.getMonth()+1}월 ${now.getDate()}일`
+    const now = new Date()
+    store = createSupabaseDailyQuotaStore()
+    const reserved = await reserveDailyGeneration(store, {
+      userId,
+      requestId: body.requestId,
+      now,
+      confirmPaidRegenerate: body.confirmPaidRegenerate,
+      paymentsEnabled: isPaymentsEnabled(),
+    })
+    if (!reserved.ok) {
+      return NextResponse.json({ error: reserved.error, code: reserved.code }, { status: quotaErrorStatus(reserved.code) })
+    }
+    reservedUsage = reserved.usage
+
+    if (reserved.reused) {
+      const cached = reserved.usage.result && reserved.usage.manse_data
+        ? { manse: reserved.usage.manse_data, result: reserved.usage.result, characterId: reserved.usage.character_id }
+        : await store.getFreeReading(userId, reserved.usage.usage_date)
+      if (!cached) {
+        return NextResponse.json({ error: '저장된 오늘의 운세를 찾지 못했어요. 잠시 후 다시 확인해주세요.' }, { status: 409 })
+      }
+      return sseFromResult(
+        cached.manse,
+        cached.result,
+      )
+    }
+
+    const kst = kstYmd(now)
+    const todayStr  = `${kst.year}년 ${kst.month}월 ${kst.day}일`
     const genderStr = gender === 'male' ? '남성' : '여성'
-    const age       = now.getFullYear() - birth.solarYear + 1
+    const age       = kst.year - birth.solarYear + 1
 
     const manse      = calcManse(birth.solarYear, birth.solarMonth, birth.solarDay, birth.hourMinute, birth.longitude)
-    const todayPillar = calcTodayPillar()
+    const todayPillar = calcTodayPillar(now)
 
     const elementNames: Record<string,string> = { '木':'나무', '火':'불', '土':'땅', '金':'금속', '水':'물' }
     const elementDesc = Object.entries(manse.elementCount)
@@ -193,57 +278,39 @@ ${buildServiceContextPrompt({ service: 'daily', maritalStatus: marital, occupati
     const parsed = JSON.parse(clean.slice(s, e + 1))
     console.log('[일일운세] 생성 완료:', response.usage.output_tokens, 'tok')
 
-    if (userId) {
+    const manseWithToday = { ...manse, todayPillar }
+    if (!store || !reservedUsage) throw new Error('quota store missing')
+    await completeDailyGeneration(store, reservedUsage, {
+      characterId: characterId || 'doRyeong',
+      manse: manseWithToday,
+      result: parsed,
+    }, now)
+
+    if (reservedUsage.kind === 'free') {
       try {
         const supabase = createServerSupabase()
-        const today = getTodayDateKST()
-        const manseWithToday = { ...manse, todayPillar }
-        await Promise.all([
-          supabase.from('daily_readings').upsert({
-            user_id: userId,
-            reading_date: today,
-            character_id: characterId,
-            manse_data: manseWithToday,
-            result: parsed,
-          }, { onConflict: 'user_id,reading_date' }),
-          supabase.from('users').update({
-            birth_profile: {
-              name, gender, characterId,
-              year: body.year, month: body.month, day: body.day, hour: body.hour,
-              calType: body.calType, isLeapMonth: body.isLeapMonth,
-              timeMode: body.timeMode, timePeriod: body.timePeriod, birthPlace: body.birthPlace,
-              maritalStatus: marital, occupation,
-            },
-          }).eq('id', userId),
-        ])
+        await supabase.from('users').update({
+          birth_profile: {
+            name, gender, characterId,
+            year: body.year, month: body.month, day: body.day, hour: body.hour,
+            calType: body.calType, isLeapMonth: body.isLeapMonth,
+            timeMode: body.timeMode, timePeriod: body.timePeriod, birthPlace: body.birthPlace,
+            maritalStatus: marital, occupation,
+          },
+        }).eq('id', userId)
       } catch (saveErr) {
-        console.error('[사주궁] 일일운세 저장 실패:', saveErr)
+        console.error('[사주궁] 일일운세 프로필 저장 실패:', saveErr)
       }
     }
 
-    const encoder = new TextEncoder()
-    const readable = new ReadableStream({
-      start(controller) {
-        controller.enqueue(encoder.encode(
-          `data: ${JSON.stringify({ type: 'manse', data: { ...manse, todayPillar } })}\n\n`
-        ))
-        const jsonStr = JSON.stringify(parsed)
-        const chunkSize = 200
-        for (let i = 0; i < jsonStr.length; i += chunkSize) {
-          controller.enqueue(encoder.encode(
-            `data: ${JSON.stringify({ text: jsonStr.slice(i, i + chunkSize) })}\n\n`
-          ))
-        }
-        controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-        controller.close()
-      },
-    })
-
-    return new NextResponse(readable, {
-      headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' },
-    })
+    return sseFromResult(manseWithToday, parsed)
   } catch (e) {
     console.error('[일일운세] 서버 오류:', e)
+    if (store && reservedUsage) {
+      try { await failDailyGeneration(store, reservedUsage) } catch (failErr) {
+        console.error('[일일운세] 실패 처리 오류:', failErr)
+      }
+    }
     return NextResponse.json({ error: '서버 오류' }, { status: 500 })
   }
 }
