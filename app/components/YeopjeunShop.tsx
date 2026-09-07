@@ -2,41 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { NYANG_PRICE, UNLOCK_PRICE } from '@/lib/pricing'
-
-interface Package {
-  id: string
-  name: string
-  tag?: string
-  coins: number
-  bonus: number
-  price: number
-  highlight?: boolean
-  desc: string
-}
-
-// ✅ 리빌딩: 4단계(1/3/5/10냥) → 2단계로 단순화
-// 낱개는 부담 없이, 3냥 패키지는 확실히 이득으로 보이게 해서 결제 유도
-const PACKAGES: Package[] = [
-  {
-    id: 'one',
-    name: '한 냥',
-    coins: 1,
-    bonus: 0,
-    price: NYANG_PRICE,
-    desc: '사주 풀이 1회',
-  },
-  {
-    id: 'three',
-    name: '3냥 패키지',
-    tag: 'BEST',
-    coins: 3,
-    bonus: 0,
-    price: UNLOCK_PRICE,
-    highlight: true,
-    desc: `사주 풀이 3회 · 낱개보다 ${(NYANG_PRICE * 3 - UNLOCK_PRICE).toLocaleString()}원 저렴`,
-  },
-]
+import { NYANG_PRICE } from '@/lib/pricing'
+import { listSalePackages, totalNyang } from '@/lib/chargePackages'
 
 interface YeopjeunShopProps {
   onClose: () => void
@@ -47,37 +14,15 @@ export default function YeopjeunShop({ onClose, currentBalance = 0 }: YeopjeunSh
   const [selected, setSelected] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const router = useRouter()
+  const packages = listSalePackages()
 
   const handlePurchase = async () => {
     if (!selected) return
-    const pkg = PACKAGES.find(p => p.id === selected)
-    if (!pkg) return
-
     setLoading(true)
-    try {
-      const orderId = `yeopjeun_${Date.now()}`
-      const res = await fetch('/api/pay/ready', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orderId,
-          amount: pkg.price,
-          orderName: `사주궁 엽전 ${pkg.coins + pkg.bonus}냥`,
-          packageId: pkg.id,
-        }),
-      })
-      const data = await res.json()
-      if (data.checkoutUrl) {
-        router.push(data.checkoutUrl)
-      }
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setLoading(false)
-    }
+    router.push(`/pay/charge?packageId=${encodeURIComponent(selected)}`)
   }
 
-  const selectedPkg = PACKAGES.find(p => p.id === selected)
+  const selectedPkg = packages.find(p => p.id === selected)
 
   return (
     <div className="fixed inset-0 bg-black/80 z-50 flex items-end justify-center"
@@ -87,12 +32,10 @@ export default function YeopjeunShop({ onClose, currentBalance = 0 }: YeopjeunSh
         style={{ background: 'linear-gradient(180deg, #13111f 0%, #0a0a0f 100%)' }}
         onClick={e => e.stopPropagation()}>
 
-        {/* 핸들 */}
         <div className="flex justify-center pt-3 pb-1">
           <div className="w-10 h-1 bg-gray-700 rounded-full" />
         </div>
 
-        {/* 헤더 */}
         <div className="px-5 pt-2 pb-4 border-b border-gray-800/60">
           <div className="flex items-center justify-between">
             <div>
@@ -102,7 +45,6 @@ export default function YeopjeunShop({ onClose, currentBalance = 0 }: YeopjeunSh
             <button onClick={onClose} className="text-gray-600 text-xl px-2">✕</button>
           </div>
 
-          {/* 환율 표시 */}
           <div className="mt-3 flex items-center gap-3 p-3 rounded-2xl bg-[#1a1025]/80 border border-purple-900/30">
             <div className="text-center flex-1">
               <p className="text-yellow-400 font-black text-lg">🪙 1냥</p>
@@ -111,15 +53,14 @@ export default function YeopjeunShop({ onClose, currentBalance = 0 }: YeopjeunSh
             <div className="text-gray-700">↔</div>
             <div className="text-center flex-1">
               <p className="text-purple-400 font-black text-lg">🔮 1풀이</p>
-              <p className="text-gray-500 text-xs">사주·궁합</p>
+              <p className="text-gray-500 text-xs">사주 전체보기 1냥</p>
             </div>
           </div>
         </div>
 
-        {/* 패키지 목록 */}
         <div className="px-5 py-4 space-y-2.5">
-          {PACKAGES.map(pkg => {
-            const total = pkg.coins + pkg.bonus
+          {packages.map(pkg => {
+            const total = totalNyang(pkg)
             const isSelected = selected === pkg.id
             return (
               <button
@@ -128,56 +69,39 @@ export default function YeopjeunShop({ onClose, currentBalance = 0 }: YeopjeunSh
                 className="w-full rounded-2xl p-4 text-left transition-all relative"
                 style={{
                   background: isSelected
-                    ? pkg.highlight
+                    ? pkg.id === 'nyang-5'
                       ? 'linear-gradient(135deg, #2d1b69, #1a0a2e)'
                       : 'linear-gradient(135deg, #1a1025, #13111f)'
                     : '#111118',
                   border: isSelected
-                    ? `2px solid ${pkg.highlight ? '#8B5CF6' : '#6D28D9'}`
+                    ? `2px solid ${pkg.id === 'nyang-5' ? '#8B5CF6' : '#6D28D9'}`
                     : '2px solid #1f1f2e',
                 }}>
-
-                {/* (BEST 태그는 이름 옆으로 이동) */}
-
                 <div className="flex items-center gap-3">
-                  {/* 선택 라디오 */}
                   <div className="w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0"
                     style={{ borderColor: isSelected ? '#8B5CF6' : '#374151' }}>
                     {isSelected && (
                       <div className="w-2.5 h-2.5 rounded-full" style={{ background: '#8B5CF6' }} />
                     )}
                   </div>
-
-                  {/* 냥 아이콘 */}
-                  <div className="flex items-center gap-0.5 flex-shrink-0">
-                    {Array.from({ length: Math.min(total, 5) }).map((_, i) => (
-                      <span key={i} className="text-base">🪙</span>
-                    ))}
-                    {total > 5 && <span className="text-yellow-400 text-xs font-bold">×{total}</span>}
-                  </div>
-
-                  {/* 텍스트 */}
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-sm text-white">{pkg.name}</span>
-                      {pkg.tag && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-black text-black flex-shrink-0"
+                      {pkg.id === 'nyang-5' && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-black text-black"
                           style={{ background: 'linear-gradient(135deg, #F59E0B, #EC4899)' }}>
-                          {pkg.tag}
+                          BEST
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-gray-500 mt-0.5">{pkg.desc}</p>
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      결제 {pkg.amountKrw.toLocaleString()}원 · 유상 {pkg.paidNyang}냥
+                      {pkg.bonusNyang > 0 ? ` · 보너스 ${pkg.bonusNyang}냥` : ' · 보너스 없음'} · 총 {total}냥
+                    </p>
                   </div>
-
-                  {/* 가격 */}
-                  <div className="text-right flex-shrink-0 flex flex-col items-end gap-0.5">
-                    <p className="font-black text-white text-sm">{pkg.price.toLocaleString()}원</p>
-                    {pkg.coins * NYANG_PRICE > pkg.price && (
-                      <p className="text-xs text-gray-600 line-through">
-                        {(pkg.coins * NYANG_PRICE).toLocaleString()}원
-                      </p>
-                    )}
+                  <div className="text-right flex-shrink-0">
+                    <p className="font-black text-white text-sm">{pkg.amountKrw.toLocaleString()}원</p>
+                    <p className="text-[10px] text-yellow-400">총 {total}냥</p>
                   </div>
                 </div>
               </button>
@@ -185,7 +109,6 @@ export default function YeopjeunShop({ onClose, currentBalance = 0 }: YeopjeunSh
           })}
         </div>
 
-        {/* 구매 버튼 */}
         <div className="px-5 pb-8 pt-2">
           <button
             onClick={handlePurchase}
@@ -197,13 +120,13 @@ export default function YeopjeunShop({ onClose, currentBalance = 0 }: YeopjeunSh
                 : '#1f1f2e',
             }}>
             {loading
-              ? '결제 준비 중...'
+              ? '결제 화면으로 이동 중...'
               : selected
-                ? `${selectedPkg!.price.toLocaleString()}원 결제하기 →`
+                ? `${selectedPkg!.amountKrw.toLocaleString()}원 · 총 ${totalNyang(selectedPkg!)}냥 충전`
                 : '패키지를 선택하세요'}
           </button>
           <p className="text-center text-gray-700 text-xs mt-3">
-            결제 후 엽전이 즉시 지급됩니다 · 토스페이먼츠 안전결제
+            금액·지급량은 서버가 패키지로 확정합니다 · 토스페이먼츠
           </p>
         </div>
       </div>
