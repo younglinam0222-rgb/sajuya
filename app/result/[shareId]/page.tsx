@@ -11,7 +11,8 @@ import { sanitizeText } from '@/lib/sajuSanitize'
 import { appendSseChunk, parseSseFrame } from '@/lib/sajuSse'
 import { normalizePersonalAnswer, PEAK_GUIDE_LABEL, readingPersonalView } from '@/lib/sajuContract'
 import { KOREA_REGIONS } from '@/lib/solarTime'
-import { ensureKakaoReady, getKakaoDiagnostics, KAKAO_READY_MESSAGE } from '@/lib/kakaoShare'
+import ReadingSharePanel from '@/app/components/ReadingSharePanel'
+import type { ShareSettings } from '@/lib/readingShare'
 
 interface Section { id: string; emoji: string; title: string; body: string }
 interface SajuTitle { id: string; category?: string; title: string; teaser: string; is_free: boolean; content: string }
@@ -75,9 +76,8 @@ export default function ResultPage() {
   const [formInfo,    setFormInfo]    = useState<any>(null)
   const [sajuData,    setSajuData]    = useState<any>(null)
   const [isPaid,      setIsPaid]      = useState(false)
-  const [copied,      setCopied]      = useState(false)
-  const [shareError,  setShareError]  = useState('')
-  const [sharing,     setSharing]     = useState(false)
+  const [aiResultRaw, setAiResultRaw] = useState<unknown>(null)
+  const [shareSettings, setShareSettings] = useState<ShareSettings | null>(null)
   const [personalAnswer, setPersonalAnswer] = useState<{ question: string; answer: string } | null>(null)
   const [isCompleteResult, setIsCompleteResult] = useState(true)
   const [personalRetrying, setPersonalRetrying] = useState(false)
@@ -101,6 +101,7 @@ export default function ResultPage() {
 
       setCharacterId(data.character_id ?? 'baekhalma')
       setIsPaid(data.is_paid ?? false)
+      if (data.share) setShareSettings(data.share)
       if (data.reservation?.expiresAt) setReservationExpiresAt(data.reservation.expiresAt)
 
       let sajuParsed: any = null
@@ -113,6 +114,7 @@ export default function ResultPage() {
       }
 
       if (data.ai_result) {
+        setAiResultRaw(data.ai_result)
         try {
           let clean = (typeof data.ai_result === 'string' ? data.ai_result : JSON.stringify(data.ai_result))
             .trim()
@@ -220,59 +222,6 @@ export default function ResultPage() {
   const charImg   = CHARACTER_IMG[characterId]   ?? '/characters/baekhalma.png'
   const charColor = CHARACTER_COLOR[characterId] ?? '#8B5CF6'
   const charName  = CHARACTER_NAMES[characterId] ?? characterId
-
-  const handleCopyLink = async () => {
-    await navigator.clipboard.writeText(window.location.href)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  const handleKakaoShare = async () => {
-    setShareError('')
-    setSharing(true)
-    const url   = window.location.href
-    const title = formInfo ? `${formInfo.name}님의 사주팔자 풀이` : '사주궁 풀이 결과'
-    const desc  = `${charName}이 직접 본 사주 결과 — 지금 확인해보세요`
-    const imageUrl = `${window.location.origin}${charImg}`
-    const diag = getKakaoDiagnostics()
-    console.log(JSON.stringify({
-      tag: '사주궁:kakao',
-      event: 'share_attempt',
-      ...diag,
-      imageHost: (() => { try { return new URL(imageUrl).host } catch { return 'invalid' } })(),
-    }))
-
-    const ready = await ensureKakaoReady()
-    if (!ready.ok) {
-      console.error(JSON.stringify({ tag: '사주궁:kakao', event: 'share_not_ready', reason: ready.reason, ...getKakaoDiagnostics() }))
-      setShareError(KAKAO_READY_MESSAGE[ready.reason])
-      setSharing(false)
-      return
-    }
-
-    try {
-      ;(window as any).Kakao.Share.sendDefault({
-        objectType: 'feed',
-        content: {
-          title, description: desc,
-          imageUrl,
-          link: { mobileWebUrl: url, webUrl: url },
-        },
-        buttons: [{ title: '풀이 보기', link: { mobileWebUrl: url, webUrl: url } }],
-      })
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e)
-      console.error(JSON.stringify({
-        tag: '사주궁:kakao',
-        event: 'share_send_failed',
-        err: message,
-        ...getKakaoDiagnostics(),
-      }))
-      setShareError(message || '카카오 공유에 실패했어요.')
-    } finally {
-      setSharing(false)
-    }
-  }
 
   const runPaidGeneration = async (form: any, charId: string, saju: any) => {
     if (paidGenLockRef.current || !form) return
@@ -810,22 +759,14 @@ export default function ResultPage() {
         </div>
       )}
 
-      {/* 공유 버튼 */}
-      <div className="px-4 mt-4 space-y-3">
-        <button className="w-full py-4 rounded-2xl font-black text-base flex items-center justify-center gap-2 disabled:opacity-60"
-          style={{ background: '#fee500', color: '#3c1e1e' }}
-          disabled={sharing}
-          onClick={handleKakaoShare}>
-          {sharing ? '카카오 공유 준비 중...' : '💬 카카오로 공유하기'}
-        </button>
-        {shareError && (
-          <p className="text-xs text-red-300 text-center">{shareError}</p>
-        )}
-        <button className="w-full py-3 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all"
-          style={{ background: copied ? '#10B981' : '#1a1a2e', border: '1px solid #333', color: copied ? 'white' : '#aaa' }}
-          onClick={handleCopyLink}>
-          {copied ? '✅ 링크 복사됐어요!' : '🔗 링크 복사하기'}
-        </button>
+      <ReadingSharePanel
+        shareId={shareId}
+        isPaid={isPaid}
+        characterId={characterId}
+        initial={shareSettings}
+        aiResult={aiResultRaw ?? JSON.stringify({ titles, strategy, personalAnswer })}
+      />
+      <div className="px-4 mt-4">
         <Link href="/saju" className="block w-full py-3 rounded-2xl font-bold text-sm text-center"
           style={{ background: '#111', border: '1px solid #222', color: '#666' }}>
           ↺ 새로 풀이받기

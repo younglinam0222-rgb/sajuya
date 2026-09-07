@@ -864,6 +864,10 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
               if (reading && reading.user_id === token.sub) {
                 const merged = mergePaidIntoFree(String(reading.ai_result ?? ''), paidAcc)
                 const done = await completeFullview(activeJobId, merged)
+                if (done.code === 'completed') {
+                  const { recordShareFunnel } = await import('@/lib/shareFunnel')
+                  await recordShareFunnel({ event: 'purchase_complete' })
+                }
                 send({ type: 'paid_status', code: done.code })
                 if (done.code !== 'completed' && done.code !== 'already_completed') {
                   workAbort.abort()

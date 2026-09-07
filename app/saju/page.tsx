@@ -284,6 +284,16 @@ export default function SajuPage() {
   const timingRef = useRef<{ submitAt: number; firstManse?: number; firstJudgment?: number; allRequired?: number; saveDone?: number }>({ submitAt: 0 })
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (new URLSearchParams(window.location.search).get('from') !== 'share') return
+    void fetch('/api/share/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event: 'share_cta_start' }),
+    })
+  }, [])
+
+  useEffect(() => {
     return () => {
       abortRef.current?.abort()
       saveAbortRef.current?.abort()

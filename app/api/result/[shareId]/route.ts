@@ -24,8 +24,10 @@ export async function GET(
     if (error || !data) {
       return NextResponse.json({ error: '풀이를 찾을 수 없습니다' }, { status: 404 })
     }
-    const isOwner = data.user_id === token.sub
-    return NextResponse.json(isOwner && data.is_paid ? data : redactUnpaidReading(data))
+    if (data.user_id !== token.sub) {
+      return NextResponse.json({ error: '풀이를 찾을 수 없습니다' }, { status: 404 })
+    }
+    return NextResponse.json(data.is_paid ? data : redactUnpaidReading(data))
   } catch {
     return NextResponse.json({ error: '서버 오류' }, { status: 500 })
   }

@@ -326,6 +326,11 @@ export async function confirmChargeOrder(input: {
     failureReason: granted.ok ? null : granted.message,
   })
 
+  if (granted.ok && granted.code === 'granted') {
+    const { recordShareFunnel } = await import('./shareFunnel')
+    await recordShareFunnel({ event: 'purchase_complete' })
+  }
+
   if (!granted.ok) {
     return {
       ok: false as const,

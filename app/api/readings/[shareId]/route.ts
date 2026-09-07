@@ -3,6 +3,7 @@ import { getToken } from 'next-auth/jwt'
 import { createServerSupabase } from '@/lib/supabase'
 import { redactUnpaidReading } from '@/lib/readingAccess'
 import { expireFullviewDue, loadOpenReservation } from '@/lib/fullviewDb'
+import { loadShareSettings } from '@/lib/shareDb'
 
 export async function GET(
   req: NextRequest,
@@ -28,11 +29,15 @@ export async function GET(
       return NextResponse.json({ error: '풀이를 찾을 수 없습니다' }, { status: 404 })
     }
 
-    const isOwner = data.user_id === token.sub
-    const reservation = isOwner ? await loadOpenReservation(shareId, token.sub) : null
-    const payload = isOwner && data.is_paid ? data : redactUnpaidReading(data)
+    if (data.user_id !== token.sub) {
+      return NextResponse.json({ error: '풀이를 찾을 수 없습니다' }, { status: 404 })
+    }
+    const reservation = await loadOpenReservation(shareId, token.sub)
+    const share = await loadShareSettings(shareId, token.sub)
+    const payload = data.is_paid ? data : redactUnpaidReading(data)
     return NextResponse.json({
       ...payload,
+      share: share ?? { enabled: false, includePersonal: false, displayName: '친구', publicPath: null },
       reservation: reservation
         ? {
             jobId: reservation.job_id,
