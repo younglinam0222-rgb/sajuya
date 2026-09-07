@@ -5,7 +5,9 @@ import { CHARACTERS } from '@/lib/characters'
 import { correctToTrueSolarTime } from '@/lib/solarTime'
 import { GROUP_IDS, LAST_GROUP_INDEX } from '@/lib/sajuContract'
 import { sanitizeJudgmentTitles, sanitizeStrategy, sanitizeText } from '@/lib/sajuSanitize'
-// @ts-ignore — lunar-javascript는 공식 타입 정의가 없음
+import { birthPromptLine, resolveBirthFromRequest } from '@/lib/birthInput'
+import { normalizeMaritalStatus, resolveOccupation } from '@/lib/profileOptions'
+import { buildServiceContextPrompt } from '@/lib/serviceContextPrompt'
 import LunarJS from 'lunar-javascript'
 
 // ✅ 수정(재발): 120초로도 부족해서 타임아웃 발생 (Vercel Runtime Timeout Error, 504)
@@ -281,7 +283,7 @@ export async function POST(req: NextRequest) {
     const {
       name, year, month, day, hour, gender, characterId, occupation,
       maritalStatus, questionIntent, partnerInfo, longitude, personalQuestion,
-      requestId: clientRequestId, retry,
+      requestId: clientRequestId, retry, calType, isLeapMonth, timeMode, timePeriod, birthPlace,
     } = body
     const requestId = typeof clientRequestId === 'string' && clientRequestId.length > 0 && clientRequestId.length < 80
       ? clientRequestId
@@ -296,7 +298,21 @@ export async function POST(req: NextRequest) {
     const voiceGuide = CHARACTER_VOICE[characterId] ?? CHARACTER_VOICE['doRyeong']
     const styleRules = getStyleRules()
 
-    const manse = calcManse(parseInt(year), parseInt(month), parseInt(day), hour ?? '', typeof longitude === 'number' ? longitude : undefined)
+    const resolvedBirth = resolveBirthFromRequest({
+      year, month, day, hour, calType, isLeapMonth, timeMode, timePeriod, birthPlace, longitude,
+    })
+    if ('error' in resolvedBirth) {
+      return sseFailure(resolvedBirth.error, requestId)
+    }
+    const marital = normalizeMaritalStatus(maritalStatus)
+    const occupationLabel = resolveOccupation(occupation) || '일반인'
+    const manse = calcManse(
+      resolvedBirth.solarYear,
+      resolvedBirth.solarMonth,
+      resolvedBirth.solarDay,
+      resolvedBirth.hourMinute,
+      resolvedBirth.longitude,
+    )
     setupManse = manse
     if (!process.env.ANTHROPIC_API_KEY) {
       return sseFailure('분석 서버 설정이 없어 풀이를 만들 수 없어요.', requestId, manse)
@@ -304,7 +320,7 @@ export async function POST(req: NextRequest) {
 
     // 현재 나이 계산
     const currentYear = new Date().getFullYear()
-    const currentAge = currentYear - parseInt(year) + 1
+    const currentAge = currentYear - resolvedBirth.solarYear + 1
 
     // ✅ 신규: "몇 년도 상반기/하반기"처럼 구체적인 시기를 짚어줄 수 있도록,
     // 올해·내년의 실제 세운(연간지)과 상/하반기 대표 월주까지 미리 계산해서 프롬프트에 넣음.
@@ -347,9 +363,9 @@ ${nextYearSeun.year}년(내년): 연간지 ${nextYearSeun.ganzhi} (십성: ${nex
 
     const sajuInfo = `
 [이 사람 사주 정보]
-이름: ${name} / 생년월일: ${year}년 ${month}월 ${day}일 / 성별: ${genderStr} / 결혼 상태: ${maritalStatus ?? '미상'} / 직업: ${occupation ?? '일반인'}
+이름: ${name} / ${birthPromptLine(resolvedBirth)} / 성별: ${genderStr} / 결혼 상태: ${marital ?? '미상'} / 직업: ${occupationLabel}
 현재 나이: ${currentAge}세 (${currentYear}년 기준) ← 반드시 이 나이 기준으로만 분석할 것. 이미 지난 시기 얘기 절대 금지.
-태어난 시간: ${manse.hourStr}
+태어난 시간: ${manse.hourStr} / ${resolvedBirth.timeDescription}
 띠: ${manse.animal}띠
 사주 기운: ${elementDesc}
 핵심 기운(일간): ${manse.dayPillar.stem}(${manse.dayPillar.stemKr}) — ${manse.dayPillar.stemElement} 기운
@@ -358,22 +374,16 @@ ${seunInfo}
 "올해", "내년", "조만간" 같은 막연한 말 대신, 위에 계산된 실제 연도와 상반기/하반기를 구체적으로 짚어서 말해라.
 예: "2027년 상반기쯤 큰 기회가 올 가능성이 높아" (○) / "언젠가 좋은 일이 생길 거야" (✗ 너무 막연함)
 단, 확정짓듯 말하지 말고 "~할 가능성이 높아", "~일 수 있어" 처럼 확률적으로 말해라. 특정 사건(합격, 이별, 사고 등)을 "반드시 일어난다"고 단정하지 마라.
-연주: ${manse.yearPillar.stem}${manse.yearPillar.branch} / 월주: ${manse.monthPillar.stem}${manse.monthPillar.branch} / 일주: ${manse.dayPillar.stem}${manse.dayPillar.branch} / 시주: ${manse.hourPillar ? manse.hourPillar.stem+manse.hourPillar.branch : '미상'}${partnerDesc}
-
-[결혼 상태 반영 규칙 — 반드시 지킬 것]
-- 결혼 상태가 '기혼'이면: 연애운 얘기 절대 금지. 대신 배우자와의 관계, 부부 궁합, 결혼생활 흐름, 가정 내 재물/소통 문제로 풀어라. "이상형", "썸", "소개팅" 같은 미혼 대상 표현 금지.
-- 결혼 상태가 '연애중'이면: "어떤 사람이 잘 맞는지" 같은 미래형 탐색 얘기 대신, 지금 만나는 사람과의 궁합·관계 흐름·앞으로 더 잘 맞춰가는 법으로 풀어라. 상대방 정보(있으면)를 적극 활용하고, "곧 만날 사람" 같은 표현은 금지.
-- 결혼 상태가 '미혼(솔로)'이면: 배우자/부부 얘기, 특정 상대와의 궁합 대신 연애 스타일, 어떤 사람이 잘 맞는지, 인연 들어오는 시기·흐름으로 풀어라.
-- 결혼 상태가 '이혼/사별'이면: 과거형으로 단정 짓지 말고, 현재 시점 새로운 인연이나 안정에 대한 흐름 위주로 조심스럽게 풀어라.
-- 돈/재물, 직업/진로, 건강, 인생 전반 주제에서도 기혼·연애중이면 배우자·상대방과 엮어서, 미혼(솔로)·이혼/사별이면 개인 중심으로 자연스럽게 반영해라.
+연주: ${manse.yearPillar.stem}${manse.yearPillar.branch} / 월주: ${manse.monthPillar.stem}${manse.monthPillar.branch} / 일주: ${manse.dayPillar.stem}${manse.dayPillar.branch} / 시주: ${manse.hourPillar ? manse.hourPillar.stem+manse.hourPillar.branch : '미상'}
+${buildServiceContextPrompt({ service: 'saju', maritalStatus: marital, occupation: occupationLabel })}${partnerDesc}
 `
 
     const intentGuide: Record<string, string> = {
       '돈/재물':   '이 사람이 돈이 잘 모이는 타입인지, 어디서 새는지, 어떻게 하면 돈이 더 들어오는지 알려줘',
       '연애/결혼':
-        maritalStatus === '기혼'
+        marital === '기혼'
           ? '이 부부가 서로 어떻게 다른지, 갈등이 생기면 왜 생기는지, 관계를 어떻게 풀어가면 좋은지 알려줘'
-          : maritalStatus === '연애중'
+          : marital === '연애중'
           ? '지금 만나는 사람이랑 궁합이 어떤지, 관계에서 앞으로 조심할 건 뭔지, 더 잘 맞춰가려면 어떻게 하면 좋은지 알려줘'
           : '이 사람이 연애할 때 어떤 스타일인지, 어떤 사람이랑 잘 맞는지, 지금 연애운이 어떤지 알려줘',
       '직업/진로': '이 사람한테 맞는 일이 뭔지, 지금 방향이 맞는지, 언제 기회가 오는지 알려줘',

@@ -4,6 +4,7 @@ import { useSession, signIn } from 'next-auth/react'
 import Link from 'next/link'
 import { useState } from 'react'
 import YeopjeunShop from '@/app/components/YeopjeunShop'
+import { servicePriceBadge, servicePriceLine } from '@/lib/priceDisplay'
 
 const CHAR_IMG: Record<string, string> = {
   baekhalma: '/characters/baekhalma.png',
@@ -25,12 +26,12 @@ interface MenuItem {
 }
 
 const MENUS: MenuItem[] = [
-  { href: '/saju', label: '사주 풀이', desc: '생년월일시로 보는 종합 사주', emoji: '🔮', badge: '1900원', badgeColor: '#F59E0B', paid: true },
-  { href: '/gunghap', label: '궁합 해설', desc: '두 사람의 사주 궁합 분석', emoji: '💞', badge: '1900원', badgeColor: '#F59E0B', paid: true },
-  { href: '/daeun', label: '대운 해설', desc: '10년 주기 큰 흐름', emoji: '🌊', badge: '일부무료', badgeColor: '#10B981', paid: false },
-  { href: '/taekil', label: '택 · 일', desc: '좋은 날짜 골라줌', emoji: '📅', badge: '일부무료', badgeColor: '#10B981', paid: false },
+  { href: '/saju', label: '사주 풀이', desc: '생년월일시로 보는 종합 사주', emoji: '🔮', badge: servicePriceBadge('saju'), badgeColor: '#F59E0B', paid: true },
+  { href: '/gunghap', label: '궁합 해설', desc: '두 사람의 사주 궁합 분석', emoji: '💞', badge: servicePriceBadge('gunghap'), badgeColor: '#F59E0B', paid: true },
+  { href: '/daeun', label: '대운 해설', desc: '10년 주기 큰 흐름', emoji: '🌊', badge: servicePriceBadge('daeun'), badgeColor: '#F59E0B', paid: true },
+  { href: '/taekil', label: '택 · 일', desc: '좋은 날짜 골라줌', emoji: '📅', badge: servicePriceBadge('taekil'), badgeColor: '#F59E0B', paid: true },
   { href: '/yearly', label: '연도별 운세', desc: '특정 연도 운세 분석', emoji: '📆', badge: '일부무료', badgeColor: '#10B981', paid: false },
-  { href: '/daily', label: '일일 운세', desc: '오늘 하루 기운', emoji: '⭐', badge: '무료', badgeColor: '#3B82F6', paid: false },
+  { href: '/daily', label: '일일 운세', desc: '오늘 하루 기운', emoji: '⭐', badge: servicePriceBadge('daily'), badgeColor: '#F59E0B', paid: true },
 ]
 
 export default function HomePage() {
@@ -51,7 +52,7 @@ export default function HomePage() {
             <span className="font-black text-lg">사주궁</span>
           </div>
           <div className="flex items-center gap-2">
-            <Link href="/daily" className="text-xs px-3 py-1.5 rounded-full bg-yellow-500/20 text-yellow-400 font-medium">⭐ 무료운세</Link>
+            <Link href="/daily" className="text-xs px-3 py-1.5 rounded-full bg-yellow-500/20 text-yellow-400 font-medium">⭐ 오늘의 운세</Link>
             {session ? (
               <button onClick={() => setShowShop(true)}
                 className="text-xs px-3 py-1.5 rounded-full bg-gray-800 text-yellow-400 font-medium flex items-center gap-1">
@@ -88,7 +89,7 @@ export default function HomePage() {
             </Link>
             <Link href="/daily"
               className="block w-full py-2 rounded-xl text-xs text-center text-gray-400 border border-gray-800">
-              ⭐ 오늘 일일운세 무료로 보기
+              ⭐ 오늘의 운세 보기
             </Link>
           </div>
         </div>
@@ -179,11 +180,11 @@ export default function HomePage() {
             <p className="text-sm font-bold mb-3">🔮 사주궁에서 할 수 있는 것들</p>
             <div className="space-y-2.5">
               {[
-                { icon: '🪙', title: '1900원 사주 풀이', desc: '타고난 성격, 재물운, 직업운까지 직설로 분석' },
+                { icon: '🪙', title: `${servicePriceLine('saju')} 사주 풀이`, desc: '타고난 성격, 재물운, 직업운까지 직설로 분석' },
                 { icon: '💞', title: '궁합', desc: '꼭 커플만 궁합 보란 법 있나요?' },
                 { icon: '🌊', title: '대운 풀이', desc: '10년 단위 인생의 큰 흐름 해설' },
                 { icon: '📆', title: '연도별 운세', desc: '올해 총운, 월별 운세를 한눈에' },
-                { icon: '⭐', title: '오늘의 운세 — 무료', desc: '매일 무료로 확인하는 일일운세' },
+                { icon: '⭐', title: `오늘의 운세 · ${servicePriceLine('daily')}`, desc: '오늘 하루 기운을 만세력으로 확인' },
                 { icon: '📅', title: '택일', desc: '이사, 결혼, 개업 등 좋은 날짜 추천' },
               ].map(item => (
                 <div key={item.title} className="flex items-start gap-2.5">
@@ -209,7 +210,7 @@ export default function HomePage() {
                 <span className="text-3xl">🪙</span>
                 <div className="flex-1">
                   <p className="font-bold text-sm">지금 가입하면 1냥 즉시 지급</p>
-                  <p className="text-gray-400 text-xs">+ 오늘의 일일운세 무료 확인</p>
+                  <p className="text-gray-400 text-xs">+ 오늘의 운세도 바로 확인</p>
                 </div>
                 <button onClick={() => setShowLoginModal(true)}
                   className="px-3 py-2 rounded-xl text-xs font-bold text-white flex-shrink-0"
@@ -276,7 +277,7 @@ export default function HomePage() {
               style={{ background: 'linear-gradient(135deg, #8B5CF6, #EC4899)' }}>
               <span className="text-2xl">⭐</span>
             </div>
-            <span className="text-xs text-purple-400 mt-0.5 font-medium">무료운세</span>
+            <span className="text-xs text-purple-400 mt-0.5 font-medium">운세</span>
           </Link>
           <Link href="/storage" className="flex flex-col items-center gap-0.5 py-2 px-3">
             <span className="text-xl">📦</span>

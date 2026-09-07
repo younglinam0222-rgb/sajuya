@@ -4,7 +4,9 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useSession, signIn } from 'next-auth/react'
-import TimeNumberInput from '@/app/components/TimeNumberInput'
+import BirthProfileFields from '@/app/components/BirthProfileFields'
+import MaritalStatusField from '@/app/components/MaritalStatusField'
+import OccupationField from '@/app/components/OccupationField'
 import { KOREA_REGIONS } from '@/lib/solarTime'
 import { sanitizeText } from '@/lib/sajuSanitize'
 import { appendSseChunk, parseSseFrame } from '@/lib/sajuSse'
@@ -27,11 +29,6 @@ interface ManseData {
   elementCount: Record<string, number>; animal: string; hourStr: string
 }
 
-const YEARS = Array.from({ length: 80 }, (_, i) => 2005 - i)
-const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1)
-const DAYS = Array.from({ length: 31 }, (_, i) => i + 1)
-const OCCUPATIONS = ['직장인', '사업가', '학생', '주부', '프리랜서', '기타']
-const MARITAL_STATUSES = ['미혼(솔로)', '연애중', '기혼', '이혼/사별']
 const QUESTION_INTENTS = ['인생 전반', '돈/재물', '연애/결혼', '직업/진로', '건강']
 
 const CHARACTERS = [
@@ -250,17 +247,23 @@ export default function SajuPage() {
   const [savedShareId, setSavedShareId] = useState<string | null>(null)
   const [incompleteSaved, setIncompleteSaved] = useState(false)
   const [selectedChar, setSelectedChar] = useState(CHARACTERS[0])
-  const [calType, setCalType] = useState<'solar'|'lunar'>('solar')
   const [form, setForm] = useState({
     name: '', year: '1990', month: '1', day: '1',
     hour: '', gender: 'female', occupation: '직장인', maritalStatus: '미혼(솔로)', questionIntent: '인생 전반', personalQuestion: '',
     birthPlace: '',
+    calType: 'solar' as 'solar' | 'lunar',
+    isLeapMonth: false,
+    timeMode: 'unknown' as 'exact' | 'period' | 'unknown',
+    timePeriod: '' as '' | 'dawn' | 'morning' | 'afternoon' | 'evening',
   })
   const [partnerForm, setPartnerForm] = useState({
     name: '', year: '1990', month: '1', day: '1', hour: '', gender: 'male',
+    calType: 'solar' as 'solar' | 'lunar',
+    isLeapMonth: false,
+    timeMode: 'unknown' as 'exact' | 'period' | 'unknown',
+    timePeriod: '' as '' | 'dawn' | 'morning' | 'afternoon' | 'evening',
+    birthPlace: '',
   })
-  // ✅ 신규: 직업 '기타(직접입력)' — 목록에 없는 직업은 자유롭게 타이핑
-  const [showCustomOcc, setShowCustomOcc] = useState(false)
 
   const finalResultRef = useRef<Partial<SajuResult>>({})
   const finalManseRef  = useRef<ManseData | null>(null)
@@ -299,9 +302,10 @@ export default function SajuPage() {
       day: params.get('day') ?? f.day,
       hour: params.get('hour') ?? f.hour,
       gender: params.get('gender') ?? f.gender,
+      timeMode: params.get('hour') ? 'exact' : f.timeMode,
     }))
     const cal = params.get('calType')
-    if (cal === 'lunar' || cal === 'solar') setCalType(cal)
+    if (cal === 'lunar' || cal === 'solar') setForm(f => ({ ...f, calType: cal }))
   }, [])
 
   const publishResult = (next: Partial<SajuResult>) => {
@@ -388,7 +392,7 @@ export default function SajuPage() {
           characterId: selectedChar.id,
           occupationId: form.occupation,
           sajuData: {
-            form: { ...form, calType },
+            form: { ...form },
             saju: finalManseRef.current,
             partner: isRomance ? partnerForm : null,
           },
@@ -499,7 +503,6 @@ export default function SajuPage() {
           ...form,
           personalQuestion: form.personalQuestion,
           occupation: form.occupation || '일반인',
-          calType,
           characterId: selectedChar.id,
           partnerInfo: isRomance ? partnerForm : undefined,
           longitude: selectedRegion?.longitude,
@@ -1008,111 +1011,23 @@ export default function SajuPage() {
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
               className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none" />
           </div>
-          <div>
-            <label className="text-xs text-gray-400 mb-1.5 block">생년월일</label>
-            <div className="flex gap-2 mb-2">
-              {(['solar','lunar'] as const).map(t => (
-                <button key={t} onClick={() => setCalType(t)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                  style={calType === t
-                    ? { background: selectedChar.color, color: 'white' }
-                    : { background: '#1F2937', color: '#9CA3AF', border: '1px solid #374151' }}>
-                  {t === 'solar' ? '양력' : '음력'}
-                </button>
-              ))}
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <select value={form.year} onChange={e => setForm(f => ({ ...f, year: e.target.value }))}
-                className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none">
-                {YEARS.map(y => <option key={y} value={y}>{y}년</option>)}
-              </select>
-              <select value={form.month} onChange={e => setForm(f => ({ ...f, month: e.target.value }))}
-                className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none">
-                {MONTHS.map(m => <option key={m} value={m}>{m}월</option>)}
-              </select>
-              <select value={form.day} onChange={e => setForm(f => ({ ...f, day: e.target.value }))}
-                className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none">
-                {DAYS.map(d => <option key={d} value={d}>{d}일</option>)}
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="text-xs text-gray-400 mb-1.5 block">
-              태어난 시간 <span className="text-gray-600">(선택 · 정확할수록 좋아요)</span>
-            </label>
-            <TimeNumberInput value={form.hour} onChange={v => setForm(f => ({ ...f, hour: v }))} />
-            <p className="text-xs text-gray-600 mt-1">모르면 비워두세요</p>
-          </div>
-          <div>
-            <label className="text-xs text-gray-400 mb-1.5 block">
-              태어난 지역 <span className="text-gray-600">(선택 · 시주 정확도 up)</span>
-            </label>
-            <select value={form.birthPlace} onChange={e => setForm(f => ({ ...f, birthPlace: e.target.value }))}
-              className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none">
-              <option value="">선택 안 함 (표준시로 계산)</option>
-              {KOREA_REGIONS.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
-            </select>
-            {form.birthPlace && (() => {
-              const region = KOREA_REGIONS.find(r => r.name === form.birthPlace)
-              return region ? (
-                <p className="text-xs text-purple-300/70 mt-1.5 font-mono tracking-wide">
-                  📍 북위 {region.latitude.toFixed(2)}° · 동경 {region.longitude.toFixed(2)}°
-                </p>
-              ) : null
-            })()}
-            <p className="text-xs text-gray-600 mt-1">한국 표준시는 태어난 곳마다 실제 시간과 몇 분씩 차이가 나요. 안 넣어도 무방합니다</p>
-          </div>
-          <div>
-            <label className="text-xs text-gray-400 mb-1.5 block">성별</label>
-            <div className="grid grid-cols-2 gap-2">
-              {['male','female'].map(g => (
-                <button key={g} onClick={() => setForm(f => ({ ...f, gender: g }))}
-                  className="py-2.5 rounded-xl text-sm font-medium transition-all"
-                  style={form.gender === g
-                    ? { background: selectedChar.color, color: 'white' }
-                    : { background: '#111827', color: '#9CA3AF', border: '1px solid #374151' }}>
-                  {g === 'male' ? '남성' : '여성'}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className="text-xs text-gray-400 mb-1.5 block">결혼 상태</label>
-            <div className="grid grid-cols-2 gap-2">
-              {MARITAL_STATUSES.map(m => (
-                <button key={m} onClick={() => setForm(f => ({ ...f, maritalStatus: m }))}
-                  className="py-2.5 rounded-xl text-sm font-medium transition-all"
-                  style={form.maritalStatus === m
-                    ? { background: selectedChar.color, color: 'white' }
-                    : { background: '#111827', color: '#9CA3AF', border: '1px solid #374151' }}>
-                  {m}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className="text-xs text-gray-400 mb-1.5 block">직업</label>
-            <div className="flex flex-wrap gap-2">
-              {OCCUPATIONS.map(o => (
-                <button key={o} onClick={() => {
-                    if (o === '기타') { setShowCustomOcc(true); setForm(f => ({ ...f, occupation: '' })) }
-                    else { setShowCustomOcc(false); setForm(f => ({ ...f, occupation: o })) }
-                  }}
-                  className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
-                  style={(o === '기타' ? showCustomOcc : (!showCustomOcc && form.occupation === o))
-                    ? { background: selectedChar.color, color: 'white' }
-                    : { background: '#1F2937', color: '#9CA3AF', border: '1px solid #374151' }}>
-                  {o === '기타' ? '기타(직접입력)' : o}
-                </button>
-              ))}
-            </div>
-            {showCustomOcc && (
-              <input type="text" placeholder="직업을 직접 입력해주세요 (예: 요리사, 공무원)"
-                value={form.occupation}
-                onChange={e => setForm(f => ({ ...f, occupation: e.target.value }))}
-                className="w-full mt-2 bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none" />
-            )}
-          </div>
+          <BirthProfileFields
+            value={form}
+            onChange={patch => setForm(f => ({ ...f, ...patch }))}
+            accentColor={selectedChar.color}
+            gender={form.gender}
+            onGenderChange={g => setForm(f => ({ ...f, gender: g }))}
+          />
+          <MaritalStatusField
+            value={form.maritalStatus}
+            onChange={m => setForm(f => ({ ...f, maritalStatus: m }))}
+            accentColor={selectedChar.color}
+          />
+          <OccupationField
+            value={form.occupation}
+            onChange={o => setForm(f => ({ ...f, occupation: o }))}
+            accentColor={selectedChar.color}
+          />
         </div>
 
         {/* 상대방 정보 */}
@@ -1128,41 +1043,13 @@ export default function SajuPage() {
                 onChange={e => setPartnerForm(f => ({ ...f, name: e.target.value }))}
                 className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none" />
             </div>
-            <div>
-              <label className="text-xs text-gray-400 mb-1.5 block">상대방 생년월일</label>
-              <div className="grid grid-cols-3 gap-2">
-                <select value={partnerForm.year} onChange={e => setPartnerForm(f => ({ ...f, year: e.target.value }))}
-                  className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none">
-                  {YEARS.map(y => <option key={y} value={y}>{y}년</option>)}
-                </select>
-                <select value={partnerForm.month} onChange={e => setPartnerForm(f => ({ ...f, month: e.target.value }))}
-                  className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none">
-                  {MONTHS.map(m => <option key={m} value={m}>{m}월</option>)}
-                </select>
-                <select value={partnerForm.day} onChange={e => setPartnerForm(f => ({ ...f, day: e.target.value }))}
-                  className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none">
-                  {DAYS.map(d => <option key={d} value={d}>{d}일</option>)}
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 mb-1.5 block">상대방 태어난 시간 <span className="text-gray-600">(선택)</span></label>
-              <TimeNumberInput value={partnerForm.hour} onChange={v => setPartnerForm(f => ({ ...f, hour: v }))} />
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 mb-1.5 block">상대방 성별</label>
-              <div className="grid grid-cols-2 gap-2">
-                {['male','female'].map(g => (
-                  <button key={g} onClick={() => setPartnerForm(f => ({ ...f, gender: g }))}
-                    className="py-2.5 rounded-xl text-sm font-medium transition-all"
-                    style={partnerForm.gender === g
-                      ? { background: selectedChar.color, color: 'white' }
-                      : { background: '#111827', color: '#9CA3AF', border: '1px solid #374151' }}>
-                    {g === 'male' ? '남성' : '여성'}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <BirthProfileFields
+              value={partnerForm}
+              onChange={patch => setPartnerForm(f => ({ ...f, ...patch }))}
+              accentColor={selectedChar.color}
+              gender={partnerForm.gender}
+              onGenderChange={g => setPartnerForm(f => ({ ...f, gender: g }))}
+            />
           </div>
         )}
 

@@ -1,22 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { birthPromptLine, resolveBirthFromRequest } from '@/lib/birthInput'
+import { CONSENT_REQUIRED_MESSAGE, hasEntertainmentConsent } from '@/lib/entertainmentConsent'
+import { normalizeMaritalStatus, resolveOccupation } from '@/lib/profileOptions'
+import { buildServiceContextPrompt } from '@/lib/serviceContextPrompt'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, year, month, day, gender, eventType, targetMonth, targetYear } = await req.json()
+    const body = await req.json()
+    if (!hasEntertainmentConsent(body.agreedEntertainment)) {
+      return NextResponse.json({ error: CONSENT_REQUIRED_MESSAGE }, { status: 400 })
+    }
+    const { name, gender, eventType, targetMonth, targetYear } = body
+    const birth = resolveBirthFromRequest(body)
+    if ('error' in birth) return NextResponse.json({ error: birth.error }, { status: 400 })
+    const marital = normalizeMaritalStatus(body.maritalStatus)
+    const occupation = resolveOccupation(body.occupation) || '미입력'
 
-    const animals = ['쥐','소','호랑이','토끼','용','뱀','말','양','원숭이','닭','개','돼지']
-    const animal = animals[(parseInt(year) - 4) % 12]
     const genderStr = gender === 'male' ? '남성' : '여성'
-    const age = parseInt(targetYear) - parseInt(year) + 1
+    const age = parseInt(String(targetYear), 10) - birth.solarYear + 1
 
     const prompt = `사주명리학으로 길일을 선택해줘.
 
-상담자: ${name} (${year}년 ${month}월 ${day}일생, ${animal}띠, ${genderStr}, ${age}세)
+상담자: ${name} (${genderStr}, ${age}세)
+${birthPromptLine(birth)}
 행사 종류: ${eventType}
 희망 기간: ${targetYear}년 ${targetMonth}월
+(희망 기간은 출생정보가 아니라 행사 검색 기간이다. 음력 출생 변환과 섞지 마라.)
+
+${buildServiceContextPrompt({ service: 'taekil', maritalStatus: marital, occupation })}
+
+준비사항은 직업(${occupation})과 행사(${eventType})에 맞는 실질 조언으로.
+연애 문구를 일괄 삽입하지 마라.
 
 반드시 아래 JSON 형식으로만 반환. 마크다운 코드블록 절대 금지.
 

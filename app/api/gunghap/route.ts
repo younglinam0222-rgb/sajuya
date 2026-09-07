@@ -1,31 +1,63 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { birthPromptLine, pickPrefixedBirth, resolveBirthFromRequest } from '@/lib/birthInput'
+import { CONSENT_REQUIRED_MESSAGE, hasEntertainmentConsent } from '@/lib/entertainmentConsent'
+import { normalizeMaritalStatus, normalizeRelationship, resolveOccupation } from '@/lib/profileOptions'
+import { buildServiceContextPrompt } from '@/lib/serviceContextPrompt'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
 export async function POST(req: NextRequest) {
   try {
-    const { name1, year1, month1, day1, gender1, name2, year2, month2, day2, gender2 } = await req.json()
+    const body = await req.json()
+    if (!hasEntertainmentConsent(body.agreedEntertainment)) {
+      return NextResponse.json({ error: CONSENT_REQUIRED_MESSAGE }, { status: 400 })
+    }
 
-    const animals = ['쥐','소','호랑이','토끼','용','뱀','말','양','원숭이','닭','개','돼지']
-    const animal1 = animals[(parseInt(year1) - 4) % 12]
-    const animal2 = animals[(parseInt(year2) - 4) % 12]
+    const { name1, gender1, name2, gender2 } = body
+    const birth1 = resolveBirthFromRequest(pickPrefixedBirth(body, '1'))
+    const birth2 = resolveBirthFromRequest(pickPrefixedBirth(body, '2'))
+    if ('error' in birth1) return NextResponse.json({ error: `질문자: ${birth1.error}` }, { status: 400 })
+    if ('error' in birth2) return NextResponse.json({ error: `상대방: ${birth2.error}` }, { status: 400 })
+
+    const relationship = normalizeRelationship(body.relationship) ?? '기타·미정'
+    const marital1 = normalizeMaritalStatus(body.maritalStatus1)
+    const marital2 = normalizeMaritalStatus(body.maritalStatus2)
+    const occupation1 = resolveOccupation(body.occupation1) || '미입력'
+    const occupation2 = resolveOccupation(body.occupation2) || '미입력'
+
     const gStr1 = gender1 === 'male' ? '남성' : '여성'
     const gStr2 = gender2 === 'male' ? '남성' : '여성'
 
     const prompt = `두 사람의 궁합을 사주명리학으로 심층 분석해줘.
 
-사람1: ${name1} (${year1}년 ${month1}월 ${day1}일생, ${animal1}띠, ${gStr1})
-사람2: ${name2} (${year2}년 ${month2}월 ${day2}일생, ${animal2}띠, ${gStr2})
+사람1(질문자): ${name1} (${gStr1})
+${birthPromptLine(birth1)}
+결혼 상태: ${marital1 ?? '미입력'} / 직업: ${occupation1}
+
+사람2(상대): ${name2} (${gStr2})
+${birthPromptLine(birth2)}
+결혼 상태: ${marital2 ?? '미입력'} / 직업: ${occupation2}
+
+${buildServiceContextPrompt({
+  service: 'gunghap',
+  maritalStatus: marital1,
+  occupation: occupation1,
+  relationship,
+  partnerMaritalStatus: marital2,
+  partnerOccupation: occupation2,
+})}
+
+love 항목은 선택한 관계(${relationship}) 기준으로 풀어라. 연인이 아니면 연애 케미만 전제하지 마라.
 
 반드시 아래 JSON 형식으로만 반환. 마크다운 코드블록 절대 금지.
 
 {
   "score": 궁합점수(0~100 숫자만),
   "overall": "종합 궁합 (4~5문장, 두 사람의 전반적인 궁합과 에너지 흐름)",
-  "love": "연애 궁합 (3~4문장, 연애할 때 두 사람의 케미와 갈등 포인트)",
+  "love": "관계 궁합 (3~4문장, 선택한 관계 기준의 케미와 갈등 포인트)",
   "personality": "성격 궁합 (3~4문장, 성격 차이와 보완점)",
-  "money": "재물 궁합 (2~3문장, 함께할 때 돈과 관련된 운)",
+  "money": "재물 궁합 (2~3문장, 두 사람 직업 현실을 반영)",
   "longterm": "장기 궁합 (3~4문장, 오래 함께할수록 어떻게 되는지)",
   "warning": "⚠️ 조심할 것들 (2~3문장, 두 사람이 주의해야 할 점)",
   "advice": "신령의 최종 조언 (2문장, 핵심 메시지)"

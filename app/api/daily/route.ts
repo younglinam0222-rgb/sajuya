@@ -4,12 +4,14 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/app/api/auth/[...nextauth]/route'
 import { createServerSupabase } from '@/lib/supabase'
 import { correctToTrueSolarTime } from '@/lib/solarTime'
-// @ts-ignore — lunar-javascript는 공식 타입 정의가 없음
+import { birthPromptLine, resolveBirthFromRequest } from '@/lib/birthInput'
+import { CONSENT_REQUIRED_MESSAGE, hasEntertainmentConsent } from '@/lib/entertainmentConsent'
+import { normalizeMaritalStatus, resolveOccupation } from '@/lib/profileOptions'
+import { buildServiceContextPrompt } from '@/lib/serviceContextPrompt'
 import LunarJS from 'lunar-javascript'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
-// 한국 시간(KST) 기준 오늘 날짜 (YYYY-MM-DD)
 function getTodayDateKST() {
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }))
   const y = now.getFullYear()
@@ -18,8 +20,6 @@ function getTodayDateKST() {
   return `${y}-${m}-${d}`
 }
 
-// ✅ 추가: 로그인한 유저의 "오늘자 캐시된 일일운세"와 "마지막 입력 프로필"을 조회
-// 로그인 안 한 사용자는 이 라우트를 호출하지 않으므로 기존 무료 이용 흐름은 그대로 유지됨
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
@@ -55,8 +55,6 @@ const STEM_ELEMENT   = ['木','木','火','火','土','土','金','金','水','�
 const BRANCH_ELEMENT = ['水','土','木','木','土','火','火','土','金','金','土','水']
 const ANIMALS = ['쥐','소','호랑이','토끼','용','뱀','말','양','원숭이','닭','개','돼지']
 
-// ✅ 수정: saju/route.ts와 동일한 버그(월주/일주/연주 계산 오류) 발견돼서 동일하게 교체.
-// 자체 수식 대신 검증된 lunar-javascript 라이브러리 사용.
 function ganZhiToPillar(ganzhi: string) {
   const stemChar = ganzhi[0], branchChar = ganzhi[1]
   const si = STEMS.indexOf(stemChar), bi = BRANCHES.indexOf(branchChar)
@@ -83,7 +81,6 @@ function calcTodayPillar() {
   return calcDayPillar(now.getFullYear(), now.getMonth() + 1, now.getDate())
 }
 function calcManse(year: number, month: number, day: number, hourStr?: string, longitude?: number) {
-  // ✅ 신규: 출생지(경도) 선택 입력 시 진태양시로 보정 (사주풀이 route.ts와 동일 로직)
   let y = year, mo = month, d = day, hm = hourStr
   if (longitude && hourStr) {
     const c = correctToTrueSolarTime(year, month, day, hourStr, longitude)
@@ -116,18 +113,24 @@ const CHARACTER_VOICE: Record<string, string> = {
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, year, month, day, hour, gender, characterId, calType, longitude, birthPlace } = await req.json()
-    // ✅ 추가: 로그인 여부 확인 (비로그인이어도 기존처럼 그대로 무료 이용 가능, 저장만 안 됨)
+    const body = await req.json()
+    if (!hasEntertainmentConsent(body.agreedEntertainment)) {
+      return NextResponse.json({ error: CONSENT_REQUIRED_MESSAGE }, { status: 400 })
+    }
+    const { name, gender, characterId } = body
+    const birth = resolveBirthFromRequest(body)
+    if ('error' in birth) return NextResponse.json({ error: birth.error }, { status: 400 })
+    const marital = normalizeMaritalStatus(body.maritalStatus)
+    const occupation = resolveOccupation(body.occupation) || '미입력'
     const session = await getServerSession(authOptions)
     const userId = (session?.user as { id?: string } | undefined)?.id
 
     const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }))
     const todayStr  = `${now.getFullYear()}년 ${now.getMonth()+1}월 ${now.getDate()}일`
     const genderStr = gender === 'male' ? '남성' : '여성'
-    const calTypeStr = calType === 'lunar' ? '음력' : '양력'
-    const age       = now.getFullYear() - parseInt(year) + 1
+    const age       = now.getFullYear() - birth.solarYear + 1
 
-    const manse      = calcManse(parseInt(year), parseInt(month), parseInt(day), hour, typeof longitude === 'number' ? longitude : undefined)
+    const manse      = calcManse(birth.solarYear, birth.solarMonth, birth.solarDay, birth.hourMinute, birth.longitude)
     const todayPillar = calcTodayPillar()
 
     const elementNames: Record<string,string> = { '木':'나무', '火':'불', '土':'땅', '金':'금속', '水':'물' }
@@ -142,16 +145,21 @@ ${voice}
 오늘은 ${todayStr}이야.
 오늘 날짜 일주: ${todayPillar.stem}${todayPillar.branch} (${todayPillar.stemKr}${todayPillar.branchKr})
 
-상담자: ${name} (${year}년 ${month}월 ${day}일생 ${calTypeStr}, ${manse.animal}띠, ${genderStr}, ${age}세)
+상담자: ${name} (${genderStr}, ${age}세, ${manse.animal}띠)
+${birthPromptLine(birth)}
 사주 기운: ${elementDesc}
 일간: ${manse.dayPillar.stem}(${manse.dayPillar.stemKr}) — ${manse.dayPillar.stemElement} 기운
 연주: ${manse.yearPillar.stem}${manse.yearPillar.branch} / 월주: ${manse.monthPillar.stem}${manse.monthPillar.branch} / 일주: ${manse.dayPillar.stem}${manse.dayPillar.branch} / 시주: ${manse.hourPillar ? manse.hourPillar.stem+manse.hourPillar.branch : '미상'}
+
+${buildServiceContextPrompt({ service: 'daily', maritalStatus: marital, occupation })}
 
 오늘 날짜 기운과 이 사람 사주 기운이 어떻게 만나는지 분석해서 일일운세를 줘.
 캐릭터 말투 100% 유지. 어려운 명리 용어 절대 금지. 20-30대 말로.
 - "~가 아니라 ~야" / "봐봐, ~잖아" / "솔직히 ~" 패턴 섞어서
 - 판결하듯이 써. 읽으면 "맞다" 싶게
 - 각 섹션 3~4문장. 구체적으로.
+- 연애운 항목은 위 결혼 상태에 맞게만 쓰고, 대운·택일용 연애 문구를 복붙하지 마라.
+- 재물운은 입력된 직업(${occupation})의 오늘 현장 기준으로.
 
 반드시 아래 JSON만 출력. 마크다운 없이. 점수는 0~100 사이 정수.
 
@@ -160,7 +168,7 @@ ${voice}
   "overall_score": 75,
   "money": "재물운 2~3문장",
   "money_score": 70,
-  "love": "연애운 2~3문장",
+  "love": "관계/인연 운 2~3문장 (결혼 상태에 맞게)",
   "love_score": 80,
   "health": "건강운 2~3문장",
   "health_score": 65,
@@ -170,7 +178,6 @@ ${voice}
 }
 `
 
-    // ── 논스트리밍으로 완성 후 전송 (파싱 안정성) ──────
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 1500,
@@ -186,7 +193,6 @@ ${voice}
     const parsed = JSON.parse(clean.slice(s, e + 1))
     console.log('[일일운세] 생성 완료:', response.usage.output_tokens, 'tok')
 
-    // ✅ 추가: 로그인 사용자면 오늘자 결과 + 마지막 입력 프로필을 저장 (다음 방문 시 재사용)
     if (userId) {
       try {
         const supabase = createServerSupabase()
@@ -201,16 +207,20 @@ ${voice}
             result: parsed,
           }, { onConflict: 'user_id,reading_date' }),
           supabase.from('users').update({
-            birth_profile: { name, year, month, day, hour, gender, calType, characterId, birthPlace },
+            birth_profile: {
+              name, gender, characterId,
+              year: body.year, month: body.month, day: body.day, hour: body.hour,
+              calType: body.calType, isLeapMonth: body.isLeapMonth,
+              timeMode: body.timeMode, timePeriod: body.timePeriod, birthPlace: body.birthPlace,
+              maritalStatus: marital, occupation,
+            },
           }).eq('id', userId),
         ])
       } catch (saveErr) {
-        // 저장 실패해도 결과 조회 자체는 그대로 진행 (저장은 부가 기능)
         console.error('[사주궁] 일일운세 저장 실패:', saveErr)
       }
     }
 
-    // ── SSE로 만세력 + 결과 전송 ────────────────────────
     const encoder = new TextEncoder()
     const readable = new ReadableStream({
       start(controller) {

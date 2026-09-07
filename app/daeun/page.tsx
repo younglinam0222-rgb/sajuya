@@ -2,6 +2,12 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import BirthProfileFields from '@/app/components/BirthProfileFields'
+import EntertainmentConsent from '@/app/components/EntertainmentConsent'
+import MaritalStatusField from '@/app/components/MaritalStatusField'
+import OccupationField from '@/app/components/OccupationField'
+import { CONSENT_REQUIRED_MESSAGE } from '@/lib/entertainmentConsent'
+import { servicePriceLine } from '@/lib/priceDisplay'
 
 type Stage = 'input' | 'loading' | 'result'
 
@@ -14,25 +20,6 @@ interface DaeunResult {
   warning: string
   advice: string
 }
-
-const YEARS = Array.from({ length: 80 }, (_, i) => 2005 - i)
-const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1)
-const DAYS = Array.from({ length: 31 }, (_, i) => i + 1)
-const HOURS = [
-  { value: '', label: '모름' },
-  { value: '23', label: '자시(23~01)' },
-  { value: '1', label: '축시(01~03)' },
-  { value: '3', label: '인시(03~05)' },
-  { value: '5', label: '묘시(05~07)' },
-  { value: '7', label: '진시(07~09)' },
-  { value: '9', label: '사시(09~11)' },
-  { value: '11', label: '오시(11~13)' },
-  { value: '13', label: '미시(13~15)' },
-  { value: '15', label: '신시(15~17)' },
-  { value: '17', label: '유시(17~19)' },
-  { value: '19', label: '술시(19~21)' },
-  { value: '21', label: '해시(21~23)' },
-]
 
 const SECTIONS = [
   { key: 'current', icon: '🌊', title: '현재 대운 분석', color: '#10B981' },
@@ -47,11 +34,26 @@ const SECTIONS = [
 export default function DaeunPage() {
   const [stage, setStage] = useState<Stage>('input')
   const [result, setResult] = useState<Partial<DaeunResult>>({})
-  const [calType, setCalType] = useState<'solar' | 'lunar'>('solar')
-  const [form, setForm] = useState({ name: '', year: '1990', month: '1', day: '1', hour: '', gender: 'female' })
+  const [agreed, setAgreed] = useState(false)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [form, setForm] = useState({
+    name: '', year: '1990', month: '1', day: '1', hour: '', gender: 'female',
+    calType: 'solar' as 'solar' | 'lunar',
+    isLeapMonth: false,
+    timeMode: 'unknown' as 'exact' | 'period' | 'unknown',
+    timePeriod: '' as '' | 'dawn' | 'morning' | 'afternoon' | 'evening',
+    birthPlace: '',
+    maritalStatus: '미혼(솔로)',
+    occupation: '직장인',
+  })
 
   const handleSubmit = async () => {
     if (!form.name) return
+    if (!agreed) {
+      setErrorMsg(CONSENT_REQUIRED_MESSAGE)
+      return
+    }
+    setErrorMsg(null)
     setStage('loading')
     setResult({})
 
@@ -59,8 +61,14 @@ export default function DaeunPage() {
       const res = await fetch('/api/daeun', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, calType }),
+        body: JSON.stringify({ ...form, agreedEntertainment: true }),
       })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        setErrorMsg(typeof err.error === 'string' ? err.error : `서버 오류(${res.status})`)
+        setStage('input')
+        return
+      }
       if (!res.body) return
 
       const reader = res.body.getReader()
@@ -120,7 +128,7 @@ export default function DaeunPage() {
             <button onClick={() => setStage('input')} className="text-gray-400 text-xl">←</button>
             <div>
               <h1 className="text-lg font-bold">{form.name}님의 대운 해설</h1>
-              <p className="text-gray-500 text-xs">무등산 신령님의 분석 · {calType === 'solar' ? '양력' : '음력'}</p>
+              <p className="text-gray-500 text-xs">무등산 신령님의 분석 · {form.calType === 'solar' ? '양력' : '음력'}</p>
             </div>
           </div>
           <div className="space-y-3">
@@ -156,7 +164,7 @@ export default function DaeunPage() {
           <Link href="/" className="text-gray-400 text-xl">←</Link>
           <div>
             <h1 className="text-xl font-bold">🌊 대운 해설</h1>
-            <p className="text-gray-500 text-xs mt-0.5">무등산 신령님의 10년 대운 분석 · 일부 무료</p>
+            <p className="text-gray-500 text-xs mt-0.5">무등산 신령님의 10년 대운 분석 · {servicePriceLine('daeun')}</p>
           </div>
         </div>
 
@@ -170,62 +178,29 @@ export default function DaeunPage() {
                 className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-green-500" />
             </div>
 
-            <div>
-              <label className="text-xs text-gray-400 mb-1.5 block">생년월일</label>
-              {/* 양력/음력 토글 */}
-              <div className="flex gap-2 mb-2">
-                {(['solar', 'lunar'] as const).map(t => (
-                  <button key={t} onClick={() => setCalType(t)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                    style={calType === t
-                      ? { background: '#10B981', color: 'white' }
-                      : { background: '#1F2937', color: '#9CA3AF', border: '1px solid #374151' }}>
-                    {t === 'solar' ? '양력' : '음력'}
-                  </button>
-                ))}
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <select value={form.year} onChange={e => setForm(f => ({ ...f, year: e.target.value }))}
-                  className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none">
-                  {YEARS.map(y => <option key={y} value={y}>{y}년</option>)}
-                </select>
-                <select value={form.month} onChange={e => setForm(f => ({ ...f, month: e.target.value }))}
-                  className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none">
-                  {MONTHS.map(m => <option key={m} value={m}>{m}월</option>)}
-                </select>
-                <select value={form.day} onChange={e => setForm(f => ({ ...f, day: e.target.value }))}
-                  className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none">
-                  {DAYS.map(d => <option key={d} value={d}>{d}일</option>)}
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="text-xs text-gray-400 mb-1.5 block">태어난 시간 <span className="text-gray-600">(선택)</span></label>
-              <select value={form.hour} onChange={e => setForm(f => ({ ...f, hour: e.target.value }))}
-                className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none">
-                {HOURS.map(h => <option key={h.value} value={h.value}>{h.label}</option>)}
-              </select>
-            </div>
-
-            <div>
-              <label className="text-xs text-gray-400 mb-1.5 block">성별</label>
-              <div className="grid grid-cols-2 gap-2">
-                {['male', 'female'].map(g => (
-                  <button key={g} onClick={() => setForm(f => ({ ...f, gender: g }))}
-                    className="py-2.5 rounded-xl text-sm font-medium transition-all"
-                    style={form.gender === g
-                      ? { background: '#10B981', color: 'white' }
-                      : { background: '#111827', color: '#9CA3AF', border: '1px solid #374151' }}>
-                    {g === 'male' ? '남성' : '여성'}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <BirthProfileFields
+              value={form}
+              onChange={patch => setForm(f => ({ ...f, ...patch }))}
+              accentColor="#10B981"
+              gender={form.gender}
+              onGenderChange={g => setForm(f => ({ ...f, gender: g }))}
+            />
+            <MaritalStatusField
+              value={form.maritalStatus}
+              onChange={m => setForm(f => ({ ...f, maritalStatus: m }))}
+              accentColor="#10B981"
+            />
+            <OccupationField
+              value={form.occupation}
+              onChange={o => setForm(f => ({ ...f, occupation: o }))}
+              accentColor="#10B981"
+            />
           </div>
         </div>
 
-        <button onClick={handleSubmit} disabled={!form.name}
+        {errorMsg && <p className="mb-3 text-xs text-red-400">{errorMsg}</p>}
+        <EntertainmentConsent agreed={agreed} onChange={setAgreed} />
+        <button onClick={handleSubmit} disabled={!form.name || !agreed}
           className="w-full py-4 rounded-2xl font-bold text-base text-white disabled:opacity-40 disabled:cursor-not-allowed"
           style={{ background: 'linear-gradient(135deg, #10B981, #3B82F6)' }}>
           대운 분석하기 →

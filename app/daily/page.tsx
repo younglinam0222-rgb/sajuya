@@ -3,6 +3,12 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
+import BirthProfileFields from '@/app/components/BirthProfileFields'
+import EntertainmentConsent from '@/app/components/EntertainmentConsent'
+import MaritalStatusField from '@/app/components/MaritalStatusField'
+import OccupationField from '@/app/components/OccupationField'
+import { servicePriceLine } from '@/lib/priceDisplay'
+import { CONSENT_REQUIRED_MESSAGE } from '@/lib/entertainmentConsent'
 
 // ─── 타입 ─────────────────────────────────────────────
 interface DailyResult {
@@ -18,10 +24,6 @@ interface ManseData {
 }
 
 // ─── 상수 ─────────────────────────────────────────────
-const YEARS   = Array.from({ length: 85 }, (_, i) => 2005 - i)
-const MONTHS  = Array.from({ length: 12 }, (_, i) => i + 1)
-const DAYS    = Array.from({ length: 31 }, (_, i) => i + 1)
-
 const CHARACTERS = [
   { id: 'baekhalma', name: '건물주 백할매', img: '/characters/baekhalma.png', color: '#8B5CF6', desc: '직설 팩폭' },
   { id: 'doRyeong',  name: '근본도령',      img: '/characters/doryeong.png',  color: '#3B82F6', desc: '다정 분석' },
@@ -236,9 +238,17 @@ export default function DailyPage() {
   const [result, setResult]     = useState<Partial<DailyResult>>({})
   const [manse, setManse]       = useState<ManseData | null>(null)
   const [selectedChar, setSelectedChar] = useState(CHARACTERS[0])
-  const [calType, setCalType] = useState<'solar'|'lunar'>('solar')
+  const [agreed, setAgreed] = useState(false)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [form, setForm] = useState({
     name: '', year: '1990', month: '1', day: '1', hour: '', gender: 'female',
+    calType: 'solar' as 'solar' | 'lunar',
+    isLeapMonth: false,
+    timeMode: 'unknown' as 'exact' | 'period' | 'unknown',
+    timePeriod: '' as '' | 'dawn' | 'morning' | 'afternoon' | 'evening',
+    birthPlace: '',
+    maritalStatus: '미혼(솔로)',
+    occupation: '직장인',
   })
   const [checkingCache, setCheckingCache] = useState(false)
   const todayStr = getTodayKST()
@@ -264,8 +274,14 @@ export default function DailyPage() {
             ...f,
             name: p.name ?? f.name, year: p.year ?? f.year, month: p.month ?? f.month,
             day: p.day ?? f.day, hour: p.hour ?? f.hour, gender: p.gender ?? f.gender,
+            calType: p.calType === 'lunar' ? 'lunar' : f.calType,
+            isLeapMonth: !!p.isLeapMonth,
+            timeMode: p.timeMode === 'exact' || p.timeMode === 'period' || p.timeMode === 'unknown' ? p.timeMode : (p.hour ? 'exact' : f.timeMode),
+            timePeriod: p.timePeriod ?? f.timePeriod,
+            birthPlace: p.birthPlace ?? f.birthPlace,
+            maritalStatus: p.maritalStatus ?? f.maritalStatus,
+            occupation: p.occupation ?? f.occupation,
           }))
-          if (p.calType) setCalType(p.calType)
           if (p.characterId) {
             const char = CHARACTERS.find(c => c.id === p.characterId)
             if (char) setSelectedChar(char)
@@ -278,6 +294,11 @@ export default function DailyPage() {
 
   const handleSubmit = async () => {
     if (!form.name) return
+    if (!agreed) {
+      setErrorMsg(CONSENT_REQUIRED_MESSAGE)
+      return
+    }
+    setErrorMsg(null)
     setStage('loading')
     setResult({})
     setManse(null)
@@ -286,8 +307,14 @@ export default function DailyPage() {
       const res = await fetch('/api/daily', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, calType, characterId: selectedChar.id }),
+        body: JSON.stringify({ ...form, characterId: selectedChar.id, agreedEntertainment: true }),
       })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        setErrorMsg(typeof err.error === 'string' ? err.error : `서버 오류(${res.status})`)
+        setStage('input')
+        return
+      }
       if (!res.body) return
 
       const reader  = res.body.getReader()
@@ -458,7 +485,7 @@ export default function DailyPage() {
           <Link href="/" className="text-gray-400 text-xl">←</Link>
           <div>
             <h1 className="text-xl font-bold">⭐ 일일 운세</h1>
-            <p className="text-gray-500 text-xs mt-0.5">{todayStr} · 무료</p>
+            <p className="text-gray-500 text-xs mt-0.5">{todayStr} · {servicePriceLine('daily')}</p>
           </div>
         </div>
 
@@ -497,73 +524,35 @@ export default function DailyPage() {
               className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none" />
           </div>
 
-          {/* 생년월일 */}
-          <div>
-            <label className="text-xs text-gray-400 mb-1.5 block">생년월일</label>
-            <div className="flex gap-2 mb-2">
-              {(['solar','lunar'] as const).map(t => (
-                <button key={t} onClick={() => setCalType(t)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                  style={calType === t
-                    ? { background: selectedChar.color, color: 'white' }
-                    : { background: '#1F2937', color: '#9CA3AF', border: '1px solid #374151' }}>
-                  {t === 'solar' ? '양력' : '음력'}
-                </button>
-              ))}
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <input
-                type="number" placeholder="출생연도" value={form.year}
-                min={1920} max={2010}
-                onChange={e => setForm(f => ({ ...f, year: e.target.value }))}
-                className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none"
-              />
-              <select value={form.month} onChange={e => setForm(f => ({ ...f, month: e.target.value }))}
-                className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none">
-                {MONTHS.map(m => <option key={m} value={m}>{m}월</option>)}
-              </select>
-              <select value={form.day} onChange={e => setForm(f => ({ ...f, day: e.target.value }))}
-                className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none">
-                {DAYS.map(d => <option key={d} value={d}>{d}일</option>)}
-              </select>
-            </div>
-          </div>
-
-          {/* 태어난 시간 */}
-          <div>
-            <label className="text-xs text-gray-400 mb-1.5 block">
-              태어난 시간 <span className="text-gray-600">(선택 · 정확할수록 좋아요)</span>
-            </label>
-            <input type="time" value={form.hour}
-              onChange={e => setForm(f => ({ ...f, hour: e.target.value }))}
-              className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none"
-              style={{ colorScheme: 'dark' }} />
-            <p className="text-xs text-gray-600 mt-1">모르면 비워두세요</p>
-          </div>
-
-          {/* 성별 */}
-          <div>
-            <label className="text-xs text-gray-400 mb-1.5 block">성별</label>
-            <div className="grid grid-cols-2 gap-2">
-              {['male','female'].map(g => (
-                <button key={g} onClick={() => setForm(f => ({ ...f, gender: g }))}
-                  className="py-2.5 rounded-xl text-sm font-medium transition-all"
-                  style={form.gender === g
-                    ? { background: selectedChar.color, color: 'white' }
-                    : { background: '#111827', color: '#9CA3AF', border: '1px solid #374151' }}>
-                  {g === 'male' ? '남성' : '여성'}
-                </button>
-              ))}
-            </div>
-          </div>
+          <BirthProfileFields
+            value={form}
+            onChange={patch => setForm(f => ({ ...f, ...patch }))}
+            accentColor={selectedChar.color}
+            gender={form.gender}
+            onGenderChange={g => setForm(f => ({ ...f, gender: g }))}
+          />
+          <MaritalStatusField
+            value={form.maritalStatus}
+            onChange={m => setForm(f => ({ ...f, maritalStatus: m }))}
+            accentColor={selectedChar.color}
+          />
+          <OccupationField
+            value={form.occupation}
+            onChange={o => setForm(f => ({ ...f, occupation: o }))}
+            accentColor={selectedChar.color}
+          />
         </div>
 
-        <button onClick={handleSubmit} disabled={!form.name}
+        {errorMsg && (
+          <p className="mb-3 text-xs text-red-400">{errorMsg}</p>
+        )}
+        <EntertainmentConsent agreed={agreed} onChange={setAgreed} />
+        <button onClick={handleSubmit} disabled={!form.name || !agreed}
           className="w-full py-4 rounded-2xl font-bold text-base text-white disabled:opacity-40 disabled:cursor-not-allowed"
           style={{ background: `linear-gradient(135deg, ${selectedChar.color}, ${selectedChar.color}bb)` }}>
           {selectedChar.name}에게 오늘 운세 묻기 ✨
         </button>
-        <p className="text-center text-gray-600 text-xs mt-3">매일 무료 · 만세력 기반 분석</p>
+        <p className="text-center text-gray-600 text-xs mt-3">만세력 기반 분석 · {servicePriceLine('daily')}</p>
       </div>
     </div>
   )
