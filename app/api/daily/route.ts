@@ -3,9 +3,17 @@ import Anthropic from '@anthropic-ai/sdk'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/app/api/auth/[...nextauth]/route'
 import { createServerSupabase } from '@/lib/supabase'
-import { correctToTrueSolarTime } from '@/lib/solarTime'
-// @ts-ignore — lunar-javascript는 공식 타입 정의가 없음
-import LunarJS from 'lunar-javascript'
+import { assertNoElementCitationMismatch } from '@/lib/elementCitationCheck'
+import {
+  calcDayPillar,
+  calcManse,
+  collectGeneratedText,
+  formatManseForPrompt,
+  generationClock,
+  hourInputToHm,
+  kstParts,
+  SHARED_INTERP_GUARDS,
+} from '@/lib/sajuCalc'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -47,66 +55,6 @@ export async function GET() {
   }
 }
 
-const STEMS    = ['甲','乙','丙','丁','戊','己','庚','辛','壬','癸']
-const BRANCHES = ['子','丑','寅','卯','辰','巳','午','未','申','酉','戌','亥']
-const STEM_KR  = ['갑','을','병','정','무','기','경','신','임','계']
-const BRANCH_KR = ['자','축','인','묘','진','사','오','미','신','유','술','해']
-const STEM_ELEMENT   = ['木','木','火','火','土','土','金','金','水','水']
-const BRANCH_ELEMENT = ['水','土','木','木','土','火','火','土','金','金','土','水']
-const ANIMALS = ['쥐','소','호랑이','토끼','용','뱀','말','양','원숭이','닭','개','돼지']
-
-// ✅ 수정: saju/route.ts와 동일한 버그(월주/일주/연주 계산 오류) 발견돼서 동일하게 교체.
-// 자체 수식 대신 검증된 lunar-javascript 라이브러리 사용.
-function ganZhiToPillar(ganzhi: string) {
-  const stemChar = ganzhi[0], branchChar = ganzhi[1]
-  const si = STEMS.indexOf(stemChar), bi = BRANCHES.indexOf(branchChar)
-  return { stem: stemChar, branch: branchChar, stemKr: STEM_KR[si], branchKr: BRANCH_KR[bi], stemElement: STEM_ELEMENT[si], branchElement: BRANCH_ELEMENT[bi], stemIdx: si, branchIdx: bi }
-}
-function calcYearPillar(year: number, month: number, day: number) {
-  const lunar = LunarJS.Solar.fromYmd(year, month, day).getLunar()
-  return ganZhiToPillar(lunar.getYearInGanZhiByLiChun())
-}
-function calcMonthPillar(year: number, month: number, day: number) {
-  const lunar = LunarJS.Solar.fromYmd(year, month, day).getLunar()
-  return ganZhiToPillar(lunar.getMonthInGanZhi())
-}
-function calcDayPillar(year: number, month: number, day: number) {
-  const lunar = LunarJS.Solar.fromYmd(year, month, day).getLunar()
-  return ganZhiToPillar(lunar.getDayInGanZhi())
-}
-function calcHourPillar(year: number, month: number, day: number, h: number, m: number) {
-  const lunar = LunarJS.Solar.fromYmdHms(year, month, day, h, m, 0).getLunar()
-  return ganZhiToPillar(lunar.getTimeInGanZhi())
-}
-function calcTodayPillar() {
-  const now = new Date()
-  return calcDayPillar(now.getFullYear(), now.getMonth() + 1, now.getDate())
-}
-function calcManse(year: number, month: number, day: number, hourStr?: string, longitude?: number) {
-  // ✅ 신규: 출생지(경도) 선택 입력 시 진태양시로 보정 (사주풀이 route.ts와 동일 로직)
-  let y = year, mo = month, d = day, hm = hourStr
-  if (longitude && hourStr) {
-    const c = correctToTrueSolarTime(year, month, day, hourStr, longitude)
-    y = c.correctedYear; mo = c.correctedMonth; d = c.correctedDay; hm = c.correctedHourMinute
-  }
-  const yp = calcYearPillar(y, mo, d)
-  const mp = calcMonthPillar(y, mo, d)
-  const dp = calcDayPillar(y, mo, d)
-  let hp = null
-  if (hm) {
-    const h = parseInt(hm.split(':')[0])
-    const m = hm.split(':')[1] ? parseInt(hm.split(':')[1]) : 0
-    if (!isNaN(h) && h >= 0 && h <= 23) hp = calcHourPillar(y, mo, d, h, m)
-  }
-  const elements: Record<string, number> = { '木':0, '火':0, '土':0, '金':0, '水':0 }
-  const pillars = [yp, mp, dp, ...(hp ? [hp] : [])]
-  pillars.forEach(p => {
-    elements[p.stemElement] = (elements[p.stemElement]||0) + 1
-    elements[p.branchElement] = (elements[p.branchElement]||0) + 1
-  })
-  return { yearPillar: yp, monthPillar: mp, dayPillar: dp, hourPillar: hp, elementCount: elements, animal: ANIMALS[yp.branchIdx] }
-}
-
 const CHARACTER_VOICE: Record<string, string> = {
   baekhalma: `너는 건물주 백할매야. 직설적이고 쿨한 할머니. "야", "봐봐", "쯧쯧" 씀. 팩폭 뒤에 걱정 한마디 붙임.`,
   doRyeong:  `너는 근본도령이야. 친한 형/오빠가 솔직하게 말해주는 느낌. "야", "솔직히", "있잖아" 씀.`,
@@ -121,37 +69,32 @@ export async function POST(req: NextRequest) {
     const session = await getServerSession(authOptions)
     const userId = (session?.user as { id?: string } | undefined)?.id
 
-    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }))
-    const todayStr  = `${now.getFullYear()}년 ${now.getMonth()+1}월 ${now.getDate()}일`
+    const clock = generationClock()
+    const todayStr  = `${clock.currentYear}년 ${clock.currentMonth}월 ${clock.currentDay}일`
     const genderStr = gender === 'male' ? '남성' : '여성'
     const calTypeStr = calType === 'lunar' ? '음력' : '양력'
-    const age       = now.getFullYear() - parseInt(year) + 1
+    const age       = clock.currentYear - parseInt(year) + 1
 
-    const manse      = calcManse(parseInt(year), parseInt(month), parseInt(day), hour, typeof longitude === 'number' ? longitude : undefined)
-    const todayPillar = calcTodayPillar()
-
-    const elementNames: Record<string,string> = { '木':'나무', '火':'불', '土':'땅', '金':'금속', '水':'물' }
-    const elementDesc = Object.entries(manse.elementCount)
-      .map(([el, cnt]) => `${elementNames[el]} ${cnt}개`).join(', ')
+    const manse      = calcManse(parseInt(year), parseInt(month), parseInt(day), hourInputToHm(hour), typeof longitude === 'number' ? longitude : undefined)
+    const todayKst = kstParts()
+    const todayPillar = calcDayPillar(todayKst.year, todayKst.month, todayKst.day)
 
     const voice = CHARACTER_VOICE[characterId] ?? CHARACTER_VOICE['doRyeong']
 
     const prompt = `
 ${voice}
 
-오늘은 ${todayStr}이야.
+오늘은 ${todayStr}이야. 생성 기준일 ${clock.generatedDateKST} (Asia/Seoul).
 오늘 날짜 일주: ${todayPillar.stem}${todayPillar.branch} (${todayPillar.stemKr}${todayPillar.branchKr})
 
-상담자: ${name} (${year}년 ${month}월 ${day}일생 ${calTypeStr}, ${manse.animal}띠, ${genderStr}, ${age}세)
-사주 기운: ${elementDesc}
-일간: ${manse.dayPillar.stem}(${manse.dayPillar.stemKr}) — ${manse.dayPillar.stemElement} 기운
-연주: ${manse.yearPillar.stem}${manse.yearPillar.branch} / 월주: ${manse.monthPillar.stem}${manse.monthPillar.branch} / 일주: ${manse.dayPillar.stem}${manse.dayPillar.branch} / 시주: ${manse.hourPillar ? manse.hourPillar.stem+manse.hourPillar.branch : '미상'}
+상담자: ${name} (${year}년 ${month}월 ${day}일생 ${calTypeStr}, ${genderStr}, ${age}세)
+${formatManseForPrompt(manse, '상담자')}
+${SHARED_INTERP_GUARDS}
 
 오늘 날짜 기운과 이 사람 사주 기운이 어떻게 만나는지 분석해서 일일운세를 줘.
 캐릭터 말투 100% 유지. 어려운 명리 용어 절대 금지. 20-30대 말로.
-- "~가 아니라 ~야" / "봐봐, ~잖아" / "솔직히 ~" 패턴 섞어서
-- 판결하듯이 써. 읽으면 "맞다" 싶게
-- 각 섹션 3~4문장. 구체적으로.
+오행 개수는 위에 준 숫자만 인용하고 다시 세지 마라.
+점수는 해석용 감각이지 계산표가 아니다. 계산된 사실처럼 단정하지 마라.
 
 반드시 아래 JSON만 출력. 마크다운 없이. 점수는 0~100 사이 정수.
 
@@ -170,21 +113,42 @@ ${voice}
 }
 `
 
-    // ── 논스트리밍으로 완성 후 전송 (파싱 안정성) ──────
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1500,
-      system: '너는 사주궁 서비스의 일일운세 캐릭터야. 반드시 순수 JSON만 출력. 마크다운 코드블록 절대 금지.',
-      messages: [{ role: 'user', content: prompt }],
-    })
-
-    const raw = response.content[0].type === 'text' ? response.content[0].text : ''
-    const clean = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
-    const s = clean.indexOf('{'), e = clean.lastIndexOf('}')
-    if (s === -1 || e === -1) throw new Error('JSON 파싱 실패')
-
-    const parsed = JSON.parse(clean.slice(s, e + 1))
-    console.log('[일일운세] 생성 완료:', response.usage.output_tokens, 'tok')
+    let parsed: Record<string, unknown> | null = null
+    let lastErr: unknown = null
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const response = await client.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1500,
+        system: '너는 사주궁 서비스의 일일운세 캐릭터야. 반드시 순수 JSON만 출력. 마크다운 코드블록 절대 금지.',
+        messages: [{ role: 'user', content: prompt }],
+      })
+      try {
+        const raw = response.content[0].type === 'text' ? response.content[0].text : ''
+        const clean = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
+        const s = clean.indexOf('{'), e = clean.lastIndexOf('}')
+        if (s === -1 || e === -1) throw new Error('JSON 파싱 실패')
+        const next = JSON.parse(clean.slice(s, e + 1))
+        assertNoElementCitationMismatch(collectGeneratedText([next]), manse.elementCount)
+        parsed = next
+        console.log(JSON.stringify({
+          tag: '일일운세',
+          phase: 'generated',
+          attempt,
+          calcVersion: manse.calcVersion,
+          outputTokens: response.usage.output_tokens,
+        }))
+        break
+      } catch (e) {
+        lastErr = e
+        console.error(JSON.stringify({
+          tag: '일일운세',
+          phase: 'validate',
+          attempt,
+          kind: e instanceof Error && e.message.includes('오행 수치 불일치') ? 'validation' : 'parse',
+        }))
+      }
+    }
+    if (!parsed) throw lastErr instanceof Error ? lastErr : new Error('일일운세 생성 실패')
 
     // ✅ 추가: 로그인 사용자면 오늘자 결과 + 마지막 입력 프로필을 저장 (다음 방문 시 재사용)
     if (userId) {

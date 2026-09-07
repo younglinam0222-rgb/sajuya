@@ -14,7 +14,7 @@ interface SajuTitle {
   id: string; category?: string; title: string; teaser: string; is_free: boolean; content: string
 }
 interface LifecycleItem {
-  age: string; score: number; season: string; desc: string
+  age: string; score?: number; season: string; desc: string
 }
 interface Strategy {
   overview: string; golden_period: string; lifecycle: LifecycleItem[]; peak_guide: string; warning: string; final_word?: string
@@ -58,8 +58,8 @@ const LOADING_TIPS = [
   '사주팔자 계산하는 중...',
   '오행 분석하는 중...',
   '판결문 12개 작성하는 중...',
-  '인생 흐름 계산하는 중...',
-  '전성기 전략 수립하는 중...',
+  '인생 흐름 정리하는 중...',
+  '전략 문장 작성하는 중...',
 ]
 
 type Stage = 'input' | 'loading' | 'result'
@@ -119,6 +119,7 @@ function ManseTable({ manse, charColor }: { manse: ManseData; charColor: string 
       </div>
       <div className="px-3 py-2 bg-[#111118] text-xs text-gray-500">
         {manse.animal}띠 · {manse.hourStr}
+        <div className="text-[10px] text-gray-600 mt-1">오행 개수는 겉글자 기준. 지지 십성은 본기(정기). 지장간 합산 아님.</div>
       </div>
     </div>
   )
@@ -150,15 +151,13 @@ function LoadingScreen({ name, character, saving }: { name: string; character: t
 
 function LifecycleChart({ data }: { data: LifecycleItem[] }) {
   if (!data?.length) return null
-  const maxScore = Math.max(...data.map(d => d.score), 1)
   return (
     <div className="rounded-2xl p-4 bg-[#111118] border border-gray-800">
-      <div className="flex items-center gap-2 mb-4"><span>📊</span><span className="font-bold text-sm text-white">나이대별 운의 흐름</span></div>
-      <div className="flex items-end gap-2 h-28 mb-3">
+      <div className="flex items-center gap-2 mb-4"><span>📊</span><span className="font-bold text-sm text-white">나이대별 흐름</span><span className="text-[10px] text-gray-500">해석 · 계산 점수 아님</span></div>
+      <div className="flex items-end gap-2 h-16 mb-3">
         {data.map(d => (
           <div key={d.age} className="flex-1 flex flex-col items-center gap-1">
-            <span className="text-xs text-gray-400">{d.score}</span>
-            <div className="w-full rounded-t-lg" style={{ height: `${Math.max((d.score/maxScore)*100,8)}%`, background: SEASON_COLORS[d.season]??'#8B5CF6', minHeight: 8 }} />
+            <div className="w-full rounded-t-lg h-10" style={{ background: SEASON_COLORS[d.season]??'#8B5CF6' }} />
           </div>
         ))}
       </div>
@@ -498,7 +497,7 @@ export default function SajuPage() {
         body: JSON.stringify({
           ...form,
           personalQuestion: form.personalQuestion,
-          occupation: form.occupation || '일반인',
+          occupation: form.occupation,
           calType,
           characterId: selectedChar.id,
           partnerInfo: isRomance ? partnerForm : undefined,
@@ -879,7 +878,7 @@ export default function SajuPage() {
               {result.strategy.lifecycle?.length > 0 && <LifecycleChart data={result.strategy.lifecycle} />}
               {result.strategy.golden_period && (
                 <div className="rounded-2xl p-4 bg-[#111118] border border-yellow-900/30">
-                  <div className="flex items-center gap-2 mb-2"><span>🏆</span><span className="font-bold text-sm text-yellow-400">전성기는 언제?</span></div>
+                  <div className="flex items-center gap-2 mb-2"><span>🏆</span><span className="font-bold text-sm text-yellow-400">기운이 잘 쓰이는 방향</span><span className="text-[10px] text-gray-500">해석</span></div>
                   <FormattedStrategyText text={result.strategy.golden_period} />
                 </div>
               )}

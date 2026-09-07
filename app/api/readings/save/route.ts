@@ -8,7 +8,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-function withSaveMeta(aiResult: unknown, isComplete: boolean, requestId?: unknown, sajuData?: { form?: { personalQuestion?: unknown } }) {
+function withSaveMeta(aiResult: unknown, isComplete: boolean, requestId?: unknown, sajuData?: { form?: { personalQuestion?: unknown }; saju?: Record<string, unknown> }) {
   if (typeof aiResult !== 'string') return aiResult
   try {
     const parsed = JSON.parse(aiResult)
@@ -22,11 +22,17 @@ function withSaveMeta(aiResult: unknown, isComplete: boolean, requestId?: unknow
       const answer = typeof pa.answer === 'string' ? pa.answer : ''
       parsed.personalAnswer = { question, answer }
     }
+    const saju = sajuData?.saju && typeof sajuData.saju === 'object' ? sajuData.saju : null
+    const extraMeta: Record<string, unknown> = {}
+    if (typeof saju?.calcVersion === 'string') extraMeta.calcVersion = saju.calcVersion
+    if (typeof saju?.promptVersion === 'string') extraMeta.promptVersion = saju.promptVersion
+    if (typeof saju?.generatedDateKST === 'string') extraMeta.generatedDateKST = saju.generatedDateKST
     parsed._meta = {
       ...(typeof parsed._meta === 'object' && parsed._meta ? parsed._meta : {}),
       isComplete: !!isComplete,
       requestId: typeof requestId === 'string' ? requestId : null,
       savedAt: Date.now(),
+      ...extraMeta,
     }
     return JSON.stringify(parsed)
   } catch {

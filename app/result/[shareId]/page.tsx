@@ -148,7 +148,7 @@ export default function ResultPage() {
         body: JSON.stringify({
           ...formInfo,
           personalQuestion: question,
-          occupation: formInfo.occupation || '일반인',
+          occupation: formInfo.occupation,
           characterId,
           longitude: selectedRegion?.longitude,
           retry: { groups: [], strategy: false, personal: true },
@@ -401,6 +401,7 @@ export default function ResultPage() {
             <div className="px-4 py-2 bg-[#111]">
               <span className="text-xs font-bold text-yellow-400">{sajuData.animal}띠</span>
               {sajuData.hourStr && <span className="text-xs text-[#555] ml-2">{sajuData.hourStr}</span>}
+              <div className="text-[10px] text-[#555] mt-1">오행 개수는 겉글자 기준. 지지 십성은 본기(정기).</div>
             </div>
           )}
         </div>
@@ -564,15 +565,13 @@ export default function ResultPage() {
               )}
               {strategy.lifecycle?.length > 0 && (
                 <div className="rounded-2xl p-4 bg-[#111] border border-gray-800">
-                  <div className="flex items-center gap-2 mb-4"><span>📊</span><span className="font-bold text-sm text-white">나이대별 운의 흐름</span></div>
-                  <div className="flex items-end gap-2 h-28 mb-3">
+                  <div className="flex items-center gap-2 mb-4"><span>📊</span><span className="font-bold text-sm text-white">나이대별 흐름</span><span className="text-[10px] text-gray-500">해석 · 계산 점수 아님</span></div>
+                  <div className="flex items-end gap-2 h-16 mb-3">
                     {strategy.lifecycle.map((d: any) => {
-                      const maxScore = Math.max(...strategy.lifecycle.map((x: any) => x.score), 1)
                       const colors: Record<string,string> = { '봄':'#10B981','여름':'#F59E0B','가을':'#F97316','겨울':'#3B82F6' }
                       return (
                         <div key={d.age} className="flex-1 flex flex-col items-center gap-1">
-                          <span className="text-[10px] text-gray-400">{d.score}</span>
-                          <div className="w-full rounded-t-lg" style={{ height: `${Math.max((d.score/maxScore)*100,8)}%`, background: colors[d.season]??'#8B5CF6', minHeight: 8 }} />
+                          <div className="w-full rounded-t-lg h-10" style={{ background: colors[d.season]??'#8B5CF6' }} />
                         </div>
                       )
                     })}
@@ -605,7 +604,7 @@ export default function ResultPage() {
               )}
               {strategy.golden_period && (
                 <div className="rounded-2xl p-4 bg-[#111] border border-yellow-900/30">
-                  <div className="flex items-center gap-2 mb-2"><span>🏆</span><span className="font-bold text-sm text-yellow-400">전성기는 언제?</span></div>
+                  <div className="flex items-center gap-2 mb-2"><span>🏆</span><span className="font-bold text-sm text-yellow-400">기운이 잘 쓰이는 방향</span><span className="text-[10px] text-gray-500">해석</span></div>
                   <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line">{sanitizeText(strategy.golden_period)}</p>
                 </div>
               )}

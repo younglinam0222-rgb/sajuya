@@ -210,7 +210,7 @@ export default function GunghapPage() {
 
           {score > 0 && (
             <div className="rounded-2xl p-5 mb-4 bg-[#111118] border border-gray-800 flex flex-col items-center">
-              <p className="text-gray-400 text-sm mb-2">궁합 점수</p>
+              <p className="text-gray-400 text-sm mb-2">궁합 점수 <span className="text-[10px] text-gray-600">해석 · 계산표 아님</span></p>
               <div className="text-6xl font-black mb-1" style={{ color: scoreColor }}>{score}</div>
               <p className="text-gray-500 text-sm">/ 100점</p>
               <div className="w-full h-2 bg-gray-800 rounded-full mt-3">
