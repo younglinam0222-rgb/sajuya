@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:content-notice": "npx --yes tsx scripts/test-content-notice.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",

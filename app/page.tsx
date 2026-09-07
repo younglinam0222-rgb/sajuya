@@ -4,6 +4,8 @@ import { useSession, signIn } from 'next-auth/react'
 import Link from 'next/link'
 import { useState, useEffect, useRef } from 'react'
 import YeopjeunShop from '@/app/components/YeopjeunShop'
+import Footer from '@/app/components/Footer'
+import { contentNoticeHref } from '@/lib/safeNextPath'
 
 // ─── 타입 ────────────────────────────────────────────
 const CHAR_IMG: Record<string, string> = {
@@ -387,22 +389,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* 법적 푸터 */}
-        <div className="px-4 mb-6">
-          <div className="border-t border-gray-900 pt-4">
-            <div className="flex flex-wrap gap-x-4 gap-y-1.5 justify-center mb-3">
-              <Link href="/terms" className="text-xs text-gray-600 hover:text-gray-400">이용약관</Link>
-              <Link href="/privacy" className="text-xs text-gray-600 hover:text-gray-400">개인정보처리방침</Link>
-              <Link href="/refund" className="text-xs text-gray-600 hover:text-gray-400">환불정책</Link>
-              <a href="mailto:sajuya.help@gmail.com" className="text-xs text-gray-600 hover:text-gray-400">고객센터</a>
-            </div>
-            <p className="text-center text-[10px] text-gray-700 leading-relaxed">
-              본 서비스는 사주명리학 기반 엔터테인먼트 콘텐츠입니다.<br />
-              의료·법률·재정 판단을 대체하지 않으며, 만 14세 이상 이용 가능합니다.
-            </p>
-            <p className="text-center text-[10px] text-gray-800 mt-1">© 2025 사주궁 · sajuya.help@gmail.com</p>
-          </div>
-        </div>
+        <Footer />
 
       </div>
 
@@ -450,17 +437,17 @@ export default function HomePage() {
               <p className="text-gray-400 text-sm">오늘의 일일운세도 무료로 바로 확인</p>
             </div>
             <div className="space-y-2">
-              <button onClick={() => agreed && signIn('kakao')}
+              <button onClick={() => agreed && signIn('kakao', { callbackUrl: contentNoticeHref('/') })}
                 className="w-full py-3.5 rounded-2xl font-bold text-black text-sm flex items-center justify-center gap-2 transition-opacity"
                 style={{ background: '#FEE500', opacity: agreed ? 1 : 0.4 }}>
                 💬 카카오로 계속하기
               </button>
-              <button onClick={() => agreed && signIn('google')}
+              <button onClick={() => agreed && signIn('google', { callbackUrl: contentNoticeHref('/') })}
                 className="w-full py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 bg-white text-gray-900 transition-opacity"
                 style={{ opacity: agreed ? 1 : 0.4 }}>
                 🔵 구글로 계속하기
               </button>
-              <button onClick={() => agreed && signIn('naver')}
+              <button onClick={() => agreed && signIn('naver', { callbackUrl: contentNoticeHref('/') })}
                 className="w-full py-3.5 rounded-2xl font-bold text-white text-sm flex items-center justify-center gap-2 transition-opacity"
                 style={{ background: '#03C75A', opacity: agreed ? 1 : 0.4 }}>
                 N 네이버로 계속하기

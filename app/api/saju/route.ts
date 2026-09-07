@@ -5,6 +5,7 @@ import { CHARACTERS } from '@/lib/characters'
 import { correctToTrueSolarTime } from '@/lib/solarTime'
 import { GROUP_IDS, LAST_GROUP_INDEX } from '@/lib/sajuContract'
 import { sanitizeJudgmentTitles, sanitizeStrategy, sanitizeText } from '@/lib/sajuSanitize'
+import { requireContentNotice } from '@/lib/contentNoticeGuard'
 // @ts-ignore — lunar-javascript는 공식 타입 정의가 없음
 import LunarJS from 'lunar-javascript'
 
@@ -287,6 +288,9 @@ export async function POST(req: NextRequest) {
       ? clientRequestId
       : randomUUID()
     setupRequestId = requestId
+
+    const notice = await requireContentNotice()
+    if (!notice.ok) return notice.response
 
     const character = CHARACTERS[characterId] ?? CHARACTERS['doRyeong']
     if (!character) {

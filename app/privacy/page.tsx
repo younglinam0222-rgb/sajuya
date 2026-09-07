@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Footer from '@/app/components/Footer'
 
 export default function PrivacyPage() {
   return (
@@ -73,6 +74,7 @@ export default function PrivacyPage() {
           </section>
 
         </div>
+        <Footer clearance={false} />
       </div>
     </div>
   )

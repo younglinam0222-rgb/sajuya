@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import ContentNoticeShortHint from '@/app/components/ContentNoticeShortHint'
+import { applyGenerateGate } from '@/lib/contentNoticeClient'
 
 type Stage = 'input' | 'loading' | 'result'
 
@@ -52,6 +54,11 @@ export default function YearlyPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       })
+      const gate = await applyGenerateGate(res, '/yearly')
+      if (gate !== 'ok') {
+        setStage('input')
+        return
+      }
       if (!res.body) return
 
       const reader = res.body.getReader()
@@ -213,6 +220,7 @@ export default function YearlyPage() {
           style={{ background: 'linear-gradient(135deg, #F97316, #F59E0B)' }}>
           {form.targetYear}년 운세 보기 📅
         </button>
+        <ContentNoticeShortHint />
       </div>
     </div>
   )

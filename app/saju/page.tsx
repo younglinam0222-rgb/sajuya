@@ -9,6 +9,9 @@ import { KOREA_REGIONS } from '@/lib/solarTime'
 import { sanitizeText } from '@/lib/sajuSanitize'
 import { appendSseChunk, parseSseFrame } from '@/lib/sajuSse'
 import { assessCompletion, GROUP_IDS, LAST_GROUP_INDEX, normalizePersonalAnswer, PEAK_GUIDE_LABEL, sortTitlesById } from '@/lib/sajuContract'
+import PersonalQuestionLabel from '@/app/components/PersonalQuestionLabel'
+import ContentNoticeShortHint from '@/app/components/ContentNoticeShortHint'
+import { applyGenerateGate } from '@/lib/contentNoticeClient'
 
 interface SajuTitle {
   id: string; category?: string; title: string; teaser: string; is_free: boolean; content: string
@@ -509,7 +512,17 @@ export default function SajuPage() {
       })
       if (requestIdRef.current !== requestId) return
       if (!res.ok) {
-        setErrorMsg(res.status === 401 ? '로그인 후 이용할 수 있어요.' : `서버 오류(${res.status}). 다시 시도해주세요.`)
+        const gate = await applyGenerateGate(res, '/saju')
+        if (gate === 'notice' || gate === 'login') {
+          setGenStatus('idle')
+          setStage('input')
+          return
+        }
+        setErrorMsg(
+          gate === 'unavailable'
+            ? '콘텐츠 안내 확인을 저장할 수 없어 생성을 시작하지 않았습니다.'
+            : res.status === 401 ? '로그인 후 이용할 수 있어요.' : `서버 오류(${res.status}). 다시 시도해주세요.`
+        )
         setGenStatus('failed')
         setStage('input')
         return
@@ -985,9 +998,9 @@ export default function SajuPage() {
 
         {/* ✅ 신규: 직접 궁금한 거 자유 입력 (선택) — 채워지면 결과 맨 위에 전용 답변 카드로 표시 */}
         <div className="mb-4">
-          <label className="text-xs text-gray-400 mb-2 block">
+          <PersonalQuestionLabel>
             🔮 족집게 질문 <span className="text-gray-600">(선택)</span>
-          </label>
+          </PersonalQuestionLabel>
           <textarea
             value={form.personalQuestion}
             onChange={e => setForm(f => ({ ...f, personalQuestion: e.target.value }))}
@@ -1171,7 +1184,8 @@ export default function SajuPage() {
           style={{ background: `linear-gradient(135deg, ${selectedChar.color}, ${selectedChar.color}bb)` }}>
           {selectedChar.name}에게 물어보기 →
         </button>
-        <p className="text-center text-gray-600 text-xs mt-3">로그인하면 전체 무료 공개</p>
+        <ContentNoticeShortHint />
+        <p className="text-center text-gray-600 text-xs mt-2">로그인하면 전체 무료 공개</p>
       </div>
     </div>
   )

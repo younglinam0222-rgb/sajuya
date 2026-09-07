@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import ContentNoticeShortHint from '@/app/components/ContentNoticeShortHint'
+import { applyGenerateGate } from '@/lib/contentNoticeClient'
 
 type Stage = 'input' | 'loading' | 'result'
 
@@ -142,6 +144,11 @@ export default function GunghapPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, calType1, calType2 }),
       })
+      const gate = await applyGenerateGate(res, '/gunghap')
+      if (gate !== 'ok') {
+        setStage('input')
+        return
+      }
       if (!res.body) return
 
       const reader = res.body.getReader()
@@ -290,6 +297,7 @@ export default function GunghapPage() {
           style={{ background: 'linear-gradient(135deg, #EC4899, #8B5CF6)' }}>
           궁합 보기 →
         </button>
+        <ContentNoticeShortHint />
       </div>
     </div>
   )

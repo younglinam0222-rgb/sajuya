@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import ContentNoticeShortHint from '@/app/components/ContentNoticeShortHint'
+import { applyGenerateGate } from '@/lib/contentNoticeClient'
 
 type Stage = 'input' | 'loading' | 'result'
 
@@ -56,6 +58,11 @@ export default function TaekilPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, calType }),
       })
+      const gate = await applyGenerateGate(res, '/taekil')
+      if (gate !== 'ok') {
+        setStage('input')
+        return
+      }
       if (!res.body) return
 
       const reader = res.body.getReader()
@@ -295,6 +302,7 @@ export default function TaekilPage() {
           style={{ background: 'linear-gradient(135deg, #7C3AED, #4F46E5)' }}>
           길일 찾기 →
         </button>
+        <ContentNoticeShortHint />
       </div>
     </div>
   )
