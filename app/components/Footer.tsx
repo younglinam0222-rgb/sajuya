@@ -8,12 +8,12 @@ type FooterProps = {
 
 export default function Footer({ showEmailInCopyright = true, clearance = true }: FooterProps) {
   return (
-    <footer className={`bg-[#0a0a0f] border-t border-gray-900 ${clearance ? 'pb-28' : 'pb-8'}`}>
+    <footer className={`relative z-[60] bg-[#0a0a0f] border-t border-gray-900 ${clearance ? 'pb-28' : 'pb-8'}`}>
       <div className="max-w-md mx-auto px-4 py-6">
         <div className="relative z-10 flex flex-wrap gap-x-4 gap-y-2 mb-4 justify-center">
-          <Link href="/terms" className="text-xs text-gray-600 hover:text-gray-400">이용약관</Link>
-          <Link href="/privacy" className="text-xs text-gray-600 hover:text-gray-400">개인정보처리방침</Link>
-          <a href={`mailto:${SUPPORT_EMAIL}`} className="text-xs text-gray-600 hover:text-gray-400">고객센터</a>
+          <Link href="/terms" className="text-xs text-gray-600 hover:text-gray-400 py-2 px-1 min-h-11 inline-flex items-center">이용약관</Link>
+          <Link href="/privacy" className="text-xs text-gray-600 hover:text-gray-400 py-2 px-1 min-h-11 inline-flex items-center">개인정보처리방침</Link>
+          <a href={`mailto:${SUPPORT_EMAIL}`} className="text-xs text-gray-600 hover:text-gray-400 py-2 px-1 min-h-11 inline-flex items-center">고객센터</a>
         </div>
         <p className="text-center text-[10px] text-gray-700 leading-relaxed">
           본 서비스는 전통 사주 해석 기반 엔터테인먼트 콘텐츠입니다.<br />

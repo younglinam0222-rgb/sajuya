@@ -18,7 +18,7 @@ export default function ContentNoticeOnboardingPage() {
 
   useEffect(() => {
     if (status !== 'loading') return
-    const timer = window.setTimeout(() => setSessionStuck(true), 8000)
+    const timer = window.setTimeout(() => setSessionStuck(true), 4000)
     return () => window.clearTimeout(timer)
   }, [status])
 

@@ -182,8 +182,8 @@ function DraftTerms() {
         <h3 className="text-gray-200 font-medium mt-4 mb-2">③ 현재 확인된 운영 방식 (Production)</h3>
         <ul className="space-y-1.5 text-gray-400">
           <li>• 화면 가격: 1냥 1,900원, 3냥 4,900원.</li>
-          <li>• 사주·궁합 등 생성 API는 현재 엽전을 자동 차감하지 않습니다. 일부 결과의 잠금 해제는 토스페이먼츠 결제 확인 후 `is_paid`를 갱신하는 방식으로 구현되어 있습니다.</li>
-          <li>• 잔액은 `yeobjeun_balance` 단일 숫자이며, 유상/무료 차감 순서가 Production 코드에 구현되어 있지 않습니다.</li>
+          <li>• 사주·궁합 등 생성 API는 현재 엽전을 자동 차감하지 않습니다. 일부 결과의 잠금 해제는 토스페이먼츠 결제 확인 후 is_paid 표시를 갱신하는 방식으로 구현되어 있습니다.</li>
+          <li>• 잔액은 yeobjeun_balance 단일 숫자이며, 유상/무료 차감 순서가 Production 코드에 구현되어 있지 않습니다.</li>
           <li>• 환불 자동화 기능은 없습니다. 결제 취소·환불은 문의 접수 후 수동 처리입니다.</li>
         </ul>
 

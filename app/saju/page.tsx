@@ -12,6 +12,7 @@ import { assessCompletion, GROUP_IDS, LAST_GROUP_INDEX, normalizePersonalAnswer,
 import PersonalQuestionLabel from '@/app/components/PersonalQuestionLabel'
 import ContentNoticeShortHint from '@/app/components/ContentNoticeShortHint'
 import { applyGenerateGate } from '@/lib/contentNoticeClient'
+import { contentNoticeHref } from '@/lib/safeNextPath'
 
 interface SajuTitle {
   id: string; category?: string; title: string; teaser: string; is_free: boolean; content: string
@@ -736,17 +737,17 @@ export default function SajuPage() {
           <span className="text-yellow-400 font-bold">가입 즉시 🪙 1엽전 지급!</span>
         </div>
         <div className="w-full max-w-xs space-y-3">
-          <button onClick={() => signIn('kakao', { callbackUrl: '/saju' })}
+          <button onClick={() => signIn('kakao', { callbackUrl: contentNoticeHref('/saju') })}
             className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
             style={{ background: '#fee500', color: '#3c1e1e' }}>
             <span className="text-xl">💬</span> 카카오로 시작하기
           </button>
-          <button onClick={() => signIn('google', { callbackUrl: '/saju' })}
+          <button onClick={() => signIn('google', { callbackUrl: contentNoticeHref('/saju') })}
             className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
             style={{ background: '#fff', color: '#333', border: '1px solid #e5e7eb' }}>
             <span style={{ fontSize: '18px', fontWeight: 900, color: '#4285F4' }}>G</span> 구글로 시작하기
           </button>
-          <button onClick={() => signIn('naver', { callbackUrl: '/saju' })}
+          <button onClick={() => signIn('naver', { callbackUrl: contentNoticeHref('/saju') })}
             className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
             style={{ background: '#03c75a', color: '#fff' }}>
             <span className="text-xl font-black">N</span> 네이버로 시작하기
