@@ -10,6 +10,8 @@ import { appendSseChunk, parseSseFrame } from '@/lib/sajuSse'
 import { normalizePersonalAnswer, PEAK_GUIDE_LABEL, readingPersonalView } from '@/lib/sajuContract'
 import { KOREA_REGIONS } from '@/lib/solarTime'
 import { ensureKakaoReady, getKakaoDiagnostics, KAKAO_READY_MESSAGE } from '@/lib/kakaoShare'
+import { applyGenerateGate } from '@/lib/contentNoticeClient'
+import { COPYRIGHT_LINE } from '@/lib/siteBranding'
 
 interface Section { id: string; emoji: string; title: string; body: string }
 interface SajuTitle { id: string; category?: string; title: string; teaser: string; is_free: boolean; content: string }
@@ -154,6 +156,8 @@ export default function ResultPage() {
           retry: { groups: [], strategy: false, personal: true },
         }),
       })
+      const gate = await applyGenerateGate(res, `/result/${shareId}`)
+      if (gate !== 'ok') return
       if (!res.ok || !res.body) throw new Error('생성 요청에 실패했어요.')
 
       const reader = res.body.getReader()
@@ -688,7 +692,7 @@ export default function ResultPage() {
 
       <div className="mx-4 mt-6 px-3 py-3 rounded-xl" style={{ background: '#0a0a0a', border: '0.5px solid #111' }}>
         <p className="text-[9px] leading-relaxed" style={{ color: '#3a3a3a' }}>
-          본 서비스는 사주명리학 이론을 기반으로 분석한 참고용 엔터테인먼트 콘텐츠입니다. 실제 투자·재무·의료·법률 등 중요한 의사결정의 근거로 사용하지 마십시오. © 사주궁
+          본 서비스는 사주명리학 이론을 기반으로 분석한 참고용 엔터테인먼트 콘텐츠입니다. 실제 투자·재무·의료·법률 등 중요한 의사결정의 근거로 사용하지 마십시오. {COPYRIGHT_LINE}
         </p>
       </div>
     </div>

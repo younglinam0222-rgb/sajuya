@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
+import ContentNoticeShortHint from '@/app/components/ContentNoticeShortHint'
+import { applyGenerateGate } from '@/lib/contentNoticeClient'
 
 // ─── 타입 ─────────────────────────────────────────────
 interface DailyResult {
@@ -288,6 +290,11 @@ export default function DailyPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, calType, characterId: selectedChar.id }),
       })
+      const gate = await applyGenerateGate(res, '/daily')
+      if (gate !== 'ok') {
+        setStage('input')
+        return
+      }
       if (!res.body) return
 
       const reader  = res.body.getReader()
@@ -563,7 +570,8 @@ export default function DailyPage() {
           style={{ background: `linear-gradient(135deg, ${selectedChar.color}, ${selectedChar.color}bb)` }}>
           {selectedChar.name}에게 오늘 운세 묻기 ✨
         </button>
-        <p className="text-center text-gray-600 text-xs mt-3">매일 무료 · 만세력 기반 분석</p>
+        <ContentNoticeShortHint />
+        <p className="text-center text-gray-600 text-xs mt-2">매일 무료 · 만세력 기반 분석</p>
       </div>
     </div>
   )

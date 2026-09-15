@@ -135,7 +135,7 @@ export default function PayPage() {
           <span className="text-xs text-gray-400 leading-relaxed">
             결제와 동시에 판결문(디지털 콘텐츠)이 즉시 제공되며, 콘텐츠 제공이 개시되면
             「전자상거래법」 제17조 2항 5호에 따라 청약철회(환불)가 제한된다는 점을 확인했습니다.
-            <Link href="/terms" target="_blank" className="text-purple-400 underline ml-1">환불정책 보기</Link>
+            <Link href="/terms#refund" target="_blank" className="text-purple-400 underline ml-1">이용약관 환불 조항 보기</Link>
           </span>
         </label>
 

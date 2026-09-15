@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { requireContentNotice } from '@/lib/contentNoticeGuard'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
 export async function POST(req: NextRequest) {
   try {
+    const notice = await requireContentNotice()
+    if (!notice.ok) return notice.response
     const { name, year, month, day, gender, targetYear } = await req.json()
 
     const animals = ['쥐','소','호랑이','토끼','용','뱀','말','양','원숭이','닭','개','돼지']

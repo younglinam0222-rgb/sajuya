@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import ContentNoticeShortHint from '@/app/components/ContentNoticeShortHint'
+import { applyGenerateGate } from '@/lib/contentNoticeClient'
 
 type Stage = 'input' | 'loading' | 'result'
 
@@ -61,6 +63,11 @@ export default function DaeunPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, calType }),
       })
+      const gate = await applyGenerateGate(res, '/daeun')
+      if (gate !== 'ok') {
+        setStage('input')
+        return
+      }
       if (!res.body) return
 
       const reader = res.body.getReader()
@@ -230,6 +237,7 @@ export default function DaeunPage() {
           style={{ background: 'linear-gradient(135deg, #10B981, #3B82F6)' }}>
           대운 분석하기 →
         </button>
+        <ContentNoticeShortHint />
       </div>
     </div>
   )

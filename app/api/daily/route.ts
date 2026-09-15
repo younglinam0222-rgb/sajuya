@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/app/api/auth/[...nextauth]/route'
 import { createServerSupabase } from '@/lib/supabase'
+import { requireContentNotice } from '@/lib/contentNoticeGuard'
 import { correctToTrueSolarTime } from '@/lib/solarTime'
 // @ts-ignore — lunar-javascript는 공식 타입 정의가 없음
 import LunarJS from 'lunar-javascript'
@@ -117,9 +118,9 @@ const CHARACTER_VOICE: Record<string, string> = {
 export async function POST(req: NextRequest) {
   try {
     const { name, year, month, day, hour, gender, characterId, calType, longitude, birthPlace } = await req.json()
-    // ✅ 추가: 로그인 여부 확인 (비로그인이어도 기존처럼 그대로 무료 이용 가능, 저장만 안 됨)
-    const session = await getServerSession(authOptions)
-    const userId = (session?.user as { id?: string } | undefined)?.id
+    const notice = await requireContentNotice()
+    if (!notice.ok) return notice.response
+    const userId = notice.userId
 
     const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }))
     const todayStr  = `${now.getFullYear()}년 ${now.getMonth()+1}월 ${now.getDate()}일`

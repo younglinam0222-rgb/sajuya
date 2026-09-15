@@ -1,6 +1,14 @@
 'use client'
 import { signIn } from 'next-auth/react'
 import Link from 'next/link'
+import { contentNoticeHref, safeNextPath } from '@/lib/safeNextPath'
+
+function loginCallbackUrl() {
+  if (typeof window === 'undefined') return contentNoticeHref('/')
+  const raw = new URLSearchParams(window.location.search).get('callbackUrl')
+  if (raw && raw.includes('/onboarding/content-notice')) return raw
+  return contentNoticeHref(safeNextPath(raw, '/'))
+}
 
 export default function LoginPage() {
   return (
@@ -19,17 +27,17 @@ export default function LoginPage() {
         </div>
 
         <div className="w-full space-y-3">
-          <button onClick={() => signIn('kakao', { callbackUrl: '/' })}
+          <button onClick={() => signIn('kakao', { callbackUrl: loginCallbackUrl() })}
             className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-98"
             style={{background:'#fee500',color:'#3c1e1e'}}>
             <span className="text-xl">💬</span> 카카오로 시작하기
           </button>
-          <button onClick={() => signIn('google', { callbackUrl: '/' })}
+          <button onClick={() => signIn('google', { callbackUrl: loginCallbackUrl() })}
             className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-98"
             style={{background:'#fff',color:'#333',border:'1px solid #e5e7eb'}}>
             <span style={{fontSize:'18px',fontWeight:'900',color:'#4285F4'}}>G</span> 구글로 시작하기
           </button>
-          <button onClick={() => signIn('naver', { callbackUrl: '/' })}
+          <button onClick={() => signIn('naver', { callbackUrl: loginCallbackUrl() })}
             className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-98"
             style={{background:'#03c75a',color:'#fff'}}>
             <span className="text-xl font-black">N</span> 네이버로 시작하기
@@ -37,7 +45,11 @@ export default function LoginPage() {
         </div>
 
         <div className="mt-6 text-xs text-[#444] text-center leading-relaxed">
-          가입 시 이용약관 및 개인정보처리방침에 동의합니다
+          가입 시{' '}
+          <Link href="/terms" className="underline text-[#666]">이용약관</Link>
+          {' '}및{' '}
+          <Link href="/privacy" className="underline text-[#666]">개인정보처리방침</Link>
+          에 동의합니다
         </div>
       </div>
     </div>
