@@ -1,4 +1,7 @@
 /* Final review: preserve the B composition; strengthen reading and task feedback. */
+/* 1440px: fixed .sg-bottom (~67px) sat over 충전하기 when the button was scrolled into view. 84px page padding left no scroll-margin, so the click target was under the nav. */
+.direction{padding-bottom:calc(112px + env(safe-area-inset-bottom, 0px))}
+.direction .sg-currency,.direction .sg-currency button,.direction .sg-footer{scroll-margin-bottom:calc(96px + env(safe-area-inset-bottom, 0px))}
 .direction-b .sg-hero h1{letter-spacing:-.035em;line-height:1.28}
 .direction .sg-hero-price{font-size:.875rem;color:var(--sg-muted);margin-top:12px;line-height:1.7;max-width:24rem}
 .direction-b .sg-hero-price{color:#d4dbe4}

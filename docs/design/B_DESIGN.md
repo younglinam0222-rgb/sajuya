@@ -61,4 +61,13 @@
 5. 자동 전환·일시정지·목차·글자 확대·세로 스크롤·키보드 포커스·충전창을 실제 조작합니다. 홈 방문 전후에도 결과 스타일이 같아야 합니다.
 6. GitHub 반영 커밋과 Vercel 배포 커밋을 확인합니다. 로컬 수정이나 ZIP 전달만으로 기존 사이트 주소가 바뀐다고 보고하지 않습니다.
 
-현재 여기에서 확인한 것은 소스·빌드 수준입니다. 브라우저 권한이 거부되어 픽셀 비교·실기기 조작은 실행하지 않았습니다. 이후 실행자도 접근이 거부되면 다른 방법으로 우회하지 말고 미검증으로 보고합니다.
+## 적용 후 수정 — `B_FILES.json` 해시 DIFF 이유
+
+원본 B안 해시는 유지합니다. 아래는 실제 사용 오류를 고치면서 기준 파일과 달라진 이유입니다.
+
+| 파일 | 이유 |
+|---|---|
+| `app/components/home/SampleHome.tsx` | 로그인 `signIn` 콜백을 `contentNoticeHref`로 연결. 고지 동의 게이트를 유지하기 위함 |
+| `app/components/home/refinement.css` | 1440px에서 고정 하단 메뉴가 `충전하기` 버튼을 가림. `scrollIntoView`가 버튼을 뷰포트 맨 아래에 두면 `.sg-bottom`과 겹침. `padding-bottom`과 `scroll-margin-bottom`을 늘려 클릭 가능하게 함 |
+| `app/components/reading/ReadingResult.tsx` | 목차 클릭이 `preventDefault`만 하고 `behavior: instant`로 이동해 해시가 비어 보임. 목차를 닫은 뒤 해당 챕터로 스크롤 |
+| `app/components/reading/approved-b.css` | 닫힌 `<details>`의 `nav`에 `display:grid`가 남아 챕터 위에 목차 링크가 겹침. 닫힘=`display:none`, 열림=`grid`. 목차 `z-index`와 챕터 `scroll-margin-top` 추가 |

@@ -9,8 +9,12 @@
 .rr .rr-note,.rr .rr-reading-tools,.rr .rr-toc a{font-size:.875rem;line-height:1.8}
 .rr .rr-reading-tools{flex-wrap:wrap;gap:10px}
 .rr .rr-note{color:#b4bfce}
+.rr .rr-toc{position:relative;z-index:3}
+.rr .rr-toc:not([open]) nav{display:none}
+.rr .rr-toc[open] nav{display:grid}
 .rr .rr-toc nav small,.rr .rr-toc summary>span{font-size:.75rem}
-.rr .rr-toc a{min-height:48px;align-items:flex-start}
+.rr .rr-toc a{min-height:48px;align-items:flex-start;position:relative;z-index:3}
+.rr .rr-chapter{scroll-margin-top:24px}
 .rr .rr-toc a small{max-width:74px;white-space:normal;line-height:1.7}
 .rr .rr-origin header>span,.rr .rr-origin-label{font-size:.8125rem}
 .rr .rr-origin-cell span,.rr .rr-origin-cell small{font-size:.8125rem;line-height:1.6}

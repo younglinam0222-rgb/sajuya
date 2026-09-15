@@ -139,9 +139,16 @@ export default function ReadingResult({ title, subtitle, character = 'baekhalma'
         {visible.length > 0 && <details className="rr-toc"><summary>해석 목차 <span>원하는 이야기로 바로 이동 ↓</span></summary>
           <nav aria-label="해석 목차">{visible.map((section, index) => <a key={section.id} href={`#reading-${section.id}`} onClick={event => {
             event.preventDefault()
-            const target = document.getElementById(`reading-${section.id}`)
-            target?.scrollIntoView({ behavior: 'instant', block: 'start' })
-            target?.focus({ preventScroll: true })
+            const id = `reading-${section.id}`
+            const details = event.currentTarget.closest('details')
+            if (details) details.open = false
+            requestAnimationFrame(() => {
+              const target = document.getElementById(id)
+              if (!target) return
+              target.scrollIntoView({ behavior: 'auto', block: 'start' })
+              target.focus({ preventScroll: true })
+              history.replaceState(null, '', `#${id}`)
+            })
           }}><small>{label(section, index)}</small>{sanitizeText(section.title)}<span>↗</span></a>)}</nav>
         </details>}
         <div className="rr-chapters">{visible.map((section, index) => <div key={section.id}>
