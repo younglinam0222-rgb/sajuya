@@ -1,0 +1,3 @@
+import {navigate} from './navigation'
+export const ANONYMOUS='preview'
+export async function loadTossPayments(){return {widgets(){return {async setAmount(){},async renderPaymentMethods({selector}:any){const el=document.querySelector(selector);if(el)el.innerHTML='<div style="padding:22px;border:1px solid #b79e66;border-radius:12px;color:#dcc695">결제 화면 예시 · 실제 결제는 진행되지 않습니다.</div>'},async renderAgreement({selector}:any){const el=document.querySelector(selector);if(el)el.textContent='원본 결제 동선의 디자인을 확인하는 체험 화면입니다.'},async requestPayment({orderId}:any){navigate('/pay/success?orderId='+encodeURIComponent(orderId)+'&amount=4900&paymentKey=preview-not-a-key')}}}}}

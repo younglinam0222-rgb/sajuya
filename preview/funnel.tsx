@@ -1,0 +1,8 @@
+import {useEffect,useState} from 'react'
+// Preview-local interaction checks. No identifiers, birth data, questions or external transport.
+const key='sajugung-preview-funnel-v1'
+type Event={event:string;target:string}
+const allowed=new Set(['hero_start','result_example_open','proof_tab','guide_open','product_open','daily_to_example','daily_to_saju','faq_open','daily_start','advice_save','share_excerpt_copy','followup_open','followup_question','review_submit'])
+function read():Event[]{try{const value=JSON.parse(sessionStorage.getItem(key)||'[]');return Array.isArray(value)?value:[]}catch{return []}}
+export function trackFunnel(event:string,target:string){if(!allowed.has(event))return;try{sessionStorage.setItem(key,JSON.stringify([...read(),{event,target}].slice(-100)));window.dispatchEvent(new Event('preview-funnel'))}catch{}}
+export function FunnelReview(){const [items,setItems]=useState<Event[]>(read);useEffect(()=>{const refresh=()=>setItems(read());window.addEventListener('preview-funnel',refresh);window.addEventListener('storage',refresh);return()=>{window.removeEventListener('preview-funnel',refresh);window.removeEventListener('storage',refresh)}},[]);return <details><summary>체험 동작 기록 · 이 탭에서만</summary><p>클릭 동작 확인용입니다. 실제 고객 전환율·결제 완료·카카오 전송을 측정하지 않습니다.</p><button onClick={()=>setItems(read())}>기록 새로고침</button><button onClick={()=>{sessionStorage.removeItem(key);setItems([])}}>기록 초기화</button><ul>{Object.entries(items.reduce((a,e)=>({...a,[e.event]:(a[e.event]||0)+1}),{} as Record<string,number>)).map(([event,count])=><li key={event}>{event}: {count}회</li>)}</ul></details>}
