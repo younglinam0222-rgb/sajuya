@@ -7,9 +7,9 @@ export const DAILY_IN_PROGRESS_MESSAGE = '오늘의 운세를 이미 생성 중�
 
 export const DAILY_LOGIN_REQUIRED_MESSAGE = '로그인 후 이용해주세요.'
 
-export const DAILY_PAID_CONSENT_MESSAGE = '다른 결과로 다시 생성하려면 1냥 사용에 동의해야 합니다.'
+export const DAILY_PAID_CONSENT_MESSAGE = '다른 결과로 다시 생성하려면 한냥 사용에 동의해야 합니다.'
 
-export const DAILY_INSUFFICIENT_BALANCE_MESSAGE = '엽전이 부족해요. 1냥이 필요합니다.'
+export const DAILY_INSUFFICIENT_BALANCE_MESSAGE = '엽전이 부족해요. 한냥이 필요합니다.'
 
 export const PENDING_TTL_MS = 10 * 60 * 1000
 

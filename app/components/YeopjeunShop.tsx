@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { NYANG_PRICE, THREE_NYANG_PRICE } from '@/lib/pricing'
+import { formatHeldNyang, formatNyang } from '@/lib/nyangDisplay'
 
 interface Package {
   id: string
@@ -20,7 +21,7 @@ interface Package {
 const PACKAGES: Package[] = [
   {
     id: 'one',
-    name: '한 냥',
+    name: '한냥',
     coins: 1,
     bonus: 0,
     price: NYANG_PRICE,
@@ -28,7 +29,7 @@ const PACKAGES: Package[] = [
   },
   {
     id: 'three',
-    name: '3냥 패키지',
+    name: '세냥 패키지',
     tag: 'BEST',
     coins: 3,
     bonus: 0,
@@ -106,7 +107,7 @@ export default function YeopjeunShop({ onClose, currentBalance = 0 }: YeopjeunSh
           <div className="flex items-center justify-between">
             <div>
               <p className="[font-family:var(--palace-serif)] text-xl font-medium">엽전 충전</p>
-              <p className="text-xs text-[#a7b3c3] mt-0.5">현재 보유 <span className="text-[#d4bc92] font-bold">{currentBalance}냥</span></p>
+              <p className="text-xs text-[#a7b3c3] mt-0.5">{formatHeldNyang(currentBalance)}</p>
             </div>
             <button type="button" aria-label="엽전 충전 닫기" onClick={onClose} className="text-[#9eabbd] text-xl px-2 min-h-11 min-w-11">✕</button>
           </div>
@@ -114,7 +115,7 @@ export default function YeopjeunShop({ onClose, currentBalance = 0 }: YeopjeunSh
           {/* 환율 표시 */}
           <div className="mt-3 flex items-center gap-3 p-3 rounded-lg bg-[#222a34]/80 border border-[#c6a66d]/30">
             <div className="text-center flex-1">
-              <p className="text-[#d4bc92] font-semibold text-lg">🪙 1냥</p>
+              <p className="text-[#d4bc92] font-semibold text-lg">🪙 {formatNyang(1)}</p>
               <p className="text-[#a7b3c3] text-xs">= {NYANG_PRICE.toLocaleString()}원</p>
             </div>
             <div className="text-[#a7b3c3]">↔</div>

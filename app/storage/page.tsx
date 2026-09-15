@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import Link from 'next/link'
+import { formatHeldNyang } from '@/lib/nyangDisplay'
 
 interface Reading {
   id: string
@@ -97,6 +98,7 @@ export default function StoragePage() {
                   <div className="px-3 py-2 text-xs text-[#a7b3c3] border-b border-[#344151] mb-1">
                     <p className="text-[#c4cdd8] font-medium truncate">{session.user?.name}님</p>
                     <p className="truncate">{session.user?.email}</p>
+                    <p className="mt-1 text-[#d4bc92]">{formatHeldNyang((session.user as {yeobjeun_balance?:number})?.yeobjeun_balance ?? 0)}</p>
                   </div>
                   <button
                     onClick={() => signOut({ callbackUrl: '/' })}

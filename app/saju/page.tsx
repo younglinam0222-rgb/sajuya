@@ -621,7 +621,7 @@ function SajuForm({ initialQuery }: { initialQuery: string }) {
           <Link href="/" className="text-gray-400 text-xl">←</Link>
           <div>
             <h1 className="text-xl font-bold">사주 풀이</h1>
-            <p className="text-gray-500 text-xs mt-0.5">새 풀이 1회 1냥 · 로그인 필요</p>
+            <p className="text-gray-500 text-xs mt-0.5">새 풀이 1회 한냥 · 로그인 필요</p>
           </div>
         </div>
 
@@ -867,7 +867,7 @@ function SajuForm({ initialQuery }: { initialQuery: string }) {
           style={{ background: `linear-gradient(135deg, ${selectedChar.color}, ${selectedChar.color}bb)` }}>
           {selectedChar.name}에게 물어보기 →
         </button>
-        <p className="text-center text-gray-600 text-xs mt-3">새 풀이 1회 1냥 · 로그인 필요</p>
+        <p className="text-center text-gray-600 text-xs mt-3">새 풀이 1회 한냥 · 로그인 필요</p>
       </div>
     </div>
   )

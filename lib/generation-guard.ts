@@ -54,7 +54,7 @@ export function guardedGeneration(product: string, generate: (req:NextRequest)=>
     }
     const reserved=await rpc('reserve_generation',{p_user:userId,p_hash:hash,p_product:product,p_request:requestId,p_input:input})
     const errors:Record<string,[number,string,('GENERATION_PENDING')?]>={
-      balance:[402,'이 풀이에는 1냥이 필요합니다. 엽전을 충전해주세요.'],
+      balance:[402,'이 풀이에는 한냥이 필요합니다. 엽전을 충전해주세요.'],
       trial_used:[403,'계정당 최초 1회 무료 운세를 이미 이용하셨습니다. 저장된 결과는 다시 볼 수 있습니다.'],
       busy:[409,'이미 풀이를 생성 중입니다. 잠시 후 같은 내용으로 다시 확인해주세요.','GENERATION_PENDING'],
       rate:[429,'요청이 많습니다. 10분 후 다시 시도해주세요.'],

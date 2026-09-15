@@ -44,7 +44,7 @@
 | 결과 순서 | 기본 해석 12개 → 인생 흐름·전략 → 선택 질문. 서버가 허용한 실제 내용만 표시 |
 | 좁은 화면 | 320/360/390/430px에서 가로 넘침·잘린 버튼·겹침 없이 세로로 읽기 |
 
-섹션 순서: 상단 로고·후기·로그인/잔액 → 큰 인물 배너 → 저장 결과 진입(로그인 시) → 결과 구성 안내 → 무료 운세 → 움직이는 1:1 대화 배너 → 후기 → 4명 안내자 → 운세 메뉴·이용 조건 → 결과 미리보기 → 풀이 방식·FAQ → 첫 이용 안내 → 충전·푸터.
+섹션 순서: 상단 로고·후기·로그인/내 계정·엽전충전 → 큰 인물 배너 → 저장 결과 진입(로그인 시) → 소개 공유 → 결과 구성 안내 → 무료 운세 → 움직이는 1:1 대화 배너 → 후기 → 4명 안내자 → 운세 메뉴·이용 조건 → 결과 미리보기 → 풀이 방식·FAQ → 첫 이용 안내 → 충전·푸터.
 
 ## 시안과 실제 서비스의 데이터 차이
 
@@ -67,7 +67,7 @@
 
 | 파일 | 이유 |
 |---|---|
-| `app/components/home/SampleHome.tsx` | 로그인 `signIn` 콜백을 `contentNoticeHref`로 연결. 고지 동의 게이트를 유지하기 위함 |
+| `app/components/home/SampleHome.tsx` | 로그인 `signIn` 콜백을 `contentNoticeHref`로 연결. 상단을 로그인/내 계정과 엽전충전으로 분리하고 소개 공유 막대를 추가 |
 | `app/components/home/refinement.css` | 1440px에서 고정 하단 메뉴가 `충전하기` 버튼을 가림. `scrollIntoView`가 버튼을 뷰포트 맨 아래에 두면 `.sg-bottom`과 겹침. `padding-bottom`과 `scroll-margin-bottom`을 늘려 클릭 가능하게 함 |
-| `app/components/reading/ReadingResult.tsx` | 목차 클릭이 `preventDefault`만 하고 `behavior: instant`로 이동해 해시가 비어 보임. 목차를 닫은 뒤 해당 챕터로 스크롤 |
+| `app/components/reading/ReadingResult.tsx` | 목차 클릭이 `preventDefault`만 하고 `behavior: instant`로 이동해 해시가 비어 보임. 목차를 닫은 뒤 해당 챕터로 스크롤. 긴 본문 앞에도 공유 영역을 둠 |
 | `app/components/reading/approved-b.css` | 닫힌 `<details>`의 `nav`에 `display:grid`가 남아 챕터 위에 목차 링크가 겹침. 닫힘=`display:none`, 열림=`grid`. 목차 `z-index`와 챕터 `scroll-margin-top` 추가 |

@@ -6,6 +6,8 @@ import { hasEntertainmentConsent } from '../lib/entertainmentConsent'
 import { resolveBirthFromRequest } from '../lib/birthInput'
 import { buildServiceContextPrompt } from '../lib/serviceContextPrompt'
 import { SERVICE_PRICE_NYANG, formatNyangWon, servicePriceBadge } from '../lib/priceDisplay'
+import { formatHeldNyang, formatNyang, nativeKoreanCount } from '../lib/nyangDisplay'
+import { contentNoticeHref, safeNextPath } from '../lib/safeNextPath'
 
 function ok(name: string, cond: boolean) {
   assert.equal(cond, true, name)
@@ -62,13 +64,19 @@ const dailyPrompt = buildServiceContextPrompt({ service: 'daily', maritalStatus:
 const daeunPrompt = buildServiceContextPrompt({ service: 'daeun', maritalStatus: '기혼', occupation: '직장인' })
 ok('daily and daeun marital copy are not identical', dailyPrompt !== daeunPrompt)
 
-ok('price saju 1냥', servicePriceBadge('saju') === '1냥' && SERVICE_PRICE_NYANG.saju === 1)
-ok('price gunghap 1냥', SERVICE_PRICE_NYANG.gunghap === 1)
-ok('price daeun 1냥', SERVICE_PRICE_NYANG.daeun === 1)
-ok('price taekil 1냥', SERVICE_PRICE_NYANG.taekil === 1)
-ok('price yearly 1냥', SERVICE_PRICE_NYANG.yearly === 1)
-ok('price daily 1냥 extra', SERVICE_PRICE_NYANG.daily === 1)
+ok('price saju 한냥', servicePriceBadge('saju') === '한냥' && SERVICE_PRICE_NYANG.saju === 1)
+ok('price gunghap 한냥', SERVICE_PRICE_NYANG.gunghap === 1)
+ok('price daeun 한냥', SERVICE_PRICE_NYANG.daeun === 1)
+ok('price taekil 한냥', SERVICE_PRICE_NYANG.taekil === 1)
+ok('price yearly 한냥', SERVICE_PRICE_NYANG.yearly === 1)
+ok('price daily 한냥 extra', SERVICE_PRICE_NYANG.daily === 1)
 ok('daily badge is free first', servicePriceBadge('daily') === '하루 1회 무료')
-ok('display conversion 1900', formatNyangWon(2) === '2냥 (3,800원)')
+ok('display conversion 1900', formatNyangWon(2) === '두냥 (3,800원)')
+ok('nyang native 1-5', formatNyang(1) === '한냥' && formatNyang(2) === '두냥' && formatNyang(3) === '세냥' && formatNyang(4) === '네냥' && formatNyang(5) === '다섯냥')
+ok('nyang 20 is 스무냥', formatNyang(20) === '스무냥' && nativeKoreanCount(21) === '스물한')
+ok('nyang large balance', formatNyang(101) === '백한냥' && formatNyang(120) === '백스무냥')
+ok('held zero', formatHeldNyang(0) === '보유 엽전 없음' && formatHeldNyang(1) === '보유 엽전: 한냥')
+ok('charge after login next is kept', safeNextPath('/?open=charge') === '/?open=charge')
+ok('content notice wraps charge return', contentNoticeHref('/?open=charge') === `/onboarding/content-notice?next=${encodeURIComponent('/?open=charge')}`)
 
 console.log('all fortune-input tests passed')

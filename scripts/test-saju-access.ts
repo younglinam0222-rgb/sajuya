@@ -17,7 +17,7 @@ function ok(name: string, cond: boolean) {
 
 ok('unlock costs 1 nyang', SAJU_UNLOCK_NYANG === 1)
 ok('peak guide label exact', PEAK_GUIDE_LABEL === '전성기 활용법')
-ok('full view button copy', sajuFullViewButtonLabel() === '1냥으로 전체보기')
+ok('full view button copy', sajuFullViewButtonLabel() === '한냥으로 전체보기')
 ok('full view hint copy', sajuFullViewHint() === '1,900원 상당 · 나머지 풀이 9개와 족집게 답변 포함')
 ok('payments stay disabled unless env', isPaymentsEnabled() === (process.env.PAYMENTS_ENABLED === 'true'))
 

@@ -4,8 +4,9 @@ import { useParams } from 'next/navigation'
 import { useSession, signIn } from 'next-auth/react'
 import Link from 'next/link'
 import ReadingResult, { sajuReadingSections, type ReadingSection } from '@/app/components/reading/ReadingResult'
+import ReadingShareActions from '@/app/components/reading/ReadingShareActions'
 import { readingPersonalView } from '@/lib/sajuContract'
-import { ensureKakaoReady, getKakaoDiagnostics, KAKAO_READY_MESSAGE } from '@/lib/kakaoShare'
+import { contentNoticeHref } from '@/lib/safeNextPath'
 
 interface Section { id: string; emoji: string; title: string; body: string }
 interface ViewPillar { stem?:string; branch?:string; stemElement?:string; branchElement?:string; stemKr?:string; branchKr?:string; sipsinStem?:string; sipsinBranch?:string }
@@ -49,18 +50,10 @@ function ResultPageContent() {
   const [formInfo,    setFormInfo]    = useState<ViewForm|null>(null)
   const [sajuData,    setSajuData]    = useState<ViewManse|null>(null)
   const [isPaid,      setIsPaid]      = useState(false)
-  const [copied,      setCopied]      = useState(false)
-  const [shareError,  setShareError]  = useState('')
-  const [sharing,     setSharing]     = useState(false)
+  const [locked,      setLocked]      = useState(false)
+  const [product,     setProduct]     = useState('')
   const [personalAnswer, setPersonalAnswer] = useState<{ question: string; answer: string } | null>(null)
   const [isCompleteResult, setIsCompleteResult] = useState(true)
-
-  const sharedUrl = async () => {
-    const response=await fetch(`/api/readings/${shareId}/share`,{method:'POST'})
-    const data=await response.json()
-    if(!response.ok) throw new Error(data.error||'공유 링크를 만들지 못했습니다.')
-    return window.location.origin+data.path
-  }
   const fetchReading = useCallback((signal: AbortSignal) => {
     return fetch(`/api/readings/${shareId}`, { signal, cache: 'no-store' })
       .then(async res => { if (!res.ok) throw new Error('not found'); return res.json() })
@@ -68,6 +61,8 @@ function ResultPageContent() {
         if (signal.aborted) return
       setCharacterId(data.character_id ?? 'baekhalma')
       setIsPaid(data.is_paid ?? false)
+      setLocked(!!data.locked)
+      setProduct(typeof data.product === 'string' ? data.product : '')
 
       setError('')
       setTitles([])
@@ -124,60 +119,7 @@ function ResultPageContent() {
 
   const charImg   = CHARACTER_IMG[characterId]   ?? '/characters/baekhalma.png'
   const charName  = CHARACTER_NAMES[characterId] ?? characterId
-
-  const handleCopyLink = async () => {
-    try { await navigator.clipboard.writeText(await sharedUrl()) } catch { setShareError('공유 링크를 복사하지 못했습니다.'); return }
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  const handleKakaoShare = async () => {
-    setShareError('')
-    setSharing(true)
-    let url: string
-    try { url=await sharedUrl() } catch { setShareError('공유 링크를 만들지 못했습니다.'); setSharing(false); return }
-    const title = formInfo ? `${formInfo.name}님의 사주팔자 풀이` : '사주궁 풀이 결과'
-    const desc  = `${charName}이 직접 본 사주 결과 — 지금 확인해보세요`
-    const imageUrl = `${window.location.origin}${charImg}`
-    const diag = getKakaoDiagnostics()
-    console.log(JSON.stringify({
-      tag: '사주궁:kakao',
-      event: 'share_attempt',
-      ...diag,
-      imageHost: (() => { try { return new URL(imageUrl).host } catch { return 'invalid' } })(),
-    }))
-
-    const ready = await ensureKakaoReady()
-    if (!ready.ok) {
-      console.error(JSON.stringify({ tag: '사주궁:kakao', event: 'share_not_ready', reason: ready.reason, ...getKakaoDiagnostics() }))
-      setShareError(KAKAO_READY_MESSAGE[ready.reason])
-      setSharing(false)
-      return
-    }
-
-    try {
-      ;(window as unknown as {Kakao:{Share:{sendDefault:(value:unknown)=>void}}}).Kakao.Share.sendDefault({
-        objectType: 'feed',
-        content: {
-          title, description: desc,
-          imageUrl,
-          link: { mobileWebUrl: url, webUrl: url },
-        },
-        buttons: [{ title: '풀이 보기', link: { mobileWebUrl: url, webUrl: url } }],
-      })
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e)
-      console.error(JSON.stringify({
-        tag: '사주궁:kakao',
-        event: 'share_send_failed',
-        err: message,
-        ...getKakaoDiagnostics(),
-      }))
-      setShareError(message || '카카오 공유에 실패했어요.')
-    } finally {
-      setSharing(false)
-    }
-  }
+  const resultLogin = contentNoticeHref(`/result/${shareId}`)
 
   // Authentication and server-verified result ownership are required before reading.
   // 데이터 로딩/에러 체크보다 먼저 와야 함 (비로그인 상태에선 fetchReading 자체를 안 돌림)
@@ -199,17 +141,17 @@ function ResultPageContent() {
           <span className="text-yellow-400 font-bold">계정당 첫 일일운세 1회 무료</span>
         </div>
         <div className="w-full max-w-xs space-y-3">
-          <button onClick={() => signIn('kakao', { callbackUrl: `/result/${shareId}` })}
+          <button onClick={() => signIn('kakao', { callbackUrl: resultLogin })}
             className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
             style={{ background: '#fee500', color: '#3c1e1e' }}>
             <span className="text-xl">💬</span> 카카오로 시작하기
           </button>
-          <button onClick={() => signIn('google', { callbackUrl: `/result/${shareId}` })}
+          <button onClick={() => signIn('google', { callbackUrl: resultLogin })}
             className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
             style={{ background: '#fff', color: '#333', border: '1px solid #e5e7eb' }}>
             <span style={{ fontSize: '18px', fontWeight: 900, color: '#4285F4' }}>G</span> 구글로 시작하기
           </button>
-          <button onClick={() => signIn('naver', { callbackUrl: `/result/${shareId}` })}
+          <button onClick={() => signIn('naver', { callbackUrl: resultLogin })}
             className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
             style={{ background: '#03c75a', color: '#fff' }}>
             <span className="text-xl font-black">N</span> 네이버로 시작하기
@@ -257,6 +199,8 @@ function ResultPageContent() {
   })))
   const reloadReading = () => { void fetchReading(new AbortController().signal) }
 
+  const canShare = !locked && isCompleteResult && product !== 'conversation'
+
   return <ReadingResult
     title={formInfo?.name ? `${formInfo.name}님의 사주 해석` : '나의 사주 해석'}
     subtitle={formInfo ? [formInfo.year && `${formInfo.year}.${formInfo.month}.${formInfo.day}`, formInfo.gender === 'male' ? '남성' : formInfo.gender === 'female' ? '여성' : '', formInfo.calType === 'lunar' ? '음력' : '양력'].filter(Boolean).join(' · ') : undefined}
@@ -267,22 +211,18 @@ function ResultPageContent() {
     expectedCoreCount={isPaid && titles.length > 0 ? 12 : undefined}
     statusLabel={isPaid ? '보관함 · 나의 해석' : '무료 샘플 1개'}
     onReload={reloadReading}
+    share={canShare ? <ReadingShareActions
+      shareId={shareId}
+      title={formInfo?.name ? `${formInfo.name}님의 사주 풀이` : '사주궁 풀이'}
+      description={`${charName}이 본 해석입니다. 생년월일과 선택 질문은 공유에 넣지 않습니다.`}
+      imagePath={charImg}
+    /> : undefined}
     notice={<>
-      {!isPaid && <section className="rr-status"><h2>전체 해석이 잠겨 있습니다</h2><p>무료 샘플은 첫 항목 1개만 제공됩니다. 나머지 해석·조언·선택 질문 답변은 구매 확인 후 열립니다.</p><p>이미 결제하셨다면 추가 결제 전에 결제 내역 확인을 요청해주세요. 기존 결과의 별도 구매는 점검 중입니다.</p><Link href="/payments">기존 결제 내역 확인하기 →</Link></section>}
+      {locked && <section className="rr-status"><h2>전체 해석이 잠겨 있습니다</h2><p>무료 샘플은 첫 항목 1개만 제공됩니다. 나머지 해석·조언·선택 질문 답변은 구매 확인 후 열립니다.</p><p>이미 결제하셨다면 추가 결제 전에 결제 내역 확인을 요청해주세요. 기존 결과의 별도 구매는 점검 중입니다.</p><Link href="/payments">기존 결제 내역 확인하기 →</Link></section>}
       {!isCompleteResult && <aside className="rr-status" role="status">이 풀이는 미완료 상태로 저장된 임시본입니다. 완성본이 아닙니다.</aside>}
     </>}
   >
-    {isPaid && <>
-      <Link href={`/chat?guide=${characterId.toLowerCase()}&source=${encodeURIComponent(shareId)}`} className="rr-conversation-link">이 사주로 1:1 대화하기 →</Link>
-      <div className="rr-status"><p>공유 링크를 가진 사람은 해석 본문을 볼 수 있습니다. 생년월일 입력표와 선택 질문은 공유에서 제외됩니다.</p>
-        <button type="button" onClick={async () => {
-          try { const response = await fetch(`/api/readings/${shareId}/share`, { method: 'DELETE' }); setShareError(response.ok ? '기존 공유 링크를 종료했습니다.' : '공유 종료에 실패했습니다.') }
-          catch { setShareError('공유 종료에 실패했습니다. 다시 시도해주세요.') }
-        }}>기존 공유 링크 종료</button></div>
-      <button type="button" className="rr-kakao-share" disabled={sharing} onClick={handleKakaoShare}>{sharing ? '카카오 공유 준비 중...' : '카카오톡 공유하기'}</button>
-      <button type="button" className="rr-copy-share" onClick={handleCopyLink}>{copied ? '링크를 복사했어요' : '공유 링크 복사하기'}</button>
-      {shareError && <p className="rr-share-status" role="status">{shareError}</p>}
-    </>}
+    {isPaid && product !== 'conversation' && <Link href={`/chat?guide=${characterId.toLowerCase()}&source=${encodeURIComponent(shareId)}`} className="rr-conversation-link">이 사주로 1:1 대화하기 →</Link>}
     <Link href="/storage">보관함으로 →</Link>
     <Link href="/saju">새로 풀이받기 →</Link>
   </ReadingResult>

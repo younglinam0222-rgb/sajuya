@@ -30,11 +30,11 @@ export async function GET() {
     const supabase = createServerSupabase()
     const today = getTodayDateKST()
 
-    const {data:rows,error}=await supabase.from('readings').select('saju_data,ai_result,character_id,created_at').eq('user_id',userId).eq('product','daily').eq('access_verified',true).order('created_at',{ascending:false}).limit(1)
+    const {data:rows,error}=await supabase.from('readings').select('share_id,saju_data,ai_result,character_id,created_at').eq('user_id',userId).eq('product','daily').eq('access_verified',true).order('created_at',{ascending:false}).limit(1)
     if(error) throw error
     const row=rows?.[0]
     const date=row ? new Date(row.created_at).toLocaleDateString('en-CA',{timeZone:'Asia/Seoul'}) : null
-    return NextResponse.json({cached:row&&date===today?{manse:row.saju_data.saju,result:JSON.parse(row.ai_result),characterId:row.character_id}:null,
+    return NextResponse.json({cached:row&&date===today?{manse:row.saju_data.saju,result:JSON.parse(row.ai_result),characterId:row.character_id,shareId:row.share_id}:null,
       birthProfile:row?.saju_data?.form??null,trialUsed:!!row},{headers:{'Cache-Control':'private, no-store'}})
 
   } catch (e) {

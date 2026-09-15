@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import AccessNotice from '@/app/components/AccessNotice'
 import ReadingResult, { type ReadingSection } from '@/app/components/reading/ReadingResult'
+import ReadingShareActions from '@/app/components/reading/ReadingShareActions'
 import { useSession } from 'next-auth/react'
 
 // ─── 타입 ─────────────────────────────────────────────
@@ -94,6 +95,7 @@ function DailyReading({ authenticated }: { authenticated: boolean }) {
     name: '', year: '1990', month: '1', day: '1', hour: '', gender: 'female',
   })
   const [checkingCache, setCheckingCache] = useState(authenticated)
+  const [shareId, setShareId] = useState('')
   const todayStr = getTodayKST()
 
   // ✅ 추가: 로그인된 사용자면 오늘자 캐시가 있는지 먼저 확인.
@@ -112,6 +114,7 @@ function DailyReading({ authenticated }: { authenticated: boolean }) {
           setSelectedChar(char)
           setManse(data.cached.manse)
           setResult(data.cached.result)
+          setShareId(typeof data.cached.shareId === 'string' ? data.cached.shareId : '')
           setStage('result')
         }
         if (data.birthProfile) {
@@ -178,6 +181,9 @@ function DailyReading({ authenticated }: { authenticated: boolean }) {
       setTrialUsed(true)
       requestRef.current = null
       setStage('result')
+      void fetch('/api/daily', { cache: 'no-store' }).then(r => r.json()).then(data => {
+        if (typeof data?.cached?.shareId === 'string') setShareId(data.cached.shareId)
+      }).catch(() => {})
     } catch (e) {
       setError(e instanceof DOMException && e.name === 'TimeoutError'
         ? '응답이 늦어지고 있어요. 보관함을 확인하거나 같은 입력으로 다시 확인해주세요.'
@@ -224,6 +230,12 @@ function DailyReading({ authenticated }: { authenticated: boolean }) {
       manse={manse}
       onBack={() => setStage('input')}
       actionLabel="입력 화면으로"
+      share={shareId ? <ReadingShareActions
+        shareId={shareId}
+        title={form.name ? `${form.name}님의 오늘 운세` : '오늘의 운세'}
+        description={`${selectedChar.name}이 본 일일운세입니다. 생년월일은 공유에 넣지 않습니다.`}
+        imagePath={selectedChar.img}
+      /> : undefined}
     >
       <Link href={`/chat?guide=${selectedChar.id.toLowerCase()}`}>이어서 1:1 대화하기 →</Link>
       <Link href="/storage">내 보관함 보기 →</Link>

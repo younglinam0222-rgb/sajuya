@@ -89,12 +89,12 @@ function tone(section: ReadingSection) {
 }
 
 export default function ReadingResult({ title, subtitle, character = 'baekhalma', characterName, quote, sections,
-  scores = [], manse, notice, children, onBack, actionLabel = '입력 화면으로', expectedCoreCount,
+  scores = [], manse, notice, children, share, onBack, actionLabel = '입력 화면으로', expectedCoreCount,
   pending = false, onReload, statusLabel = '나의 해석', disclaimer,
 }: {
   title: string; subtitle?: string; character?: string; characterName?: string; quote?: string
   sections: ReadingSection[]; scores?: { label: string; value?: number }[]; manse?: ReadingManse | null
-  notice?: ReactNode; children?: ReactNode; onBack?: () => void; actionLabel?: string
+  notice?: ReactNode; children?: ReactNode; share?: ReactNode; onBack?: () => void; actionLabel?: string
   expectedCoreCount?: number; pending?: boolean; onReload?: () => void; statusLabel?: string; disclaimer?: string
 }) {
   const [large, setLarge] = useState(false)
@@ -136,6 +136,7 @@ export default function ReadingResult({ title, subtitle, character = 'baekhalma'
           <p>누락된 항목은 저장된 결과에서 다시 확인할 수 있어요.</p>{onReload && <button onClick={onReload}>저장된 결과 다시 확인</button>}</aside>}
         <div className="rr-reading-tools"><span>{coreCount ? '기본 해석' : '해석'} {count}편</span>
           <button type="button" aria-pressed={large} onClick={() => setLarge(value => !value)}>글자 {large ? '기본으로' : '크게'} <b>가</b></button></div>
+        {share}
         {visible.length > 0 && <details className="rr-toc"><summary>해석 목차 <span>원하는 이야기로 바로 이동 ↓</span></summary>
           <nav aria-label="해석 목차">{visible.map((section, index) => <a key={section.id} href={`#reading-${section.id}`} onClick={event => {
             event.preventDefault()

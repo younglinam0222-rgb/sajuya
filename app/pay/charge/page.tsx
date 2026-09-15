@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useSession, signIn } from 'next-auth/react'
 import Link from 'next/link'
 import { loadTossPayments, ANONYMOUS, type TossPaymentsWidgets } from '@tosspayments/tosspayments-sdk'
+import { formatNyang } from '@/lib/nyangDisplay'
 import { Suspense } from 'react'
 
 type PackageView = {
@@ -76,7 +77,7 @@ function ChargeContent() {
     try {
       await widgetsRef.current.requestPayment({
         orderId: order.orderId,
-        orderName: `사주궁 엽전 ${order.pkg.totalNyang}냥`,
+        orderName: `사주궁 엽전 ${formatNyang(order.pkg.totalNyang)}`,
         successUrl: `${window.location.origin}/pay/success`,
         failUrl: `${window.location.origin}/pay/fail`,
         customerEmail: session?.user?.email ?? undefined,
@@ -118,16 +119,16 @@ function ChargeContent() {
       <div className="px-4 pt-5">
         {order && (
           <div className="rounded-2xl p-4 mb-4 bg-[#111118] border border-gray-800 space-y-1.5 text-sm">
-            <div className="flex justify-between"><span className="text-gray-400">패키지</span><span>{order.pkg.name}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">패키지</span><span>{formatNyang(order.pkg.totalNyang)}</span></div>
             <div className="flex justify-between"><span className="text-gray-400">결제금액</span><span className="text-yellow-400 font-black">{order.amount.toLocaleString()}원</span></div>
             {!!order.pkg.discountKrw && (
               <div className="flex justify-between"><span className="text-gray-400">할인</span><span>{order.pkg.discountKrw.toLocaleString()}원 (정가 {order.pkg.listPriceKrw?.toLocaleString()}원)</span></div>
             )}
-            <div className="flex justify-between"><span className="text-gray-400">유상</span><span>{order.pkg.paidNyang}냥</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">유상</span><span>{formatNyang(order.pkg.paidNyang)}</span></div>
             {order.pkg.bonusNyang > 0 && (
-              <div className="flex justify-between"><span className="text-gray-400">보너스</span><span>{order.pkg.bonusNyang}냥</span></div>
+              <div className="flex justify-between"><span className="text-gray-400">보너스</span><span>{formatNyang(order.pkg.bonusNyang)}</span></div>
             )}
-            <div className="flex justify-between"><span className="text-gray-400">총 지급</span><span className="font-bold">{order.pkg.totalNyang}냥</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">총 지급</span><span className="font-bold">{formatNyang(order.pkg.totalNyang)}</span></div>
           </div>
         )}
         {error && (
