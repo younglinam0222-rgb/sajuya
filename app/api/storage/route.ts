@@ -10,14 +10,14 @@ const supabase = createClient(
 export async function GET(req: NextRequest) {
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
 
-  if (!token?.email) {
+  if (!token?.sub) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const { data, error } = await supabase
     .from('readings')
     .select('id, share_id, character_id, created_at, saju_data, is_paid')
-    .eq('user_email', token.email)
+    .eq('user_id', token.sub)
     .order('created_at', { ascending: false })
 
   if (error) {

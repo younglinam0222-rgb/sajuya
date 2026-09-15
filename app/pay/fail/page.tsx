@@ -8,7 +8,7 @@ function PayFailContent() {
   const searchParams = useSearchParams()
   const message = searchParams.get('message') || '결제가 취소되었거나 실패했어요.'
   const orderId = searchParams.get('orderId') || ''
-  const shareId = orderId.split('_')[1]
+  const shareId = orderId.startsWith('unlock_') ? orderId.split('_')[1] : ''
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center text-white px-6 text-center">

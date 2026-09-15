@@ -8,7 +8,10 @@ import TimeNumberInput from '@/app/components/TimeNumberInput'
 import { KOREA_REGIONS } from '@/lib/solarTime'
 import { sanitizeText } from '@/lib/sajuSanitize'
 import { appendSseChunk, parseSseFrame } from '@/lib/sajuSse'
-import { assessCompletion, GROUP_IDS, LAST_GROUP_INDEX, normalizePersonalAnswer, PEAK_GUIDE_LABEL, sortTitlesById } from '@/lib/sajuContract'
+import { assessFreeStage, FREE_TITLE_IDS } from '@/lib/sajuScope'
+import { normalizePersonalAnswer, PEAK_GUIDE_LABEL, sortTitlesById } from '@/lib/sajuContract'
+import { titleIsFree } from '@/lib/readingAccess'
+import { SAJU_UNLOCK_NYANG } from '@/lib/pricing'
 import PersonalQuestionLabel from '@/app/components/PersonalQuestionLabel'
 import ContentNoticeShortHint from '@/app/components/ContentNoticeShortHint'
 import { applyGenerateGate } from '@/lib/contentNoticeClient'
@@ -18,7 +21,7 @@ interface SajuTitle {
   id: string; category?: string; title: string; teaser: string; is_free: boolean; content: string
 }
 interface LifecycleItem {
-  age: string; score: number; season: string; desc: string
+  age: string; score?: number; season: string; desc: string
 }
 interface Strategy {
   overview: string; golden_period: string; lifecycle: LifecycleItem[]; peak_guide: string; warning: string; final_word?: string
@@ -62,8 +65,8 @@ const LOADING_TIPS = [
   '사주팔자 계산하는 중...',
   '오행 분석하는 중...',
   '판결문 12개 작성하는 중...',
-  '인생 흐름 계산하는 중...',
-  '전성기 전략 수립하는 중...',
+  '인생 흐름 정리하는 중...',
+  '전략 문장 작성하는 중...',
 ]
 
 type Stage = 'input' | 'loading' | 'result'
@@ -123,6 +126,7 @@ function ManseTable({ manse, charColor }: { manse: ManseData; charColor: string 
       </div>
       <div className="px-3 py-2 bg-[#111118] text-xs text-gray-500">
         {manse.animal}띠 · {manse.hourStr}
+        <div className="text-[10px] text-gray-600 mt-1">오행 개수는 겉글자 기준. 지지 십성은 본기(정기). 지장간 합산 아님.</div>
       </div>
     </div>
   )
@@ -154,15 +158,13 @@ function LoadingScreen({ name, character, saving }: { name: string; character: t
 
 function LifecycleChart({ data }: { data: LifecycleItem[] }) {
   if (!data?.length) return null
-  const maxScore = Math.max(...data.map(d => d.score), 1)
   return (
     <div className="rounded-2xl p-4 bg-[#111118] border border-gray-800">
-      <div className="flex items-center gap-2 mb-4"><span>📊</span><span className="font-bold text-sm text-white">나이대별 운의 흐름</span></div>
-      <div className="flex items-end gap-2 h-28 mb-3">
+      <div className="flex items-center gap-2 mb-4"><span>📊</span><span className="font-bold text-sm text-white">나이대별 흐름</span><span className="text-[10px] text-gray-500">해석 · 계산 점수 아님</span></div>
+      <div className="flex items-end gap-2 h-16 mb-3">
         {data.map(d => (
           <div key={d.age} className="flex-1 flex flex-col items-center gap-1">
-            <span className="text-xs text-gray-400">{d.score}</span>
-            <div className="w-full rounded-t-lg" style={{ height: `${Math.max((d.score/maxScore)*100,8)}%`, background: SEASON_COLORS[d.season]??'#8B5CF6', minHeight: 8 }} />
+            <div className="w-full rounded-t-lg h-10" style={{ background: SEASON_COLORS[d.season]??'#8B5CF6' }} />
           </div>
         ))}
       </div>
@@ -188,7 +190,7 @@ function LifecycleChart({ data }: { data: LifecycleItem[] }) {
 }
 
 // ✅ 수정: 데드코드(open state) 제거
-function TitleCard({ item, charColor, idx }: { item: SajuTitle; charColor: string; idx: number }) {
+function TitleCard({ item, charColor, idx, locked }: { item: SajuTitle; charColor: string; idx: number; locked?: boolean }) {
   return (
     <div className="rounded-2xl overflow-hidden border" style={{ borderColor: `${charColor}40`, background: '#111118' }}>
       <div className="p-4">
@@ -200,9 +202,15 @@ function TitleCard({ item, charColor, idx }: { item: SajuTitle; charColor: strin
               {item.category}
             </span>
           )}
+          {locked && <span className="ml-auto text-gray-600">🔒</span>}
         </div>
         <p className="font-bold text-base leading-snug text-white">{sanitizeText(item.title)}</p>
-        {item.content && (
+        {locked ? (
+          <>
+            {item.teaser && <p className="text-xs text-gray-500 mt-1">{sanitizeText(item.teaser)}</p>}
+            <p className="text-xs text-gray-600 mt-3">전체보기는 결과 화면에서 엽전 {SAJU_UNLOCK_NYANG}냥으로 열 수 있어요.</p>
+          </>
+        ) : item.content ? (
           <div className="text-gray-300 text-sm leading-relaxed mt-4">
             {sanitizeText(item.content).split('\n').map((line, i) => (
               line.startsWith('⚠️')
@@ -212,7 +220,7 @@ function TitleCard({ item, charColor, idx }: { item: SajuTitle; charColor: strin
                   : <p key={i}>{line}</p>
             ))}
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   )
@@ -280,6 +288,16 @@ export default function SajuPage() {
   const timingRef = useRef<{ submitAt: number; firstManse?: number; firstJudgment?: number; allRequired?: number; saveDone?: number }>({ submitAt: 0 })
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (new URLSearchParams(window.location.search).get('from') !== 'share') return
+    void fetch('/api/share/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event: 'share_cta_start' }),
+    })
+  }, [])
+
+  useEffect(() => {
     return () => {
       abortRef.current?.abort()
       saveAbortRef.current?.abort()
@@ -315,16 +333,13 @@ export default function SajuPage() {
 
   const mergeTitleList = (): SajuTitle[] => sortTitlesById([...titlesByIdRef.current.values()])
 
-  const currentAssessment = () => assessCompletion({
+  const currentAssessment = () => assessFreeStage({
     titles: mergeTitleList(),
-    strategy: finalResultRef.current.strategy,
-    personal: finalResultRef.current.personalAnswer,
-    requestedPersonal: requestedPersonalRef.current,
     receivedGroupIndexes: receivedGroupsRef.current,
     gotDone: gotDoneRef.current,
   })
 
-  const hintFromReport = (report: ReturnType<typeof assessCompletion>) => {
+  const hintFromReport = (report: ReturnType<typeof assessFreeStage>) => {
     const hints: string[] = []
     if (!report.gotDone) hints.push('서버 완료 신호([DONE]) 없음')
     if (report.missingGroups.length) hints.push(`그룹 ${report.missingGroups.map(g => g + 1).join(', ')}`)
@@ -486,9 +501,9 @@ export default function SajuPage() {
           groups: [...new Set([
             ...reportNow.missingGroups,
             ...failedParts.filter(p => p.part === 'group' && typeof p.groupIndex === 'number').map(p => p.groupIndex as number),
-          ])].filter(g => g >= 0 && g <= LAST_GROUP_INDEX),
-          strategy: !reportNow.strategyOk,
-          personal: requestedPersonalRef.current && !reportNow.personalOk,
+          ])].filter(g => g === 0),
+          strategy: false,
+          personal: false,
         }
       : undefined
 
@@ -502,13 +517,14 @@ export default function SajuPage() {
         body: JSON.stringify({
           ...form,
           personalQuestion: form.personalQuestion,
-          occupation: form.occupation || '일반인',
+          occupation: form.occupation,
           calType,
           characterId: selectedChar.id,
           partnerInfo: isRomance ? partnerForm : undefined,
           longitude: selectedRegion?.longitude,
           requestId,
           retry,
+          phase: 'free',
         }),
       })
       if (requestIdRef.current !== requestId) return
@@ -575,7 +591,7 @@ export default function SajuPage() {
           return
         }
         if (parsed.type === 'group') {
-          if (typeof parsed.groupIndex !== 'number' || parsed.groupIndex < 0 || parsed.groupIndex > LAST_GROUP_INDEX) {
+          if (typeof parsed.groupIndex !== 'number' || parsed.groupIndex !== 0) {
             clientLog('invalid_group_index', { groupIndex: parsed.groupIndex ?? null })
             return
           }
@@ -837,7 +853,7 @@ export default function SajuPage() {
                 “{sanitizeText(result.personalAnswer?.question || form.personalQuestion)}”
               </p>
               {result.personalAnswer?.answer ? (
-                <FormattedStrategyText text={result.personalAnswer.answer} highlightColor={selectedChar.color} />
+                <p className="text-sm text-gray-500">족집게 답변은 결과 화면에서 엽전 {SAJU_UNLOCK_NYANG}냥으로 전체보기할 수 있어요.</p>
               ) : (
                 <div className="space-y-3">
                   <p className="text-sm text-gray-400">
@@ -865,9 +881,13 @@ export default function SajuPage() {
           <div className="mb-2">
             <p className="text-xs text-gray-500 mb-2 font-medium">✨ 판결 {allTitles.length}가지{generating ? ' · 도착하는 대로 표시' : ''}</p>
             <div className="space-y-3">
-              {GROUP_IDS.flat().map((id, i) => {
+              {FREE_TITLE_IDS.map((id, i) => {
                 const item = titleMap.get(String(id))
-                if (item) return <TitleCard key={item.id} item={item} charColor={selectedChar.color} idx={i} />
+                if (item) {
+                  const titleIndex = allTitles.findIndex(t => String(t.id) === String(item.id))
+                  const locked = !titleIsFree(item, titleIndex >= 0 ? titleIndex : i, allTitles)
+                  return <TitleCard key={item.id} item={item} charColor={selectedChar.color} idx={i} locked={locked} />
+                }
                 return (
                   <div key={`pending-${id}`} className="rounded-2xl border border-dashed border-gray-800 bg-[#111118] p-4 text-xs text-gray-500">
                     {id}번 판결문 {generating ? '작성 중...' : '아직 도착하지 않았어요'}
@@ -878,50 +898,24 @@ export default function SajuPage() {
           </div>
 
           {result.strategy && (
-            <div className="mt-6 space-y-3">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-lg">⚔️</span>
-                <h2 className="font-bold text-base">인생 전략 분석</h2>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">책사 모드</span>
+            <div className="mt-6 rounded-2xl p-4 bg-[#111118] border border-gray-800">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">⚔️</span>
+                  <h2 className="font-bold text-base">인생 전략 분석</h2>
+                </div>
+                <span className="text-gray-600">🔒</span>
               </div>
-              {result.strategy.overview && (
-                <div className="rounded-2xl p-4 bg-[#111118] border border-gray-800">
-                  <div className="flex items-center gap-2 mb-2"><span>🌌</span><span className="font-bold text-sm">인생의 큰 그림</span></div>
-                  <p className="text-gray-300 text-sm leading-relaxed">{result.strategy.overview}</p>
-                </div>
-              )}
-              {result.strategy.lifecycle?.length > 0 && <LifecycleChart data={result.strategy.lifecycle} />}
-              {result.strategy.golden_period && (
-                <div className="rounded-2xl p-4 bg-[#111118] border border-yellow-900/30">
-                  <div className="flex items-center gap-2 mb-2"><span>🏆</span><span className="font-bold text-sm text-yellow-400">전성기는 언제?</span></div>
-                  <FormattedStrategyText text={result.strategy.golden_period} />
-                </div>
-              )}
-              {result.strategy.peak_guide && (
-                <div className="rounded-2xl p-4 bg-[#111118] border border-gray-800">
-                  <div className="flex items-center gap-2 mb-2"><span>🚀</span><span className="font-bold text-sm text-green-400">{PEAK_GUIDE_LABEL}</span></div>
-                  <FormattedStrategyText text={result.strategy.peak_guide} highlightColor="#4ade80" />
-                </div>
-              )}
-              {result.strategy.warning && (
-                <div className="rounded-2xl p-4 bg-[#111118] border border-yellow-700/40">
-                  <div className="flex items-center gap-2 mb-2"><span>⚠️</span><span className="font-bold text-sm text-yellow-400">조심할 시기</span></div>
-                  <FormattedStrategyText text={result.strategy.warning} highlightColor="#fbbf24" />
-                </div>
-              )}
-              {result.strategy.final_word && (() => {
-                const fw = FINAL_WORD_LABEL[selectedChar.id] ?? { icon: '💬', label: '마지막 한마디' }
-                return (
-                  <div className="rounded-2xl p-4 border" style={{ background: `${selectedChar.color}14`, borderColor: `${selectedChar.color}55` }}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <span>{fw.icon}</span>
-                      <span className="font-bold text-sm" style={{ color: selectedChar.color }}>{fw.label}</span>
-                    </div>
-                    <p className="text-gray-200 text-sm leading-relaxed">{sanitizeText(result.strategy.final_word)}</p>
-                  </div>
-                )
-              })()}
+              <p className="text-xs text-gray-500">전체보기는 결과 화면에서 엽전 {SAJU_UNLOCK_NYANG}냥입니다.</p>
             </div>
+          )}
+
+          {savedShareId && (
+            <Link href={`/result/${savedShareId}`}
+              className="block w-full mt-4 py-3.5 rounded-2xl font-bold text-sm text-white text-center"
+              style={{ background: selectedChar.color }}>
+              결과에서 전체보기 (1냥)
+            </Link>
           )}
 
           {result.disclaimer && <p className="text-gray-600 text-xs text-center mt-6">{result.disclaimer}</p>}
@@ -939,7 +933,7 @@ export default function SajuPage() {
           <Link href="/" className="text-gray-400 text-xl">←</Link>
           <div>
             <h1 className="text-xl font-bold">사주 풀이</h1>
-            <p className="text-gray-500 text-xs mt-0.5">로그인하면 전체 무료 공개</p>
+            <p className="text-gray-500 text-xs mt-0.5">전체보기는 엽전 1냥</p>
           </div>
         </div>
 
@@ -1186,7 +1180,7 @@ export default function SajuPage() {
           {selectedChar.name}에게 물어보기 →
         </button>
         <ContentNoticeShortHint />
-        <p className="text-center text-gray-600 text-xs mt-2">로그인하면 전체 무료 공개</p>
+        <p className="text-center text-gray-600 text-xs mt-3">전체보기는 엽전 1냥 · 이후 무료 재열람</p>
       </div>
     </div>
   )

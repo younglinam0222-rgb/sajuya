@@ -2,13 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 import { createClient } from '@supabase/supabase-js'
 import { randomUUID } from 'crypto'
+import { keepFreeAiResult } from '@/lib/sajuScope'
+import { rejectCrossSiteCookieMutation, rejectOversizedJson } from '@/lib/requestGuard'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-function withSaveMeta(aiResult: unknown, isComplete: boolean, requestId?: unknown, sajuData?: { form?: { personalQuestion?: unknown } }) {
+function withSaveMeta(aiResult: unknown, isComplete: boolean, requestId?: unknown, sajuData?: { form?: { personalQuestion?: unknown }; saju?: Record<string, unknown> }) {
   if (typeof aiResult !== 'string') return aiResult
   try {
     const parsed = JSON.parse(aiResult)
@@ -22,11 +24,17 @@ function withSaveMeta(aiResult: unknown, isComplete: boolean, requestId?: unknow
       const answer = typeof pa.answer === 'string' ? pa.answer : ''
       parsed.personalAnswer = { question, answer }
     }
+    const saju = sajuData?.saju && typeof sajuData.saju === 'object' ? sajuData.saju : null
+    const extraMeta: Record<string, unknown> = {}
+    if (typeof saju?.calcVersion === 'string') extraMeta.calcVersion = saju.calcVersion
+    if (typeof saju?.promptVersion === 'string') extraMeta.promptVersion = saju.promptVersion
+    if (typeof saju?.generatedDateKST === 'string') extraMeta.generatedDateKST = saju.generatedDateKST
     parsed._meta = {
       ...(typeof parsed._meta === 'object' && parsed._meta ? parsed._meta : {}),
       isComplete: !!isComplete,
       requestId: typeof requestId === 'string' ? requestId : null,
       savedAt: Date.now(),
+      ...extraMeta,
     }
     return JSON.stringify(parsed)
   } catch {
@@ -36,13 +44,31 @@ function withSaveMeta(aiResult: unknown, isComplete: boolean, requestId?: unknow
 
 export async function POST(req: NextRequest) {
   try {
+    const csrf = rejectCrossSiteCookieMutation(req)
+    if (csrf) return csrf
+    const oversized = rejectOversizedJson(req)
+    if (oversized) return oversized
+
     const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
-    const { characterId, occupationId, sajuData, aiResult, isPaid, shareId: existingShareId, requestId, isComplete } = await req.json()
-    const storedResult = withSaveMeta(aiResult, !!isComplete, requestId, sajuData)
+    const body = await req.json()
+    const { characterId, occupationId, sajuData, aiResult, shareId: existingShareId, requestId, isComplete } = body
+    let storedResult = withSaveMeta(aiResult, !!isComplete, requestId, sajuData)
 
     if (typeof existingShareId === 'string' && existingShareId.length >= 8 && existingShareId.length <= 32) {
       if (!token?.sub) {
         return NextResponse.json({ error: '저장 재시도는 로그인 후 가능합니다' }, { status: 401 })
+      }
+      const { data: existing } = await supabase
+        .from('readings')
+        .select('is_paid, user_id')
+        .eq('share_id', existingShareId)
+        .eq('user_id', token.sub)
+        .maybeSingle()
+      if (!existing) {
+        return NextResponse.json({ error: '기존 저장본을 찾지 못함' }, { status: 404 })
+      }
+      if (!existing.is_paid && typeof storedResult === 'string') {
+        storedResult = withSaveMeta(keepFreeAiResult(storedResult), !!isComplete, requestId, sajuData)
       }
       const { data, error } = await supabase
         .from('readings')
@@ -50,8 +76,7 @@ export async function POST(req: NextRequest) {
           character_id: characterId,
           occupation_id: occupationId ?? 'general',
           saju_data: sajuData,
-          ai_result: storedResult,
-          is_paid: isPaid ?? false,
+          ...(existing.is_paid ? {} : { ai_result: storedResult }),
         })
         .eq('share_id', existingShareId)
         .eq('user_id', token.sub)
@@ -60,6 +85,10 @@ export async function POST(req: NextRequest) {
 
       if (error || !data) throw error ?? new Error('기존 저장본을 찾지 못함')
       return NextResponse.json({ shareId: data.share_id, updated: true, isComplete: !!isComplete })
+    }
+
+    if (typeof storedResult === 'string') {
+      storedResult = withSaveMeta(keepFreeAiResult(storedResult), !!isComplete, requestId, sajuData)
     }
 
     const shareId = randomUUID().replace(/-/g, '').slice(0, 12)
@@ -72,7 +101,7 @@ export async function POST(req: NextRequest) {
       occupation_id: occupationId ?? 'general',
       saju_data:    sajuData,
       ai_result:    storedResult,
-      is_paid:      isPaid ?? false,
+      is_paid:      false,
     })
 
     if (error) throw error

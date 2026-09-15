@@ -1,15 +1,18 @@
 'use client'
-import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useEffect, useState, useRef } from 'react'
+import { useParams } from 'next/navigation'
 import { useSession, signIn } from 'next-auth/react'
 import Link from 'next/link'
-import { UNLOCK_PRICE } from '@/lib/pricing'
+import { SAJU_UNLOCK_NYANG } from '@/lib/pricing'
+import YeopjeunShop from '@/app/components/YeopjeunShop'
+import { titleIsFree } from '@/lib/readingAccess'
 import PersonalQuestionCard from '@/components/PersonalQuestionCard'
 import { sanitizeText } from '@/lib/sajuSanitize'
 import { appendSseChunk, parseSseFrame } from '@/lib/sajuSse'
 import { normalizePersonalAnswer, PEAK_GUIDE_LABEL, readingPersonalView } from '@/lib/sajuContract'
 import { KOREA_REGIONS } from '@/lib/solarTime'
-import { ensureKakaoReady, getKakaoDiagnostics, KAKAO_READY_MESSAGE } from '@/lib/kakaoShare'
+import ReadingSharePanel from '@/app/components/ReadingSharePanel'
+import type { ShareSettings } from '@/lib/readingShare'
 import { applyGenerateGate } from '@/lib/contentNoticeClient'
 import { COPYRIGHT_LINE } from '@/lib/siteBranding'
 
@@ -61,9 +64,9 @@ const elementBg    = (el: string) => ({ '木':'rgba(34,197,94,.12)','火':'rgba(
 
 export default function ResultPage() {
   const params  = useParams()
-  const router  = useRouter()
   const shareId = params.shareId as string
-  const { status: authStatus } = useSession()
+  const { data: session, status: authStatus, update: updateSession } = useSession()
+  const balance = (session?.user as { yeobjeun_balance?: number })?.yeobjeun_balance ?? 0
 
   const [loading,     setLoading]     = useState(true)
   const [error,       setError]       = useState('')
@@ -75,27 +78,33 @@ export default function ResultPage() {
   const [formInfo,    setFormInfo]    = useState<any>(null)
   const [sajuData,    setSajuData]    = useState<any>(null)
   const [isPaid,      setIsPaid]      = useState(false)
-  const [copied,      setCopied]      = useState(false)
-  const [shareError,  setShareError]  = useState('')
-  const [sharing,     setSharing]     = useState(false)
+  const [aiResultRaw, setAiResultRaw] = useState<unknown>(null)
+  const [shareSettings, setShareSettings] = useState<ShareSettings | null>(null)
   const [personalAnswer, setPersonalAnswer] = useState<{ question: string; answer: string } | null>(null)
   const [isCompleteResult, setIsCompleteResult] = useState(true)
   const [personalRetrying, setPersonalRetrying] = useState(false)
   const [personalRetryError, setPersonalRetryError] = useState('')
+  const [unlocking, setUnlocking] = useState(false)
+  const [unlockError, setUnlockError] = useState('')
+  const [showShop, setShowShop] = useState(false)
+  const [paidGenerating, setPaidGenerating] = useState(false)
+  const [reservationExpiresAt, setReservationExpiresAt] = useState<string | null>(null)
+  const paidGenLockRef = useRef(false)
 
   useEffect(() => {
-    if (authStatus === 'authenticated') fetchReading()
+    if (authStatus === 'authenticated') fetchReading({ resume: true })
   }, [shareId, authStatus])
 
-  const fetchReading = async () => {
+  const fetchReading = async (opts?: { resume?: boolean }) => {
     try {
-      // ✅ 수정: /api/result → /api/readings
       const res = await fetch(`/api/readings/${shareId}`)
       if (!res.ok) throw new Error('not found')
       const data = await res.json()
 
       setCharacterId(data.character_id ?? 'baekhalma')
       setIsPaid(data.is_paid ?? false)
+      if (data.share) setShareSettings(data.share)
+      if (data.reservation?.expiresAt) setReservationExpiresAt(data.reservation.expiresAt)
 
       let sajuParsed: any = null
       if (data.saju_data) {
@@ -107,6 +116,7 @@ export default function ResultPage() {
       }
 
       if (data.ai_result) {
+        setAiResultRaw(data.ai_result)
         try {
           let clean = (typeof data.ai_result === 'string' ? data.ai_result : JSON.stringify(data.ai_result))
             .trim()
@@ -126,6 +136,14 @@ export default function ResultPage() {
       } else if (sajuParsed) {
         const view = readingPersonalView(null, sajuParsed)
         if (view.requested) setPersonalAnswer({ question: view.question, answer: view.answer })
+      }
+      if (
+        opts?.resume
+        && !data.is_paid
+        && (data.reservation?.status === 'reserved' || data.reservation?.status === 'generating')
+        && sajuParsed?.form
+      ) {
+        void runPaidGeneration(sajuParsed.form, data.character_id ?? 'baekhalma', sajuParsed.saju)
       }
     } catch {
       setError('저장된 풀이를 찾을 수 없습니다.')
@@ -150,7 +168,7 @@ export default function ResultPage() {
         body: JSON.stringify({
           ...formInfo,
           personalQuestion: question,
-          occupation: formInfo.occupation || '일반인',
+          occupation: formInfo.occupation,
           characterId,
           longitude: selectedRegion?.longitude,
           retry: { groups: [], strategy: false, personal: true },
@@ -209,61 +227,99 @@ export default function ResultPage() {
   const charColor = CHARACTER_COLOR[characterId] ?? '#8B5CF6'
   const charName  = CHARACTER_NAMES[characterId] ?? characterId
 
-  const handleCopyLink = async () => {
-    await navigator.clipboard.writeText(window.location.href)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  const runPaidGeneration = async (form: any, charId: string, saju: any) => {
+    if (paidGenLockRef.current || !form) return
+    paidGenLockRef.current = true
+    setPaidGenerating(true)
+    setUnlockError('')
+    try {
+      const selectedRegion = KOREA_REGIONS.find(r => r.name === form.birthPlace)
+      const res = await fetch('/api/saju', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...form,
+          personalQuestion: form.personalQuestion,
+          occupation: form.occupation,
+          characterId: charId,
+          longitude: selectedRegion?.longitude,
+          phase: 'paid',
+          shareId,
+        }),
+      })
+      if (!res.ok || !res.body) {
+        setUnlockError(res.status === 401 ? '로그인 후 다시 시도해주세요.' : '유료 풀이 생성 요청에 실패했어요.')
+        return
+      }
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let paidCode = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const stepped = appendSseChunk(buffer, decoder.decode(value, { stream: true }))
+        buffer = stepped.buffer
+        for (const frame of stepped.frames) {
+          const parsed = parseSseFrame(frame)
+          if (parsed.kind !== 'event') continue
+          if (parsed.data.type === 'paid_status' && typeof parsed.data.code === 'string') {
+            paidCode = parsed.data.code
+          }
+          if (parsed.data.type === 'error' && parsed.data.part === 'fatal') {
+            setUnlockError(typeof parsed.data.message === 'string' ? parsed.data.message : '유료 풀이 생성에 실패했어요.')
+          }
+        }
+      }
+      if (paidCode === 'discarded') {
+        setUnlockError('예약이 만료되어 엽전을 돌려드렸어요. 다시 전체보기를 눌러주세요.')
+      } else if (paidCode === 'incomplete') {
+        setUnlockError('유료 풀이가 아직 끝나지 않았어요. 같은 화면에서 다시 시도할 수 있어요.')
+      }
+      await fetchReading()
+      await updateSession()
+    } catch {
+      setUnlockError('유료 풀이 생성 중 오류가 났어요.')
+    } finally {
+      paidGenLockRef.current = false
+      setPaidGenerating(false)
+    }
   }
 
-  const handleKakaoShare = async () => {
-    setShareError('')
-    setSharing(true)
-    const url   = window.location.href
-    const title = formInfo ? `${formInfo.name}님의 사주팔자 풀이` : '사주궁 풀이 결과'
-    const desc  = `${charName}이 직접 본 사주 결과 — 지금 확인해보세요`
-    const imageUrl = `${window.location.origin}${charImg}`
-    const diag = getKakaoDiagnostics()
-    console.log(JSON.stringify({
-      tag: '사주궁:kakao',
-      event: 'share_attempt',
-      ...diag,
-      imageHost: (() => { try { return new URL(imageUrl).host } catch { return 'invalid' } })(),
-    }))
-
-    const ready = await ensureKakaoReady()
-    if (!ready.ok) {
-      console.error(JSON.stringify({ tag: '사주궁:kakao', event: 'share_not_ready', reason: ready.reason, ...getKakaoDiagnostics() }))
-      setShareError(KAKAO_READY_MESSAGE[ready.reason])
-      setSharing(false)
+  const unlockWithNyang = async () => {
+    if (balance < SAJU_UNLOCK_NYANG) {
+      setShowShop(true)
       return
     }
-
+    setUnlocking(true)
+    setUnlockError('')
     try {
-      ;(window as any).Kakao.Share.sendDefault({
-        objectType: 'feed',
-        content: {
-          title, description: desc,
-          imageUrl,
-          link: { mobileWebUrl: url, webUrl: url },
-        },
-        buttons: [{ title: '풀이 보기', link: { mobileWebUrl: url, webUrl: url } }],
-      })
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e)
-      console.error(JSON.stringify({
-        tag: '사주궁:kakao',
-        event: 'share_send_failed',
-        err: message,
-        ...getKakaoDiagnostics(),
-      }))
-      setShareError(message || '카카오 공유에 실패했어요.')
+      const res = await fetch(`/api/readings/${shareId}/unlock`, { method: 'POST' })
+      const data = await res.json()
+      if (res.status === 402 || data.code === 'insufficient') {
+        setShowShop(true)
+        setUnlockError('엽전이 부족해요. 충전 후 다시 눌러주세요.')
+        return
+      }
+      if (!res.ok) {
+        setUnlockError(data.error || '전체보기에 실패했어요.')
+        return
+      }
+      if (data.already) {
+        await fetchReading()
+        await updateSession()
+        return
+      }
+      if (data.expiresAt) setReservationExpiresAt(data.expiresAt)
+      await updateSession()
+      await runPaidGeneration(formInfo, characterId, sajuData)
+    } catch {
+      setUnlockError('전체보기 요청 중 오류가 났어요.')
     } finally {
-      setSharing(false)
+      setUnlocking(false)
     }
   }
 
-  // ✅ 수정: 결제(Toss) 보류 — 로그인 여부만으로 전체 판결 공개 여부를 결정.
-  // 데이터 로딩/에러 체크보다 먼저 와야 함 (비로그인 상태에선 fetchReading 자체를 안 돌림)
   if (authStatus === 'loading') {
     return (
       <div className="bg-[#0a0a0a] min-h-screen flex items-center justify-center text-gray-500 text-sm">
@@ -332,9 +388,9 @@ export default function ResultPage() {
     { label: '연주', pillar: sajuData.yearPillar },
   ] : []
 
-  // ✅ 수정: 결제(Toss) 보류 — 로그인 게이트를 이미 통과했으므로 전체 판결을 그냥 다 공개
-  const freeTitles = titles
-  const paidTitles: SajuTitle[] = []
+  // 신규 전체보기는 1냥 차감. 기존 is_paid 권한은 그대로 무료 재열람.
+  const freeTitles = titles.filter((t, i) => titleIsFree(t, i, titles))
+  const paidTitles = titles.filter((t, i) => !titleIsFree(t, i, titles))
 
   return (
     <div className="bg-[#0a0a0a] min-h-screen text-white max-w-[430px] mx-auto pb-8">
@@ -405,6 +461,7 @@ export default function ResultPage() {
             <div className="px-4 py-2 bg-[#111]">
               <span className="text-xs font-bold text-yellow-400">{sajuData.animal}띠</span>
               {sajuData.hourStr && <span className="text-xs text-[#555] ml-2">{sajuData.hourStr}</span>}
+              <div className="text-[10px] text-[#555] mt-1">오행 개수는 겉글자 기준. 지지 십성은 본기(정기).</div>
             </div>
           )}
         </div>
@@ -418,11 +475,11 @@ export default function ResultPage() {
 
       <PersonalQuestionCard
         question={personalAnswer?.question || formInfo?.personalQuestion || ''}
-        answer={personalAnswer?.answer || ''}
+        answer={isPaid ? (personalAnswer?.answer || '') : ''}
         charColor={charColor}
         retrying={personalRetrying}
-        retryError={personalRetryError}
-        onRetry={retryPersonalAnswer}
+        retryError={isPaid ? personalRetryError : ''}
+        onRetry={isPaid ? retryPersonalAnswer : undefined}
       />
 
       {/* 새 포맷: titles */}
@@ -533,27 +590,54 @@ export default function ResultPage() {
                       </div>
                     ))}
                   </div>
+                  {unlockError && (
+                    <p className="text-xs text-red-400 mt-2">{unlockError}</p>
+                  )}
                   <button
-                    onClick={() => {
-                      if (authStatus !== 'authenticated') {
-                        signIn(undefined, { callbackUrl: `/pay/${shareId}` })
-                      } else {
-                        router.push(`/pay/${shareId}`)
-                      }
-                    }}
-                    className="w-full mt-3 py-3.5 rounded-2xl font-bold text-sm text-white"
+                    onClick={unlockWithNyang}
+                    disabled={unlocking || paidGenerating}
+                    className="w-full mt-3 py-3.5 rounded-2xl font-bold text-sm text-white disabled:opacity-40"
                     style={{ background: `linear-gradient(135deg, ${charColor}, ${charColor}bb)` }}>
-                    {authStatus === 'authenticated'
-                      ? `🔓 전체 ${paidTitles.length}개 열기 — ${UNLOCK_PRICE.toLocaleString()}원`
-                      : `🔒 로그인하고 전체 ${paidTitles.length}개 열기`}
+                    {unlocking || paidGenerating ? (paidGenerating ? '유료 풀이 생성 중...' : '엽전 차감 중...') : `🔓 전체보기 — 엽전 ${SAJU_UNLOCK_NYANG}냥`}
                   </button>
+                  <p className="text-[11px] text-gray-600 text-center mt-2">이후 같은 풀이는 무료로 다시 볼 수 있어요</p>
+                  {reservationExpiresAt && (
+                    <p className="text-[10px] text-gray-700 text-center mt-1">서버 예약 만료 시각: {reservationExpiresAt}</p>
+                  )}
                 </>
               )}
             </div>
           )}
 
+          {!isPaid && paidTitles.length === 0 && (
+            <div className="mb-4">
+              {unlockError && <p className="text-xs text-red-400 mb-2">{unlockError}</p>}
+              {paidGenerating && (
+                <p className="text-xs text-purple-300 mb-2">유료 판결문을 생성하고 있어요. 창을 닫아도 서버에서 이어서 처리합니다.</p>
+              )}
+              <button
+                onClick={unlockWithNyang}
+                disabled={unlocking || paidGenerating}
+                className="w-full py-3.5 rounded-2xl font-bold text-sm text-white disabled:opacity-40"
+                style={{ background: `linear-gradient(135deg, ${charColor}, ${charColor}bb)` }}>
+                {unlocking || paidGenerating ? (paidGenerating ? '유료 풀이 생성 중...' : '엽전 차감 중...') : `🔓 전체보기 — 엽전 ${SAJU_UNLOCK_NYANG}냥`}
+              </button>
+              <p className="text-[11px] text-gray-600 text-center mt-2">이후 같은 풀이는 무료로 다시 볼 수 있어요</p>
+            </div>
+          )}
+
+          {strategy && !isPaid && (
+            <div className="mb-4 rounded-2xl p-4 bg-[#111] border border-gray-800">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-sm">⚔️ 인생 전략 분석</span>
+                <span className="text-gray-600">🔒</span>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">전체보기 후 확인할 수 있어요.</p>
+            </div>
+          )}
+
           {/* 전략 섹션 */}
-          {strategy && (
+          {strategy && isPaid && (
             <div className="space-y-3 mb-4">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-lg">⚔️</span>
@@ -568,15 +652,13 @@ export default function ResultPage() {
               )}
               {strategy.lifecycle?.length > 0 && (
                 <div className="rounded-2xl p-4 bg-[#111] border border-gray-800">
-                  <div className="flex items-center gap-2 mb-4"><span>📊</span><span className="font-bold text-sm text-white">나이대별 운의 흐름</span></div>
-                  <div className="flex items-end gap-2 h-28 mb-3">
+                  <div className="flex items-center gap-2 mb-4"><span>📊</span><span className="font-bold text-sm text-white">나이대별 흐름</span><span className="text-[10px] text-gray-500">해석 · 계산 점수 아님</span></div>
+                  <div className="flex items-end gap-2 h-16 mb-3">
                     {strategy.lifecycle.map((d: any) => {
-                      const maxScore = Math.max(...strategy.lifecycle.map((x: any) => x.score), 1)
                       const colors: Record<string,string> = { '봄':'#10B981','여름':'#F59E0B','가을':'#F97316','겨울':'#3B82F6' }
                       return (
                         <div key={d.age} className="flex-1 flex flex-col items-center gap-1">
-                          <span className="text-[10px] text-gray-400">{d.score}</span>
-                          <div className="w-full rounded-t-lg" style={{ height: `${Math.max((d.score/maxScore)*100,8)}%`, background: colors[d.season]??'#8B5CF6', minHeight: 8 }} />
+                          <div className="w-full rounded-t-lg h-10" style={{ background: colors[d.season]??'#8B5CF6' }} />
                         </div>
                       )
                     })}
@@ -609,7 +691,7 @@ export default function ResultPage() {
               )}
               {strategy.golden_period && (
                 <div className="rounded-2xl p-4 bg-[#111] border border-yellow-900/30">
-                  <div className="flex items-center gap-2 mb-2"><span>🏆</span><span className="font-bold text-sm text-yellow-400">전성기는 언제?</span></div>
+                  <div className="flex items-center gap-2 mb-2"><span>🏆</span><span className="font-bold text-sm text-yellow-400">기운이 잘 쓰이는 방향</span><span className="text-[10px] text-gray-500">해석</span></div>
                   <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line">{sanitizeText(strategy.golden_period)}</p>
                 </div>
               )}
@@ -641,6 +723,7 @@ export default function ResultPage() {
         <div className="px-4 pt-4">
           <div className="text-xs font-bold text-[#555] mb-3">✦ 저장된 풀이</div>
           {sections.map((sec, idx) => {
+            const locked = !isPaid && idx >= 3
             const isWarning = sec.id === 'warning'
             const isOpen    = openIdx.includes(idx)
             return (
@@ -652,6 +735,7 @@ export default function ResultPage() {
                   onClick={() => setOpenIdx(prev => prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx])}>
                   <SectionIcon id={sec.id} />
                   <span className={`flex-1 text-sm font-bold ${isWarning ? 'text-red-300' : 'text-white'} leading-snug`}>{sec.title}</span>
+                  {locked && <span className="text-gray-600">🔒</span>}
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2" strokeLinecap="round"
                     style={{ transform: isOpen ? 'rotate(180deg)' : '', transition: 'transform .2s', flexShrink: 0 }}>
                     <path d="M19 9l-7 7-7-7" />
@@ -659,31 +743,34 @@ export default function ResultPage() {
                 </button>
                 {isOpen && (
                   <div className="px-4 pb-5 border-t" style={{ borderColor: isWarning ? 'rgba(239,68,68,.12)' : '#1e1e1e' }}>
-                    <p className="text-sm leading-[1.95] pt-4 whitespace-pre-line" style={{ color: isWarning ? '#fca5a5' : '#bbb' }}>{sec.body}</p>
+                    <p className="text-sm leading-[1.95] pt-4 whitespace-pre-line" style={{ color: isWarning ? '#fca5a5' : '#bbb' }}>
+                      {locked ? '전체보기 후 확인할 수 있어요.' : sec.body}
+                    </p>
                   </div>
                 )}
               </div>
             )
           })}
+          {!isPaid && (
+            <button
+              onClick={unlockWithNyang}
+              disabled={unlocking}
+              className="w-full mt-2 py-3.5 rounded-2xl font-bold text-sm text-white disabled:opacity-40"
+              style={{ background: `linear-gradient(135deg, ${charColor}, ${charColor}bb)` }}>
+              {unlocking ? '엽전 차감 중...' : `🔓 전체보기 — 엽전 ${SAJU_UNLOCK_NYANG}냥`}
+            </button>
+          )}
         </div>
       )}
 
-      {/* 공유 버튼 */}
-      <div className="px-4 mt-4 space-y-3">
-        <button className="w-full py-4 rounded-2xl font-black text-base flex items-center justify-center gap-2 disabled:opacity-60"
-          style={{ background: '#fee500', color: '#3c1e1e' }}
-          disabled={sharing}
-          onClick={handleKakaoShare}>
-          {sharing ? '카카오 공유 준비 중...' : '💬 카카오로 공유하기'}
-        </button>
-        {shareError && (
-          <p className="text-xs text-red-300 text-center">{shareError}</p>
-        )}
-        <button className="w-full py-3 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all"
-          style={{ background: copied ? '#10B981' : '#1a1a2e', border: '1px solid #333', color: copied ? 'white' : '#aaa' }}
-          onClick={handleCopyLink}>
-          {copied ? '✅ 링크 복사됐어요!' : '🔗 링크 복사하기'}
-        </button>
+      <ReadingSharePanel
+        shareId={shareId}
+        isPaid={isPaid}
+        characterId={characterId}
+        initial={shareSettings}
+        aiResult={aiResultRaw ?? JSON.stringify({ titles, strategy, personalAnswer })}
+      />
+      <div className="px-4 mt-4">
         <Link href="/saju" className="block w-full py-3 rounded-2xl font-bold text-sm text-center"
           style={{ background: '#111', border: '1px solid #222', color: '#666' }}>
           ↺ 새로 풀이받기
@@ -695,6 +782,7 @@ export default function ResultPage() {
           본 서비스는 사주명리학 이론을 기반으로 분석한 참고용 엔터테인먼트 콘텐츠입니다. 실제 투자·재무·의료·법률 등 중요한 의사결정의 근거로 사용하지 마십시오. {COPYRIGHT_LINE}
         </p>
       </div>
+      {showShop && <YeopjeunShop onClose={() => setShowShop(false)} currentBalance={balance} />}
     </div>
   )
 }

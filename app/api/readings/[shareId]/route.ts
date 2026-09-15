@@ -1,27 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/app/api/auth/[...nextauth]/route'
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+import { getToken } from 'next-auth/jwt'
+import { createServerSupabase } from '@/lib/supabase'
+import { redactUnpaidReading } from '@/lib/readingAccess'
+import { expireFullviewDue, loadOpenReservation } from '@/lib/fullviewDb'
+import { loadShareSettings } from '@/lib/shareDb'
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ shareId: string }> }
 ) {
   try {
-    // ✅ 수정: 로그인 안 하면 결과 내용 자체를 서버에서 내려주지 않음 (프론트 화면만 막는 건 우회 가능)
-    const session = await getServerSession(authOptions)
-    if (!session) {
+    const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
+    if (!token?.sub) {
       return NextResponse.json({ error: '로그인이 필요합니다' }, { status: 401 })
     }
 
     const { shareId } = await params
+    await expireFullviewDue()
 
-    const { data, error } = await supabaseAdmin
+    const supabase = createServerSupabase()
+    const { data, error } = await supabase
       .from('readings')
       .select('*')
       .eq('share_id', shareId)
@@ -31,7 +29,27 @@ export async function GET(
       return NextResponse.json({ error: '풀이를 찾을 수 없습니다' }, { status: 404 })
     }
 
-    return NextResponse.json(data)
+    if (data.user_id !== token.sub) {
+      return NextResponse.json({ error: '풀이를 찾을 수 없습니다' }, { status: 404 })
+    }
+    const reservation = await loadOpenReservation(shareId, token.sub)
+    const share = await loadShareSettings(shareId, token.sub)
+    const payload = data.is_paid ? data : redactUnpaidReading(data)
+    return NextResponse.json({
+      ...payload,
+      share: share ?? { enabled: false, includePersonal: false, displayName: '친구', publicPath: null },
+      reservation: reservation
+        ? {
+            jobId: reservation.job_id,
+            status: reservation.status,
+            expiresAt: reservation.expires_at,
+            reservedAt: reservation.reserved_at,
+            completedAt: reservation.completed_at,
+            releasedAt: reservation.released_at,
+            releaseReason: reservation.release_reason,
+          }
+        : null,
+    })
   } catch {
     return NextResponse.json({ error: '서버 오류' }, { status: 500 })
   }
