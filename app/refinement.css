@@ -1,0 +1,27 @@
+/* Shared journey typography; original pages and controls retain their structure. */
+.palace-page.palace-page{background:#141a24!important;font-size:1rem;color:#f2f1ed}
+.palace-page.palace-page .text-sm{font-size:1rem;line-height:1.85}
+.palace-page.palace-page .text-xs{font-size:.875rem;line-height:1.75}
+.palace-page.palace-page label{font-size:.875rem;line-height:1.75}
+.palace-page.palace-page :is(input,select,textarea){font-size:1rem}
+.palace-page.palace-page :is(button,a){overflow-wrap:anywhere}
+.palace-page.palace-page [class~="text-[9px]"],.palace-page.palace-page [class~="text-[10px]"],.palace-page.palace-page [class~="text-[11px]"]{font-size:.75rem;line-height:1.7}
+.palace-page.palace-page .text-gray-700{color:#a7afb9}
+.palace-page.palace-page .text-gray-600{color:#b0bac8}
+.palace-page.palace-page .text-gray-500{color:#b7c0cd}
+.palace-page.palace-page .text-gray-400{color:#c6cdd7}
+.palace-page.palace-page .grid>*{min-width:0}
+.palace-page.palace-page :is(input,select,textarea)::placeholder{color:#a7b5c8;opacity:1}
+.palace-page.palace-terms{font-size:1rem}
+.palace-terms .space-y-6{font-size:1rem;line-height:1.95}
+.reading-progress.reading-progress>p,.reading-progress.reading-progress .reading-status{font-size:.875rem;line-height:1.85}
+.reading-progress.reading-progress .reading-estimate{font-size:.8125rem;line-height:1.85}
+.reading-progress.reading-progress .reading-steps{flex-wrap:wrap;gap:10px 16px}
+.reading-progress.reading-progress .reading-steps li{font-size:.8125rem;line-height:1.6}
+.reading-progress.reading-progress .palace-kicker{font-size:.75rem;letter-spacing:.04em}
+.reading-progress.reading-progress.is-compact{padding:22px 18px}
+.palace-page.palace-result .text-sm.leading-relaxed{font-size:1.0625rem;line-height:1.9}
+@media(max-width:380px){
+ .palace-page.palace-page>.max-w-md{padding-inline:16px}
+ .reading-progress.reading-progress .reading-steps{justify-content:flex-start;gap:10px}
+}
