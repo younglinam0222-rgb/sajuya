@@ -1,0 +1,45 @@
+/* Final B sample typography and responsive geometry. Keep scoped to results. */
+
+.rr .rr-top>span,.rr .rr-footer>small,.rr .rr-number,.rr .rr-category{font-size:.75rem}
+.rr .rr-cover-copy>span,.rr .rr-cover-copy>p{font-size:.875rem;line-height:1.65}
+.rr .rr-cover{height:auto;min-height:205px;display:flex;align-items:flex-end}
+.rr .rr-cover-copy{position:relative;left:auto;right:auto;bottom:auto;padding:26px 24px;max-width:83%}
+.rr .rr-cover h1{font-size:1.75rem;line-height:1.4;letter-spacing:-.03em}
+.rr .rr-prose p{font-size:1.0625rem;line-height:1.9;color:#d0d7e0}
+.rr .rr-note,.rr .rr-reading-tools,.rr .rr-toc a{font-size:.875rem;line-height:1.8}
+.rr .rr-reading-tools{flex-wrap:wrap;gap:10px}
+.rr .rr-note{color:#b4bfce}
+.rr .rr-toc nav small,.rr .rr-toc summary>span{font-size:.75rem}
+.rr .rr-toc a{min-height:48px;align-items:flex-start}
+.rr .rr-toc a small{max-width:74px;white-space:normal;line-height:1.7}
+.rr .rr-origin header>span,.rr .rr-origin-label{font-size:.8125rem}
+.rr .rr-origin-cell span,.rr .rr-origin-cell small{font-size:.8125rem;line-height:1.6}
+.rr .rr-origin-cell{padding:12px 3px;min-height:140px}
+.rr .rr-elements small,.rr .rr-time-note{font-size:.75rem;line-height:1.8}
+.rr .rr-life-chart{height:auto;min-height:180px}
+.rr .rr-life-chart>div{font-size:.75rem}
+.rr .rr-life-row{grid-template-columns:44px 36px minmax(0,1fr);font-size:.875rem}
+.rr .rr-life-row>p,.rr .rr-date>small,.rr .rr-share-status{font-size:.875rem;line-height:1.85}
+.rr .rr-group-heading{flex-wrap:wrap;gap:8px}
+.rr .rr-group-heading>span{font-size:.8125rem}
+.rr .rr-inline-warning{font-size:1rem;line-height:1.85}
+.rr.rr-large .rr-prose p,.rr.rr-large .rr-tone-question>div p{font-size:1.25rem}
+.rr.rr-large .rr-inline-warning{font-size:1.125rem}
+.rr.rr-large .rr-origin-cell span,.rr.rr-large .rr-origin-cell small{font-size:1rem}
+.rr.rr-large .rr-elements small,.rr.rr-large .rr-time-note,.rr.rr-large .rr-life-row>p{font-size:1rem}
+.rr .rr-footer>button,.rr .rr-footer>a{min-height:52px;font-size:1rem}
+.rr .rr-footer [role=alert],.rr .rr-incomplete,.rr .rr-missing{display:block;padding:18px;background:#302a1e;border:1px solid #8b754f;color:#f1d58c;font-size:1rem;line-height:1.85;border-radius:8px}
+.rr .rr-footer [role=alert]{background:#2a2028;border-color:#a17782;color:#f0b5bd}
+.rr .rr-incomplete{margin:24px 0}
+.rr .rr-incomplete p,.rr .rr-missing p{font-size:.875rem;margin:8px 0;color:#ddd2bc}
+.rr .rr-incomplete button{min-height:48px;padding:10px 14px;margin-top:10px;border:1px solid #c9ac86;background:transparent;color:#f1d58c;font-size:.875rem}
+@media(max-width:767px){
+ .rr .rr-content{padding:0 16px}
+ .rr .rr-chapter{padding:24px 18px}
+}
+@media(max-width:359px){
+ .rr .rr-chapter{padding:20px 14px}
+ .rr .rr-content{padding-inline:12px}
+ .rr .rr-life-row{grid-template-columns:40px minmax(0,1fr);gap:8px}
+ .rr .rr-life-row>p{grid-column:1/-1}
+}

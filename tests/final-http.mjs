@@ -9,6 +9,7 @@ const fake=createServer(async(req,res)=>{
  let raw='';for await(const chunk of req)raw+=chunk
  const b=JSON.parse(raw||'{}'),u=new URL(req.url,'http://localhost');calls.push({path:u.pathname,body:b})
  res.setHeader('Content-Type','application/json')
+ if(u.pathname==='/rest/v1/content_notice_acks')return res.end(JSON.stringify({acknowledged_at:'2026-01-01T00:00:00.000Z',notice_version:'content-notice-v1-20260908'}))
  if(u.pathname==='/rest/v1/generation_requests')return res.end(JSON.stringify({job_id:u.searchParams.get('request_id')==='eq.pending-request'?'running-conversation':u.searchParams.get('request_id')==='eq.consent-request'?'old-conversation':'old-year-job'}))
  if(u.pathname==='/rest/v1/generation_jobs')return res.end(JSON.stringify(u.searchParams.get('id')==='eq.running-conversation'?{fingerprint:'current-conversation-year',product:'conversation',input:conversationInput,status:'running',updated_at:new Date().toISOString()}:u.searchParams.get('id')==='eq.old-conversation'?{fingerprint:'previous-conversation-year',product:'conversation',input:conversationInput,status:'failed',updated_at:'2025-12-31T12:00:00Z'}:{fingerprint:'server-owned-previous-year',product:'saju',input:base}))
  if(u.pathname==='/rest/v1/rpc/reserve_generation'&&b.p_request==='busy-request')return res.end(JSON.stringify({error:'busy'}))
@@ -29,13 +30,14 @@ try{
  for(const route of ['readings/known','result/known','storage','pay/order/known','refunds'])assert.equal((await fetch(origin+'/api/'+route)).status,401,route)
  await expectStatus(post('saju',{...base,requestId:'same-request-2026'}),200,'cached saju replay through runtime SUPABASE_URL')
  assert.equal(calls.find(c=>c.path==='/rest/v1/rpc/reserve_generation').body.p_hash,'server-owned-previous-year')
- const count=calls.length
+ const chargeTouch=()=>calls.filter(c=>c.path!=='/rest/v1/content_notice_acks')
+ const count=chargeTouch().length
  assert.equal((await post('saju',{...base,retry:{personal:true}})).status,400)
  assert.equal((await post('saju',{...base,month:'2',day:'31'})).status,400)
  assert.equal((await post('saju',{...base,hour:'24:80'})).status,400)
  assert.equal((await post('pay/ready',{packageId:'unlock',agreed:true})).status,503)
  for(const product of ['gunghap','daeun','yearly','taekil'])assert.equal((await post(product,base)).status,503)
- assert.equal(calls.length,count,'invalid/paused requests must not touch DB or charge')
+ assert.equal(chargeTouch().length,count,'invalid/paused requests must not reserve, charge, or write generation jobs')
  assert.equal((await post('saju',{...base,name:'changed',requestId:'same-request-2026'})).status,409)
  assert.equal((await post('saju',base,{...auth,Origin:'https://elsewhere.example'})).status,403)
  const locked=await fetch(origin+'/api/readings/locked',{headers:auth});assert.equal(locked.status,200);const body=await locked.text();assert.ok(body.includes('ONE_ONLY'));assert.ok(!body.includes('PAID_SECRET'));assert.ok(!body.includes('PRIVATE_QUESTION'))

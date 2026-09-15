@@ -1,0 +1,127 @@
+{
+  "design": "B",
+  "reference_revision": "b90e34e17e25e81730bf154293710949956d88b2",
+  "purpose": "Approved implementation source hashes; not proof of browser pixel equivalence",
+  "files": [
+    {
+      "path": "app/components/conversation/ConversationBanner.tsx",
+      "sha256": "112311496e27b99df61d8ba897f93bc4264c8aab5ba653784ab7669900a26a22"
+    },
+    {
+      "path": "app/components/conversation/conversation-banner.css",
+      "sha256": "d1dce9236c9d831441366a0c9181706d67d4fa1770d8192c65ccc4f35ec93620"
+    },
+    {
+      "path": "app/components/home/ConversionContent.tsx",
+      "sha256": "55b01dbae1780d45232196cf181f469226e4125b09260d86dc6d92d75f408438"
+    },
+    {
+      "path": "app/components/home/SampleHome.tsx",
+      "sha256": "c2dfaf99946f317667bd69b19b0064656179fb0df3cfa7201faf41a7bf5deb58"
+    },
+    {
+      "path": "app/components/home/TrustNote.tsx",
+      "sha256": "7ad4ab15fc82e9a0e74bbc5cfb5e9688f1ebc41f4a154018f066aae96987d09d"
+    },
+    {
+      "path": "app/components/home/conversion.css",
+      "sha256": "dc239fd52977bbba32ae46a6e7884d77abd4aa2ee84e737e5698137d9ffdd2ac"
+    },
+    {
+      "path": "app/components/home/data.ts",
+      "sha256": "99648b3c9e9a8e1d76dceedb94e0cb3ba27ea18a8ecf109f94a6593449f76209"
+    },
+    {
+      "path": "app/components/home/home.css",
+      "sha256": "8c2a97db92c647e2560fc7a557a2b73600e7f9aba01e9f767317eef1583ef6a8"
+    },
+    {
+      "path": "app/components/home/refinement.css",
+      "sha256": "62736ff7f3e16b7454789334322c318f955d19b9383734b1c5702cc94524f1cb"
+    },
+    {
+      "path": "app/components/home/trust.css",
+      "sha256": "e4df82eebb735a980f386a7c9daaac9fe6a9c72b607c18d83f983a557852fd1c"
+    },
+    {
+      "path": "app/components/reading/ReadingResult.tsx",
+      "sha256": "029e3ad226c1f290ac051214a510ea78b955b22ff7246e788536419d35b5baf6"
+    },
+    {
+      "path": "app/components/reading/approved-b.css",
+      "sha256": "4def5422a68bb5df0eb2b69cf031bdb3d1166ef7d89b4a6a398e9faac4044206"
+    },
+    {
+      "path": "app/components/reading/results.css",
+      "sha256": "d0618fec316c5b76c244e5b0f1efac7d5e17be90d09ab40c5e15d96877da1243"
+    },
+    {
+      "path": "app/components/reviews/ReviewCard.tsx",
+      "sha256": "91170e52fd741f98662f1eb65dd70419dfe422538dfdb6b5ae7d351b5b49b536"
+    },
+    {
+      "path": "app/components/reviews/ReviewsPreview.tsx",
+      "sha256": "556984317a2e07cc676a929c2d9d02183860273c2468dda3342296fcf183a348"
+    },
+    {
+      "path": "app/components/reviews/reviews.css",
+      "sha256": "44f0589483ef2b1be39ce54631bcbece286ec928856afcadf169ab786d8c96e7"
+    },
+    {
+      "path": "app/components/reviews/useReviews.ts",
+      "sha256": "ead9b327208f1b15dadcc94a6f21f668a4640e0ad9ac6410b029b259291fd271"
+    },
+    {
+      "path": "app/examples/saju/page.tsx",
+      "sha256": "00bceaa2952e7fa5a3e034a00338423ae5c5ffeaa9154d1beca0ff418f6ecc8a"
+    },
+    {
+      "path": "app/globals.css",
+      "sha256": "7ac99d460c499ca968974219b8b5e61307c6efcc8355dd0b2923d52d1742dea0"
+    },
+    {
+      "path": "app/layout.tsx",
+      "sha256": "cabb3cbb18fa70c69be818e072343489539ea75ff5bb202880237a9f20740ea0"
+    },
+    {
+      "path": "app/page.tsx",
+      "sha256": "ef7b7cb1662ab82ae18fa8521ee32c40dd23babc4ca5c2ef7bf294c473674668"
+    },
+    {
+      "path": "public/characters/README.txt",
+      "sha256": "c1a5829858c0ae8c27e603406b1d9eded33141217e0e4215352a79dbd5c6c1e2"
+    },
+    {
+      "path": "public/characters/baekhalma.png",
+      "sha256": "6f668d300c74af2d8bee87519ec239ce1828b769df842332f8643128710930ef"
+    },
+    {
+      "path": "public/characters/doryeong.png",
+      "sha256": "6d591550ea13f7256f02f33516fb62fd60589e2ed19f4012141e292c82ff3ae7"
+    },
+    {
+      "path": "public/characters/gumiho.png",
+      "sha256": "ace7f29764d991eed18c66785a1ff678eabf0b866e57be29a97d6b4cc69b96e3"
+    },
+    {
+      "path": "public/characters/sinryeong.png",
+      "sha256": "5e9f8a86cad6bfb2d6a3678e01030bf4c70ccb4e1f21ec9fd7b5595445e04310"
+    },
+    {
+      "path": "public/fonts/NotoSansKR-OFL.txt",
+      "sha256": "1c05c68c34f9708415aada51f17e1b0092d2cea709bf4a94cd38114f9e73d7d9"
+    },
+    {
+      "path": "public/fonts/NotoSerifKR-OFL.txt",
+      "sha256": "5e0da210fb04058a8c0087985d2d456b931c2579811a49655721d3cf0c36b6d6"
+    },
+    {
+      "path": "public/fonts/palace-sans.woff",
+      "sha256": "6f4c7091b61b7793059ff89b650464d94ca867d8688c2bb94d9f8fc33c77368e"
+    },
+    {
+      "path": "public/fonts/palace-serif.woff",
+      "sha256": "613cad31576cd553b5ed4bc5f112d8e20cad301d427be62cb96291de8260e865"
+    }
+  ]
+}

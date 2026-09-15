@@ -82,7 +82,7 @@ export default function ReadingSharePanel({ shareId, isPaid, characterId, aiResu
     const card = kakaoShareCard(preview.displayName)
     trackClick()
     try {
-      ;(window as any).Kakao.Share.sendDefault({
+      ;(window as unknown as { Kakao: { Share: { sendDefault: (value: unknown) => void } } }).Kakao.Share.sendDefault({
         objectType: 'feed',
         content: {
           title: card.title,

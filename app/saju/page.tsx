@@ -8,6 +8,7 @@ import Link from 'next/link'
 import { useSession, signIn } from 'next-auth/react'
 import TimeNumberInput from '@/app/components/TimeNumberInput'
 import { KOREA_REGIONS } from '@/lib/solarTime'
+import { contentNoticeHref } from '@/lib/safeNextPath'
 import { appendSseChunk, parseSseFrame } from '@/lib/sajuSse'
 import { assessCompletion, GROUP_IDS, LAST_GROUP_INDEX, normalizePersonalAnswer, sortTitlesById } from '@/lib/sajuContract'
 
@@ -548,17 +549,17 @@ function SajuForm({ initialQuery }: { initialQuery: string }) {
           <span className="text-yellow-400 font-bold">계정당 첫 일일운세 1회 무료</span>
         </div>
         <div className="w-full max-w-xs space-y-3">
-          <button onClick={() => signIn('kakao', { callbackUrl: `/saju?character=${encodeURIComponent(selectedChar.id)}` })}
+          <button onClick={() => signIn('kakao', { callbackUrl: contentNoticeHref(`/saju?character=${encodeURIComponent(selectedChar.id)}`) })}
             className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
             style={{ background: '#fee500', color: '#3c1e1e' }}>
             <span className="text-xl">💬</span> 카카오로 시작하기
           </button>
-          <button onClick={() => signIn('google', { callbackUrl: `/saju?character=${encodeURIComponent(selectedChar.id)}` })}
+          <button onClick={() => signIn('google', { callbackUrl: contentNoticeHref(`/saju?character=${encodeURIComponent(selectedChar.id)}`) })}
             className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
             style={{ background: '#fff', color: '#333', border: '1px solid #e5e7eb' }}>
             <span style={{ fontSize: '18px', fontWeight: 900, color: '#4285F4' }}>G</span> 구글로 시작하기
           </button>
-          <button onClick={() => signIn('naver', { callbackUrl: `/saju?character=${encodeURIComponent(selectedChar.id)}` })}
+          <button onClick={() => signIn('naver', { callbackUrl: contentNoticeHref(`/saju?character=${encodeURIComponent(selectedChar.id)}`) })}
             className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
             style={{ background: '#03c75a', color: '#fff' }}>
             <span className="text-xl font-black">N</span> 네이버로 시작하기

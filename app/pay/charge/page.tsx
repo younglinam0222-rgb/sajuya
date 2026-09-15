@@ -82,9 +82,10 @@ function ChargeContent() {
         customerEmail: session?.user?.email ?? undefined,
         customerName: session?.user?.name ?? undefined,
       })
-    } catch (e: any) {
-      if (e?.code !== 'USER_CANCEL') {
-        setError(e?.message || '결제 요청 중 오류가 발생했어요.')
+    } catch (e: unknown) {
+      const err = e as { code?: string; message?: string }
+      if (err?.code !== 'USER_CANCEL') {
+        setError(err?.message || '결제 요청 중 오류가 발생했어요.')
       }
       setPaying(false)
     }

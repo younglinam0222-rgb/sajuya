@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
-import { authOptions } from '@/app/api/auth/[...nextauth]/route'
+import { authOptions } from '@/lib/auth-options'
 import { CONTENT_NOTICE_VERSION } from '@/lib/contentNotice'
 import { parseAckBody } from '@/lib/contentNoticeParse'
 import { loadContentNoticeAck, logContentNoticeEvent, saveContentNoticeAck } from '@/lib/contentNoticeDb'

@@ -1,0 +1,46 @@
+/* Final review: preserve the B composition; strengthen reading and task feedback. */
+.direction-b .sg-hero h1{letter-spacing:-.035em;line-height:1.28}
+.direction .sg-hero-price{font-size:.875rem;color:var(--sg-muted);margin-top:12px;line-height:1.7;max-width:24rem}
+.direction-b .sg-hero-price{color:#d4dbe4}
+.direction-b .sg-guide-description{display:block;font-size:.875rem;line-height:1.7;color:#d4dbe4}
+.direction-b .sg-guide-image{min-height:330px}
+.direction .sg-group,.direction .sg-guide-copy>p,.direction .sg-menu p{font-size:.875rem}
+.direction .sg-free .sg-menu-price{font-size:.8125rem}
+.direction .sg-heading>a,.direction .sg-heading>button{font-size:.875rem}
+.direction .sg-daily{align-items:center;flex-wrap:wrap}
+.direction .sg-daily p,.direction .sg-daily>span{font-size:.875rem}
+.direction .sg-daily>div{flex:1;min-width:190px}
+.direction .sg-daily>span{min-height:44px}
+.direction .sg-footer-links a{min-height:44px;font-size:.8125rem}
+.direction .sg-bottom a{font-size:.8125rem;line-height:1.4}
+.direction .cv-sample-meta small{font-size:.75rem}
+.direction .cv-sample{min-height:0}
+.direction .cv-sample>p{font-size:1.0625rem;line-height:1.9}
+.direction .cv-faq summary{font-size:1rem;line-height:1.65}
+.direction .cv-value-strip>small{font-size:.8125rem}
+@media(max-width:767px){
+ .direction-b .sg-hero-body{min-height:480px}
+ .direction-b .sg-hero-copy{max-width:74%}
+ .direction-b .sg-hero h1{font-size:2.25rem}
+ .direction-b .sg-hero-desc{font-size:1rem;max-width:210px;line-height:1.8}
+ .direction-b .sg-hero-portrait:after{background:linear-gradient(90deg,#202735 0%,#202735bb 32%,#20273522 78%)}
+ .direction .sg-eyebrow{font-size:.875rem}
+ .direction .sg-primary{font-size:.9375rem!important}
+ .direction-b .sg-guide-image{min-height:320px}
+ .direction-b .sg-guide-copy .sg-guide-description{font-size:.875rem;line-height:1.7}
+ .direction .sg-heading{align-items:flex-start}
+ .direction .sg-heading h2{font-size:1.375rem}
+ .direction .sg-slide-tabs button{font-size:.8125rem}
+ .direction .sg-currency p{font-size:.875rem}
+}
+@media(max-width:359px){
+ .direction .sg-main{padding-inline:16px}
+ .direction-b .sg-hero{margin-inline:-16px}
+ .direction-b .sg-hero-body{padding:28px 16px}
+ .direction-b .sg-hero-copy{max-width:85%}
+ .direction .sg-heading{flex-wrap:wrap}
+ .direction .sg-daily>div{min-width:180px}
+ .direction .sg-daily>span{margin-left:40px}
+ .direction-b .sg-guide-image{min-height:345px}
+ .direction .sg-bottom a{font-size:.75rem}
+}

@@ -77,7 +77,9 @@ export default function PublicSharePage() {
   const charColor = CHARACTER_COLOR[view.characterId] ?? '#8B5CF6'
   const charName = CHARACTER_NAMES[view.characterId] ?? view.characterId
   const titles = Array.isArray(view.titles) ? view.titles as { id?: string; category?: string; title?: string; teaser?: string; content?: string }[] : []
-  const strategy = view.strategy as Record<string, any> | null
+  const strategy = view.strategy && typeof view.strategy === 'object'
+    ? view.strategy as { overview?: string; golden_period?: string; peak_guide?: string; final_word?: string }
+    : null
 
   return (
     <div className="bg-[#0a0a0a] min-h-screen text-white max-w-[430px] mx-auto pb-10">

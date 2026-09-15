@@ -2,6 +2,7 @@ import type { NextAuthOptions } from 'next-auth'
 import KakaoProvider from 'next-auth/providers/kakao'
 import GoogleProvider from 'next-auth/providers/google'
 import { createServerSupabase } from './supabase'
+import { loadContentNoticeAck } from './contentNoticeDb'
 
 const supabaseAdmin = createServerSupabase()
 
@@ -67,8 +68,9 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (session.user) {
-        const user = session.user as typeof session.user & {id: string; yeobjeun_balance?: number}
+        const user = session.user as typeof session.user & {id: string; yeobjeun_balance?: number; contentNoticeAcked?: boolean}
         user.id = token.sub as string
+        user.contentNoticeAcked = token.contentNoticeAcked === true
 
         // 세션에 잔액 포함
         try {
@@ -82,7 +84,15 @@ export const authOptions: NextAuthOptions = {
       }
       return session
     },
-    async jwt({ token }) {
+    async jwt({ token, trigger }) {
+      if (token.sub && (trigger === 'signIn' || trigger === 'update' || token.contentNoticeAcked === undefined)) {
+        try {
+          const ack = await loadContentNoticeAck(token.sub)
+          token.contentNoticeAcked = ack.status === 'acked'
+        } catch {
+          token.contentNoticeAcked = false
+        }
+      }
       return token
     },
   },

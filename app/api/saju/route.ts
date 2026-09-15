@@ -7,6 +7,7 @@ import { correctToTrueSolarTime } from '@/lib/solarTime'
 import {stemRelationship,branchRelationship,birthSolarDate,koreanDate} from '@/lib/manse-facts'
 import { GROUP_IDS, LAST_GROUP_INDEX } from '@/lib/sajuContract'
 import { sanitizeJudgmentTitles, sanitizeStrategy, sanitizeText } from '@/lib/sajuSanitize'
+import { requireContentNotice } from '@/lib/contentNoticeGuard'
 import LunarJS from 'lunar-javascript'
 
 // ✅ 수정(재발): 120초로도 부족해서 타임아웃 발생 (Vercel Runtime Timeout Error, 504)
@@ -848,4 +849,9 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
   }
 }
 
-export const POST = guardedGeneration('saju', generate)
+const guardedSaju = guardedGeneration('saju', generate)
+export async function POST(req: NextRequest) {
+  const notice = await requireContentNotice(req)
+  if (!notice.ok) return notice.response
+  return guardedSaju(req)
+}

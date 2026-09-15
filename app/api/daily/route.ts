@@ -6,6 +6,7 @@ import { authOptions } from '@/lib/auth-options'
 import { createServerSupabase } from '@/lib/supabase'
 import { correctToTrueSolarTime } from '@/lib/solarTime'
 import {koreanDate,birthSolarDate} from '@/lib/manse-facts'
+import { requireContentNotice } from '@/lib/contentNoticeGuard'
 import LunarJS from 'lunar-javascript'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
@@ -208,5 +209,10 @@ ${voice}
   }
 }
 
-export const POST = guardedGeneration('daily', generate)
+const guardedDaily = guardedGeneration('daily', generate)
+export async function POST(req: NextRequest) {
+  const notice = await requireContentNotice(req)
+  if (!notice.ok) return notice.response
+  return guardedDaily(req)
+}
 export const maxDuration = 300

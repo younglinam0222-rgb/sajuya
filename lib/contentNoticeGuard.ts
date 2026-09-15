@@ -1,6 +1,5 @@
-import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/app/api/auth/[...nextauth]/route'
+import { NextRequest, NextResponse } from 'next/server'
+import { getToken } from 'next-auth/jwt'
 import { loadContentNoticeAck, logContentNoticeEvent } from '@/lib/contentNoticeDb'
 import { CONTENT_NOTICE_VERSION } from '@/lib/contentNotice'
 
@@ -8,9 +7,9 @@ export type NoticeGate =
   | { ok: true; userId: string }
   | { ok: false; response: NextResponse }
 
-export async function requireContentNotice(): Promise<NoticeGate> {
-  const session = await getServerSession(authOptions)
-  const userId = (session?.user as { id?: string } | undefined)?.id
+export async function requireContentNotice(req: NextRequest): Promise<NoticeGate> {
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
+  const userId = typeof token?.sub === 'string' ? token.sub : ''
   if (!userId) {
     logContentNoticeEvent('generate_blocked', { reason: 'login_required' })
     return {

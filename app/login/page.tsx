@@ -1,18 +1,13 @@
 'use client'
 import { signIn } from 'next-auth/react'
 import Link from 'next/link'
+import { contentNoticeHref, safeNextPath } from '@/lib/safeNextPath'
 
 export default function LoginPage() {
   function login(provider: 'kakao' | 'google' | 'naver') {
-    let callbackUrl = '/'
     const value = new URLSearchParams(window.location.search).get('callbackUrl')
-    if (value) {
-      try {
-        const target = new URL(value, window.location.origin)
-        if (target.origin === window.location.origin && target.pathname !== '/login') callbackUrl = target.pathname + target.search + target.hash
-      } catch { /* Untrusted destinations fall back to home. */ }
-    }
-    void signIn(provider, { callbackUrl })
+    const next = safeNextPath(value, '/')
+    void signIn(provider, { callbackUrl: contentNoticeHref(next) })
   }
   return (
     <div className="palace-page palace-login bg-[#0c1119] min-h-screen text-white max-w-[430px] mx-auto flex flex-col">

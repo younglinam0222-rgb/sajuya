@@ -1,8 +1,8 @@
 import Link from 'next/link'
 
-export default function Footer() {
+export default function Footer({ clearance = true }: { clearance?: boolean } = {}) {
   return (
-    <footer className="bg-[#0c1119] border-t border-[#344151] pb-24">
+    <footer className={`bg-[#0c1119] border-t border-[#344151] ${clearance ? 'pb-24' : 'pb-8'}`}>
       <div className="max-w-[640px] mx-auto px-6 py-8">
         <div className="flex flex-wrap gap-x-4 gap-y-2 mb-4 justify-center">
           <Link href="/terms" className="inline-flex min-h-11 items-center text-xs text-[#a7b3c3] hover:text-[#d4bc92]">이용약관</Link>

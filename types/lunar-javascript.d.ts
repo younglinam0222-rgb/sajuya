@@ -15,6 +15,20 @@ declare module 'lunar-javascript' {
     getDay(): number
     getLunar(): LunarObj
   }
-  const exportObj: { Lunar: {fromYmd(year: number, month: number, day: number): LunarObj}; Solar: typeof Solar; LunarUtil:{SHI_SHEN:Record<string,string>} }
+  class Lunar {
+    static fromYmd(year: number, month: number, day: number): LunarObj
+  }
+  class LunarMonth {
+    getDayCount(): number
+    getFirstJulianDay(): number
+    getMonth(): number
+    isLeap(): boolean
+  }
+  class LunarYear {
+    static fromYear(year: number): LunarYear
+    getLeapMonth(): number
+    getMonth(lunarMonth: number): LunarMonth | null
+  }
+  const exportObj: { Lunar: typeof Lunar; Solar: typeof Solar; LunarYear: typeof LunarYear; LunarUtil:{SHI_SHEN:Record<string,string>; ZHI_HIDE_GAN:Record<string,string[]>} }
   export = exportObj
 }

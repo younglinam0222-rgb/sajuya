@@ -186,31 +186,31 @@ export default function StoragePage() {
         <div className="fixed inset-0 z-40" onClick={() => setShowLogout(false)} />
       )}
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-[#0c1119] border-t border-[#344151] z-50">
-        <div className="max-w-md mx-auto flex items-center justify-around py-1 px-2">
-          <Link href="/" className="flex flex-col items-center gap-0.5 py-2 px-3">
-            <span className="text-xl">🏠</span>
-            <span className="text-xs text-[#a7b3c3]">홈</span>
-          </Link>
-          <Link href="/saju" className="flex flex-col items-center gap-0.5 py-2 px-3">
-            <span className="text-xl">🔮</span>
-            <span className="text-xs text-[#a7b3c3]">사주</span>
-          </Link>
-          <Link href="/daily" className="flex flex-col items-center -mt-4">
-            <div className="w-14 h-14 rounded-full flex items-center justify-center shadow-lg border-4 border-[#0c1119]"
-              style={{ background: '#c6a66d', color: '#17202c' }}>
-              <span className="text-2xl">⭐</span>
-            </div>
-            <span className="text-xs text-[#c6a66d] mt-0.5 font-medium">일일운세</span>
-          </Link>
-          <Link href="/storage" className="flex flex-col items-center gap-0.5 py-2 px-3">
-            <span className="text-xl">📦</span>
-            <span className="text-xs text-[#c6a66d] font-medium">보관함</span>
-          </Link>
-          <Link href="/characters" className="flex flex-col items-center gap-0.5 py-2 px-3">
-            <span className="text-xl">👁</span>
-            <span className="text-xs text-[#a7b3c3]">신령</span>
-          </Link>
+      <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-[#344151] bg-[#141a24]" aria-label="주요 메뉴">
+        <div className="mx-auto flex max-w-[1120px] items-stretch justify-center px-2 py-1 pb-[max(8px,env(safe-area-inset-bottom))]">
+          {[
+            { href: '/', label: '홈' },
+            { href: '/saju', label: '사주' },
+            { href: '/chat', label: '1:1 대화' },
+            { href: '/daily', label: '일일운세' },
+            { href: '/storage', label: '보관함' },
+            { href: '/characters', label: '신령' },
+          ].map(n => (
+            <Link
+              key={n.href}
+              href={n.href}
+              aria-current={n.href === '/storage' ? 'page' : undefined}
+              className={`flex min-h-[50px] min-w-0 flex-1 flex-col items-center justify-center px-1 text-center text-[11px] whitespace-nowrap ${
+                n.href === '/storage'
+                  ? 'font-semibold text-[#f2f1ed]'
+                  : n.href === '/chat'
+                    ? 'font-bold text-[#c9ac86]'
+                    : 'text-[#a7afb9]'
+              }`}
+            >
+              {n.label}
+            </Link>
+          ))}
         </div>
       </nav>
     </div>
