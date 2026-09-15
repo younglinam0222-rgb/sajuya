@@ -1,10 +1,15 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { useSession } from 'next-auth/react'
+import { useSession, signIn } from 'next-auth/react'
 import ContentNoticeShortHint from '@/app/components/ContentNoticeShortHint'
 import { applyGenerateGate } from '@/lib/contentNoticeClient'
+import BirthProfileFields from '@/app/components/BirthProfileFields'
+import MaritalStatusField from '@/app/components/MaritalStatusField'
+import OccupationField from '@/app/components/OccupationField'
+import { servicePriceLine } from '@/lib/priceDisplay'
+import { DAILY_FREE_USED_MESSAGE, DAILY_LOGIN_REQUIRED_MESSAGE } from '@/lib/dailyQuota'
 
 // ─── 타입 ─────────────────────────────────────────────
 interface DailyResult {
@@ -20,10 +25,6 @@ interface ManseData {
 }
 
 // ─── 상수 ─────────────────────────────────────────────
-const YEARS   = Array.from({ length: 85 }, (_, i) => 2005 - i)
-const MONTHS  = Array.from({ length: 12 }, (_, i) => i + 1)
-const DAYS    = Array.from({ length: 31 }, (_, i) => i + 1)
-
 const CHARACTERS = [
   { id: 'baekhalma', name: '건물주 백할매', img: '/characters/baekhalma.png', color: '#8B5CF6', desc: '직설 팩폭' },
   { id: 'doRyeong',  name: '근본도령',      img: '/characters/doryeong.png',  color: '#3B82F6', desc: '다정 분석' },
@@ -238,11 +239,25 @@ export default function DailyPage() {
   const [result, setResult]     = useState<Partial<DailyResult>>({})
   const [manse, setManse]       = useState<ManseData | null>(null)
   const [selectedChar, setSelectedChar] = useState(CHARACTERS[0])
-  const [calType, setCalType] = useState<'solar'|'lunar'>('solar')
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [form, setForm] = useState({
     name: '', year: '1990', month: '1', day: '1', hour: '', gender: 'female',
+    calType: 'solar' as 'solar' | 'lunar',
+    isLeapMonth: false,
+    timeMode: 'unknown' as 'exact' | 'period' | 'unknown',
+    timePeriod: '' as '' | 'dawn' | 'morning' | 'afternoon' | 'evening',
+    birthPlace: '',
+    maritalStatus: '미혼(솔로)',
+    occupation: '직장인',
   })
   const [checkingCache, setCheckingCache] = useState(false)
+  const [paymentsEnabled, setPaymentsEnabled] = useState(false)
+  const [canGenerateFree, setCanGenerateFree] = useState(true)
+  const [hasCachedResult, setHasCachedResult] = useState(false)
+  const [quotaMessage, setQuotaMessage] = useState<string | null>(null)
+  const [confirmPaid, setConfirmPaid] = useState(false)
+  const requestIdRef = useRef<string | null>(null)
+  const inFlightRef = useRef(false)
   const todayStr = getTodayKST()
 
   // ✅ 추가: 로그인된 사용자면 오늘자 캐시가 있는지 먼저 확인.
@@ -266,12 +281,24 @@ export default function DailyPage() {
             ...f,
             name: p.name ?? f.name, year: p.year ?? f.year, month: p.month ?? f.month,
             day: p.day ?? f.day, hour: p.hour ?? f.hour, gender: p.gender ?? f.gender,
+            calType: p.calType === 'lunar' ? 'lunar' : f.calType,
+            isLeapMonth: !!p.isLeapMonth,
+            timeMode: p.timeMode === 'exact' || p.timeMode === 'period' || p.timeMode === 'unknown' ? p.timeMode : (p.hour ? 'exact' : f.timeMode),
+            timePeriod: p.timePeriod ?? f.timePeriod,
+            birthPlace: p.birthPlace ?? f.birthPlace,
+            maritalStatus: p.maritalStatus ?? f.maritalStatus,
+            occupation: p.occupation ?? f.occupation,
           }))
-          if (p.calType) setCalType(p.calType)
           if (p.characterId) {
             const char = CHARACTERS.find(c => c.id === p.characterId)
             if (char) setSelectedChar(char)
           }
+        }
+        if (typeof data.paymentsEnabled === 'boolean') setPaymentsEnabled(data.paymentsEnabled)
+        if (data.quota) {
+          setCanGenerateFree(!!data.quota.canGenerateFree)
+          setHasCachedResult(!!data.quota.hasCachedResult)
+          setQuotaMessage(typeof data.quota.message === 'string' ? data.quota.message : null)
         }
       })
       .catch(() => {})
@@ -280,6 +307,24 @@ export default function DailyPage() {
 
   const handleSubmit = async () => {
     if (!form.name) return
+    if (status !== 'authenticated') {
+      setErrorMsg(DAILY_LOGIN_REQUIRED_MESSAGE)
+      return
+    }
+    if (!canGenerateFree) {
+      if (!paymentsEnabled) {
+        setErrorMsg(quotaMessage || DAILY_FREE_USED_MESSAGE)
+        return
+      }
+      if (!confirmPaid) {
+        setErrorMsg('다른 결과로 다시 생성하려면 1냥 사용에 동의해야 합니다.')
+        return
+      }
+    }
+    if (inFlightRef.current) return
+    inFlightRef.current = true
+    if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID()
+    setErrorMsg(null)
     setStage('loading')
     setResult({})
     setManse(null)
@@ -288,11 +333,26 @@ export default function DailyPage() {
       const res = await fetch('/api/daily', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, calType, characterId: selectedChar.id }),
+        body: JSON.stringify({
+          ...form,
+          characterId: selectedChar.id,
+          requestId: requestIdRef.current,
+          confirmPaidRegenerate: paymentsEnabled && !canGenerateFree && confirmPaid,
+        }),
       })
       const gate = await applyGenerateGate(res, '/daily')
-      if (gate !== 'ok') {
+      if (gate === 'notice' || gate === 'login') {
         setStage('input')
+        return
+      }
+      if (gate !== 'ok') {
+        const err = await res.json().catch(() => ({}))
+        setErrorMsg(typeof err.error === 'string' ? err.error : `서버 오류(${res.status})`)
+        if (res.status !== 500) requestIdRef.current = null
+        if (res.status === 403 || res.status === 409) {
+          setCanGenerateFree(false)
+        }
+        setStage(hasCachedResult ? 'result' : 'input')
         return
       }
       if (!res.body) return
@@ -324,10 +384,15 @@ export default function DailyPage() {
           } catch {}
         }
       }
+      setCanGenerateFree(false)
+      setHasCachedResult(true)
+      requestIdRef.current = null
       setStage('result')
     } catch (e) {
       console.error(e)
       setStage('input')
+    } finally {
+      inFlightRef.current = false
     }
   }
 
@@ -447,7 +512,7 @@ export default function DailyPage() {
 
           <button onClick={() => setStage('input')}
             className="w-full mt-6 py-3 rounded-2xl text-sm text-gray-400 border border-gray-800">
-            다시 보기
+            입력 화면으로
           </button>
           <Link href="/" className="block mt-3 text-center text-gray-500 text-sm">홈으로</Link>
         </div>
@@ -465,7 +530,7 @@ export default function DailyPage() {
           <Link href="/" className="text-gray-400 text-xl">←</Link>
           <div>
             <h1 className="text-xl font-bold">⭐ 일일 운세</h1>
-            <p className="text-gray-500 text-xs mt-0.5">{todayStr} · 무료</p>
+            <p className="text-gray-500 text-xs mt-0.5">{todayStr} · {servicePriceLine('daily')}</p>
           </div>
         </div>
 
@@ -492,7 +557,27 @@ export default function DailyPage() {
           </div>
         </div>
 
-        {/* 입력 폼 */}
+        {hasCachedResult && (
+          <div className="mb-4 rounded-2xl border border-gray-800 bg-[#111118] p-4">
+            <p className="text-sm text-gray-300 mb-3">{quotaMessage || DAILY_FREE_USED_MESSAGE}</p>
+            <button onClick={() => setStage('result')}
+              className="w-full py-3 rounded-2xl text-sm font-bold text-white"
+              style={{ background: selectedChar.color }}>
+              오늘 결과 다시 보기
+            </button>
+          </div>
+        )}
+
+        {status !== 'authenticated' && status !== 'loading' && (
+          <div className="mb-4 rounded-2xl border border-gray-800 bg-[#111118] p-4">
+            <p className="text-sm text-gray-300 mb-3">로그인하면 하루에 한 번 오늘의 운세를 볼 수 있어요.</p>
+            <button onClick={() => signIn('kakao', { callbackUrl: '/daily' })}
+              className="w-full py-3 rounded-2xl font-bold text-sm text-black"
+              style={{ background: '#FEE500' }}>
+              카카오로 로그인
+            </button>
+          </div>
+        )}
         <div className="bg-[#111118] rounded-2xl p-4 mb-4 border border-gray-800 space-y-3">
           <p className="text-xs font-medium" style={{ color: selectedChar.color }}>✨ 오늘 하루의 운세를 확인하세요</p>
 
@@ -504,74 +589,54 @@ export default function DailyPage() {
               className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none" />
           </div>
 
-          {/* 생년월일 */}
-          <div>
-            <label className="text-xs text-gray-400 mb-1.5 block">생년월일</label>
-            <div className="flex gap-2 mb-2">
-              {(['solar','lunar'] as const).map(t => (
-                <button key={t} onClick={() => setCalType(t)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                  style={calType === t
-                    ? { background: selectedChar.color, color: 'white' }
-                    : { background: '#1F2937', color: '#9CA3AF', border: '1px solid #374151' }}>
-                  {t === 'solar' ? '양력' : '음력'}
-                </button>
-              ))}
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <input
-                type="number" placeholder="출생연도" value={form.year}
-                min={1920} max={2010}
-                onChange={e => setForm(f => ({ ...f, year: e.target.value }))}
-                className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none"
-              />
-              <select value={form.month} onChange={e => setForm(f => ({ ...f, month: e.target.value }))}
-                className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none">
-                {MONTHS.map(m => <option key={m} value={m}>{m}월</option>)}
-              </select>
-              <select value={form.day} onChange={e => setForm(f => ({ ...f, day: e.target.value }))}
-                className="bg-gray-900 border border-gray-700 rounded-xl px-2 py-2.5 text-sm text-white focus:outline-none">
-                {DAYS.map(d => <option key={d} value={d}>{d}일</option>)}
-              </select>
-            </div>
-          </div>
-
-          {/* 태어난 시간 */}
-          <div>
-            <label className="text-xs text-gray-400 mb-1.5 block">
-              태어난 시간 <span className="text-gray-600">(선택 · 정확할수록 좋아요)</span>
-            </label>
-            <input type="time" value={form.hour}
-              onChange={e => setForm(f => ({ ...f, hour: e.target.value }))}
-              className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none"
-              style={{ colorScheme: 'dark' }} />
-            <p className="text-xs text-gray-600 mt-1">모르면 비워두세요</p>
-          </div>
-
-          {/* 성별 */}
-          <div>
-            <label className="text-xs text-gray-400 mb-1.5 block">성별</label>
-            <div className="grid grid-cols-2 gap-2">
-              {['male','female'].map(g => (
-                <button key={g} onClick={() => setForm(f => ({ ...f, gender: g }))}
-                  className="py-2.5 rounded-xl text-sm font-medium transition-all"
-                  style={form.gender === g
-                    ? { background: selectedChar.color, color: 'white' }
-                    : { background: '#111827', color: '#9CA3AF', border: '1px solid #374151' }}>
-                  {g === 'male' ? '남성' : '여성'}
-                </button>
-              ))}
-            </div>
-          </div>
+          <BirthProfileFields
+            value={form}
+            onChange={patch => setForm(f => ({ ...f, ...patch }))}
+            accentColor={selectedChar.color}
+            gender={form.gender}
+            onGenderChange={g => setForm(f => ({ ...f, gender: g }))}
+          />
+          <MaritalStatusField
+            value={form.maritalStatus}
+            onChange={m => setForm(f => ({ ...f, maritalStatus: m }))}
+            accentColor={selectedChar.color}
+          />
+          <OccupationField
+            value={form.occupation}
+            onChange={o => setForm(f => ({ ...f, occupation: o }))}
+            accentColor={selectedChar.color}
+          />
         </div>
 
-        <button onClick={handleSubmit} disabled={!form.name}
+        {errorMsg && (
+          <p className="mb-3 text-xs text-red-400">{errorMsg}</p>
+        )}
+        {!canGenerateFree && !paymentsEnabled && !hasCachedResult && (
+          <p className="mb-3 text-xs text-amber-300">{quotaMessage || DAILY_FREE_USED_MESSAGE}</p>
+        )}
+        {paymentsEnabled && !canGenerateFree && (
+          <label className="mb-3 flex items-start gap-2 text-sm text-gray-200">
+            <input type="checkbox" checked={confirmPaid} onChange={e => setConfirmPaid(e.target.checked)}
+              className="mt-0.5 accent-yellow-500" />
+            <span>1냥을 사용하여 다른 결과로 다시 생성합니다.</span>
+          </label>
+        )}
+        <button onClick={handleSubmit} disabled={
+          !form.name
+          || status !== 'authenticated'
+          || (!canGenerateFree && !paymentsEnabled)
+          || (!canGenerateFree && paymentsEnabled && !confirmPaid)
+        }
           className="w-full py-4 rounded-2xl font-bold text-base text-white disabled:opacity-40 disabled:cursor-not-allowed"
           style={{ background: `linear-gradient(135deg, ${selectedChar.color}, ${selectedChar.color}bb)` }}>
-          {selectedChar.name}에게 오늘 운세 묻기 ✨
+          {status !== 'authenticated'
+            ? '로그인 후 오늘 운세 보기'
+            : !canGenerateFree && !paymentsEnabled
+              ? '오늘은 이용을 완료했어요'
+              : `${selectedChar.name}에게 오늘 운세 묻기 ✨`}
         </button>
         <ContentNoticeShortHint />
-        <p className="text-center text-gray-600 text-xs mt-2">매일 무료 · 만세력 기반 분석</p>
+        <p className="text-center text-gray-600 text-xs mt-2">만세력 기반 분석 · {servicePriceLine('daily')}</p>
       </div>
     </div>
   )

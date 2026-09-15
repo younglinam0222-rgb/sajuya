@@ -203,7 +203,7 @@ export default function StoragePage() {
               style={{ background: 'linear-gradient(135deg, #8B5CF6, #EC4899)' }}>
               <span className="text-2xl">⭐</span>
             </div>
-            <span className="text-xs text-purple-400 mt-0.5 font-medium">무료운세</span>
+            <span className="text-xs text-purple-400 mt-0.5 font-medium">운세</span>
           </Link>
           <Link href="/storage" className="flex flex-col items-center gap-0.5 py-2 px-3">
             <span className="text-xl">📦</span>

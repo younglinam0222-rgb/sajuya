@@ -12,48 +12,98 @@ import {
   collectGeneratedText,
   formatManseForPrompt,
   generationClock,
-  hourInputToHm,
-  kstParts,
   SHARED_INTERP_GUARDS,
 } from '@/lib/sajuCalc'
+import { birthPromptLine, resolveBirthFromRequest } from '@/lib/birthInput'
+import { normalizeMaritalStatus, resolveOccupation } from '@/lib/profileOptions'
+import { buildServiceContextPrompt } from '@/lib/serviceContextPrompt'
+import { isPaymentsEnabled } from '@/lib/paymentFlags'
+import { createSupabaseDailyQuotaStore } from '@/lib/dailyQuotaSupabase'
+import {
+  DAILY_LOGIN_REQUIRED_MESSAGE,
+  completeDailyGeneration,
+  failDailyGeneration,
+  getDailyQuotaStatus,
+  reserveDailyGeneration,
+  type DailyUsageRow,
+} from '@/lib/dailyQuota'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
-// 한국 시간(KST) 기준 오늘 날짜 (YYYY-MM-DD)
-function getTodayDateKST() {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }))
-  const y = now.getFullYear()
-  const m = String(now.getMonth() + 1).padStart(2, '0')
-  const d = String(now.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
+function sessionUserId(session: unknown): string | null {
+  const user = (session as { user?: { id?: string } } | null)?.user
+  return user?.id ?? null
 }
 
-// ✅ 추가: 로그인한 유저의 "오늘자 캐시된 일일운세"와 "마지막 입력 프로필"을 조회
-// 로그인 안 한 사용자는 이 라우트를 호출하지 않으므로 기존 무료 이용 흐름은 그대로 유지됨
+function quotaErrorStatus(code: string): number {
+  if (code === 'IN_PROGRESS') return 409
+  if (code === 'INVALID_REQUEST') return 400
+  return 403
+}
+
+function sseFromResult(manse: unknown, parsed: unknown) {
+  const encoder = new TextEncoder()
+  const readable = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode(
+        `data: ${JSON.stringify({ type: 'manse', data: manse })}\n\n`,
+      ))
+      const jsonStr = JSON.stringify(parsed)
+      const chunkSize = 200
+      for (let i = 0; i < jsonStr.length; i += chunkSize) {
+        controller.enqueue(encoder.encode(
+          `data: ${JSON.stringify({ text: jsonStr.slice(i, i + chunkSize) })}\n\n`,
+        ))
+      }
+      controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+      controller.close()
+    },
+  })
+  return new NextResponse(readable, {
+    headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' },
+  })
+}
+
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user) {
-      return NextResponse.json({ cached: null, birthProfile: null })
+    const userId = sessionUserId(session)
+    if (!userId) {
+      return NextResponse.json({
+        cached: null,
+        birthProfile: null,
+        quota: null,
+        paymentsEnabled: isPaymentsEnabled(),
+      })
     }
-    const userId = (session.user as { id?: string }).id
-    if (!userId) return NextResponse.json({ cached: null, birthProfile: null })
 
+    const store = createSupabaseDailyQuotaStore()
     const supabase = createServerSupabase()
-    const today = getTodayDateKST()
-
-    const [{ data: cached }, { data: userRow }] = await Promise.all([
-      supabase.from('daily_readings').select('*').eq('user_id', userId).eq('reading_date', today).maybeSingle(),
+    const now = new Date()
+    const [quota, userRow] = await Promise.all([
+      getDailyQuotaStatus(store, userId, now),
       supabase.from('users').select('birth_profile').eq('id', userId).maybeSingle(),
     ])
 
     return NextResponse.json({
-      cached: cached ? { manse: cached.manse_data, result: cached.result, characterId: cached.character_id } : null,
-      birthProfile: userRow?.birth_profile ?? null,
+      cached: quota.cached
+        ? { manse: quota.cached.manse, result: quota.cached.result, characterId: quota.cached.characterId }
+        : null,
+      birthProfile: userRow.data?.birth_profile ?? null,
+      quota: {
+        usageDate: quota.usageDate,
+        freeStatus: quota.freeStatus,
+        canGenerateFree: quota.canGenerateFree,
+        hasCachedResult: quota.hasCachedResult,
+        message: quota.canGenerateFree ? null : (quota.freeStatus === 'pending'
+          ? '오늘의 운세를 이미 생성 중이에요. 잠시 후 다시 확인해주세요.'
+          : '오늘 무료 이용을 완료했어요. 기존 결과를 확인하거나 내일 다시 이용해주세요'),
+      },
+      paymentsEnabled: isPaymentsEnabled(),
     })
   } catch (e) {
     console.error('[사주궁] 일일운세 조회 오류:', e)
-    return NextResponse.json({ cached: null, birthProfile: null })
+    return NextResponse.json({ cached: null, birthProfile: null, quota: null, paymentsEnabled: isPaymentsEnabled() })
   }
 }
 
@@ -65,23 +115,59 @@ const CHARACTER_VOICE: Record<string, string> = {
 }
 
 export async function POST(req: NextRequest) {
+  let reservedUsage: DailyUsageRow | null = null
+  let store: ReturnType<typeof createSupabaseDailyQuotaStore> | null = null
   try {
     const csrf = rejectCrossSiteCookieMutation(req)
     if (csrf) return csrf
-    const { name, year, month, day, hour, gender, characterId, calType, longitude, birthPlace } = await req.json()
     const notice = await requireContentNotice()
     if (!notice.ok) return notice.response
     const userId = notice.userId
+    if (!userId) {
+      return NextResponse.json({ error: DAILY_LOGIN_REQUIRED_MESSAGE }, { status: 401 })
+    }
 
-    const clock = generationClock()
-    const todayStr  = `${clock.currentYear}년 ${clock.currentMonth}월 ${clock.currentDay}일`
+    const body = await req.json()
+    const { name, gender, characterId } = body
+    const birth = resolveBirthFromRequest(body)
+    if ('error' in birth) return NextResponse.json({ error: birth.error }, { status: 400 })
+    const marital = normalizeMaritalStatus(body.maritalStatus)
+    const occupation = resolveOccupation(body.occupation) || '미입력'
+
+    const now = new Date()
+    store = createSupabaseDailyQuotaStore()
+    const reserved = await reserveDailyGeneration(store, {
+      userId,
+      requestId: body.requestId,
+      now,
+      confirmPaidRegenerate: body.confirmPaidRegenerate,
+      paymentsEnabled: isPaymentsEnabled(),
+    })
+    if (!reserved.ok) {
+      return NextResponse.json({ error: reserved.error, code: reserved.code }, { status: quotaErrorStatus(reserved.code) })
+    }
+    reservedUsage = reserved.usage
+
+    if (reserved.reused) {
+      const cached = reserved.usage.result && reserved.usage.manse_data
+        ? { manse: reserved.usage.manse_data, result: reserved.usage.result, characterId: reserved.usage.character_id }
+        : await store.getFreeReading(userId, reserved.usage.usage_date)
+      if (!cached) {
+        return NextResponse.json({ error: '저장된 오늘의 운세를 찾지 못했어요. 잠시 후 다시 확인해주세요.' }, { status: 409 })
+      }
+      return sseFromResult(
+        cached.manse,
+        cached.result,
+      )
+    }
+
+    const clock = generationClock(now)
+    const todayStr = `${clock.currentYear}년 ${clock.currentMonth}월 ${clock.currentDay}일`
     const genderStr = gender === 'male' ? '남성' : '여성'
-    const calTypeStr = calType === 'lunar' ? '음력' : '양력'
-    const age       = clock.currentYear - parseInt(year) + 1
+    const age = clock.currentYear - birth.solarYear + 1
 
-    const manse      = calcManse(parseInt(year), parseInt(month), parseInt(day), hourInputToHm(hour), typeof longitude === 'number' ? longitude : undefined)
-    const todayKst = kstParts()
-    const todayPillar = calcDayPillar(todayKst.year, todayKst.month, todayKst.day)
+    const manse = calcManse(birth.solarYear, birth.solarMonth, birth.solarDay, birth.hourMinute, birth.longitude)
+    const todayPillar = calcDayPillar(clock.currentYear, clock.currentMonth, clock.currentDay)
 
     const voice = CHARACTER_VOICE[characterId] ?? CHARACTER_VOICE['doRyeong']
 
@@ -91,14 +177,22 @@ ${voice}
 오늘은 ${todayStr}이야. 생성 기준일 ${clock.generatedDateKST} (Asia/Seoul).
 오늘 날짜 일주: ${todayPillar.stem}${todayPillar.branch} (${todayPillar.stemKr}${todayPillar.branchKr})
 
-상담자: ${name} (${year}년 ${month}월 ${day}일생 ${calTypeStr}, ${genderStr}, ${age}세)
+상담자: ${name} (${genderStr}, ${age}세, ${manse.animal}띠)
+${birthPromptLine(birth)}
 ${formatManseForPrompt(manse, '상담자')}
 ${SHARED_INTERP_GUARDS}
+
+${buildServiceContextPrompt({ service: 'daily', maritalStatus: marital, occupation })}
 
 오늘 날짜 기운과 이 사람 사주 기운이 어떻게 만나는지 분석해서 일일운세를 줘.
 캐릭터 말투 100% 유지. 어려운 명리 용어 절대 금지. 20-30대 말로.
 오행 개수는 위에 준 숫자만 인용하고 다시 세지 마라.
 점수는 해석용 감각이지 계산표가 아니다. 계산된 사실처럼 단정하지 마라.
+- "~가 아니라 ~야" / "봐봐, ~잖아" / "솔직히 ~" 패턴 섞어서
+- 판결하듯이 써. 읽으면 "맞다" 싶게
+- 각 섹션 3~4문장. 구체적으로.
+- 연애운 항목은 위 결혼 상태에 맞게만 쓰고, 대운·택일용 연애 문구를 복붙하지 마라.
+- 재물운은 입력된 직업(${occupation})의 오늘 현장 기준으로.
 
 반드시 아래 JSON만 출력. 마크다운 없이. 점수는 0~100 사이 정수.
 
@@ -107,7 +201,7 @@ ${SHARED_INTERP_GUARDS}
   "overall_score": 75,
   "money": "재물운 2~3문장",
   "money_score": 70,
-  "love": "연애운 2~3문장",
+  "love": "관계/인연 운 2~3문장 (결혼 상태에 맞게)",
   "love_score": 80,
   "health": "건강운 2~3문장",
   "health_score": 65,
@@ -154,54 +248,39 @@ ${SHARED_INTERP_GUARDS}
     }
     if (!parsed) throw lastErr instanceof Error ? lastErr : new Error('일일운세 생성 실패')
 
-    // ✅ 추가: 로그인 사용자면 오늘자 결과 + 마지막 입력 프로필을 저장 (다음 방문 시 재사용)
-    if (userId) {
+    const manseWithToday = { ...manse, todayPillar }
+    if (!store || !reservedUsage) throw new Error('quota store missing')
+    await completeDailyGeneration(store, reservedUsage, {
+      characterId: characterId || 'doRyeong',
+      manse: manseWithToday,
+      result: parsed,
+    }, now)
+
+    if (reservedUsage.kind === 'free') {
       try {
         const supabase = createServerSupabase()
-        const today = getTodayDateKST()
-        const manseWithToday = { ...manse, todayPillar }
-        await Promise.all([
-          supabase.from('daily_readings').upsert({
-            user_id: userId,
-            reading_date: today,
-            character_id: characterId,
-            manse_data: manseWithToday,
-            result: parsed,
-          }, { onConflict: 'user_id,reading_date' }),
-          supabase.from('users').update({
-            birth_profile: { name, year, month, day, hour, gender, calType, characterId, birthPlace },
-          }).eq('id', userId),
-        ])
+        await supabase.from('users').update({
+          birth_profile: {
+            name, gender, characterId,
+            year: body.year, month: body.month, day: body.day, hour: body.hour,
+            calType: body.calType, isLeapMonth: body.isLeapMonth,
+            timeMode: body.timeMode, timePeriod: body.timePeriod, birthPlace: body.birthPlace,
+            maritalStatus: marital, occupation,
+          },
+        }).eq('id', userId)
       } catch (saveErr) {
-        // 저장 실패해도 결과 조회 자체는 그대로 진행 (저장은 부가 기능)
-        console.error('[사주궁] 일일운세 저장 실패:', saveErr)
+        console.error('[사주궁] 일일운세 프로필 저장 실패:', saveErr)
       }
     }
 
-    // ── SSE로 만세력 + 결과 전송 ────────────────────────
-    const encoder = new TextEncoder()
-    const readable = new ReadableStream({
-      start(controller) {
-        controller.enqueue(encoder.encode(
-          `data: ${JSON.stringify({ type: 'manse', data: { ...manse, todayPillar } })}\n\n`
-        ))
-        const jsonStr = JSON.stringify(parsed)
-        const chunkSize = 200
-        for (let i = 0; i < jsonStr.length; i += chunkSize) {
-          controller.enqueue(encoder.encode(
-            `data: ${JSON.stringify({ text: jsonStr.slice(i, i + chunkSize) })}\n\n`
-          ))
-        }
-        controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-        controller.close()
-      },
-    })
-
-    return new NextResponse(readable, {
-      headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' },
-    })
+    return sseFromResult(manseWithToday, parsed)
   } catch (e) {
     console.error('[일일운세] 서버 오류:', e)
+    if (store && reservedUsage) {
+      try { await failDailyGeneration(store, reservedUsage) } catch (failErr) {
+        console.error('[일일운세] 실패 처리 오류:', failErr)
+      }
+    }
     return NextResponse.json({ error: '서버 오류' }, { status: 500 })
   }
 }

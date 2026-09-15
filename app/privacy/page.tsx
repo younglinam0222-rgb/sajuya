@@ -76,6 +76,7 @@ export default function PrivacyPage() {
         </div>
         <Footer clearance={false} />
       </div>
+      <Footer />
     </div>
   )
 }

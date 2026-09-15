@@ -8,9 +8,11 @@ import {
   formatManseForPrompt,
   formatSeunForPrompt,
   generationClock,
-  hourInputToHm,
   periodGuidance,
 } from '@/lib/sajuCalc'
+import { birthPromptLine, resolveBirthFromRequest } from '@/lib/birthInput'
+import { normalizeMaritalStatus, resolveOccupation } from '@/lib/profileOptions'
+import { buildServiceContextPrompt } from '@/lib/serviceContextPrompt'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -20,17 +22,23 @@ export async function POST(req: NextRequest) {
     if (csrf) return csrf
     const notice = await requireContentNotice()
     if (!notice.ok) return notice.response
-    const { name, year, month, day, hour, gender } = await req.json()
+    const body = await req.json()
+    const { name, gender } = body
+    const birth = resolveBirthFromRequest(body)
+    if ('error' in birth) return NextResponse.json({ error: birth.error }, { status: 400 })
+    const marital = normalizeMaritalStatus(body.maritalStatus)
+    const occupation = resolveOccupation(body.occupation) || '미입력'
 
     const clock = generationClock()
-    const manse = calcManse(parseInt(year), parseInt(month), parseInt(day), hourInputToHm(hour))
-    const age = clock.currentYear - parseInt(year) + 1
+    const manse = calcManse(birth.solarYear, birth.solarMonth, birth.solarDay, birth.hourMinute, birth.longitude)
+    const age = clock.currentYear - birth.solarYear + 1
     const genderStr = gender === 'male' ? '남성' : '여성'
     const thisYearSeun = formatSeunForPrompt(manse.dayPillar.stemIdx, clock.currentYear)
 
     const prompt = `사주명리학 대운 분석을 해줘.
 
-상담자: ${name} (${year}년 ${month}월 ${day}일생, ${genderStr}, 현재 ${age}세)
+상담자: ${name} (${genderStr}, 현재 ${age}세)
+${birthPromptLine(birth)}
 ${formatManseForPrompt(manse, '상담자')}
 올해 세운(일간 기준): ${thisYearSeun.year} ${thisYearSeun.ganzhi} (${thisYearSeun.sipsin})
 ${periodGuidance(clock)}
@@ -41,13 +49,18 @@ ${periodGuidance(clock)}
 질환·증상을 겪는다고 단정하거나 치료처럼 안내하지 마라.
 ${SHARED_INTERP_GUARDS}
 
+${buildServiceContextPrompt({ service: 'daeun', maritalStatus: marital, occupation })}
+
+인연·관계 대운은 위 결혼 상태에 맞게만 쓰고, 오늘의 운세/택일용 연애 문구를 복붙하지 마라.
+직업·재물 대운은 실제 직업(${occupation}) 사례로.
+
 반드시 아래 JSON 형식으로만 반환. 마크다운 코드블록 절대 금지.
 
 {
   "current": "현재 흐름 분석 (4~5문장, 원국·세운 기준으로. 없는 대운 나이를 만들지 말 것)",
   "next10": "향후 흐름 (3~4문장, 구체 나이를 계산된 사실처럼 쓰지 말 것)",
   "career": "직업·재물 흐름 (3~4문장)",
-  "love": "인연·관계 흐름 (3~4문장)",
+  "love": "인연·관계 흐름 (3~4문장, 결혼 상태에 맞게)",
   "health": "생활 리듬 조언 (3~4문장, 질환 단정 금지)",
   "warning": "⚠️ 조심할 것들 (2~3문장)",
   "advice": "신령의 핵심 조언 (2문장)"

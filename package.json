@@ -11,7 +11,10 @@
     "test:sipsin": "npx --yes tsx scripts/test-sipsin.ts",
     "test:charge": "npx --yes tsx scripts/test-charge-packages.ts",
     "test:reservation": "npx --yes tsx scripts/test-reservation.ts",
-    "test:share": "npx --yes tsx scripts/test-reading-share.ts"
+    "test:share": "npx --yes tsx scripts/test-reading-share.ts",
+    "test:daily-quota": "npx --yes tsx scripts/test-daily-quota.ts",
+    "test:fortune-inputs": "npx --yes tsx scripts/test-fortune-inputs.ts",
+    "test:saju-access": "npx --yes tsx scripts/test-saju-access.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",

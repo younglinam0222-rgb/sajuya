@@ -24,6 +24,7 @@ export default function PersonalQuestionCard({
   question,
   answer,
   charColor,
+  locked = false,
   retrying = false,
   retryError = '',
   onRetry,
@@ -31,6 +32,7 @@ export default function PersonalQuestionCard({
   question: string
   answer: string
   charColor: string
+  locked?: boolean
   retrying?: boolean
   retryError?: string
   onRetry?: () => void
@@ -43,9 +45,12 @@ export default function PersonalQuestionCard({
       <div className="flex items-center gap-2 mb-2">
         <span>🔮</span>
         <span className="font-bold text-sm" style={{ color: charColor }}>족집게 질문</span>
+        {locked && <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-800 text-gray-400">잠김</span>}
       </div>
       <p className="text-sm text-white font-medium mb-3">“{sanitizeText(q)}”</p>
-      {answer.trim() ? (
+      {locked ? (
+        <p className="text-sm text-gray-400">전체보기를 구매하면 답변을 확인할 수 있어요</p>
+      ) : answer.trim() ? (
         <FormattedAnswer text={answer} highlightColor={charColor} />
       ) : (
         <div className="space-y-3">

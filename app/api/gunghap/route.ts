@@ -7,9 +7,11 @@ import {
   calcManse,
   formatManseForPrompt,
   generationClock,
-  hourInputToHm,
   periodGuidance,
 } from '@/lib/sajuCalc'
+import { birthPromptLine, pickPrefixedBirth, resolveBirthFromRequest } from '@/lib/birthInput'
+import { normalizeMaritalStatus, normalizeRelationship, resolveOccupation } from '@/lib/profileOptions'
+import { buildServiceContextPrompt } from '@/lib/serviceContextPrompt'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -19,26 +21,38 @@ export async function POST(req: NextRequest) {
     if (csrf) return csrf
     const notice = await requireContentNotice()
     if (!notice.ok) return notice.response
-    const {
-      name1, year1, month1, day1, hour1, gender1,
-      name2, year2, month2, day2, hour2, gender2,
-      relationship,
-    } = await req.json()
+    const body = await req.json()
+
+    const { name1, gender1, name2, gender2 } = body
+    const birth1 = resolveBirthFromRequest(pickPrefixedBirth(body, '1'))
+    const birth2 = resolveBirthFromRequest(pickPrefixedBirth(body, '2'))
+    if ('error' in birth1) return NextResponse.json({ error: `질문자: ${birth1.error}` }, { status: 400 })
+    if ('error' in birth2) return NextResponse.json({ error: `상대방: ${birth2.error}` }, { status: 400 })
+
+    const relationship = normalizeRelationship(body.relationship) ?? '기타·미정'
+    const marital1 = normalizeMaritalStatus(body.maritalStatus1)
+    const marital2 = normalizeMaritalStatus(body.maritalStatus2)
+    const occupation1 = resolveOccupation(body.occupation1) || '미입력'
+    const occupation2 = resolveOccupation(body.occupation2) || '미입력'
 
     const clock = generationClock()
-    const manse1 = calcManse(parseInt(year1), parseInt(month1), parseInt(day1), hourInputToHm(hour1))
-    const manse2 = calcManse(parseInt(year2), parseInt(month2), parseInt(day2), hourInputToHm(hour2))
+    const manse1 = calcManse(birth1.solarYear, birth1.solarMonth, birth1.solarDay, birth1.hourMinute, birth1.longitude)
+    const manse2 = calcManse(birth2.solarYear, birth2.solarMonth, birth2.solarDay, birth2.hourMinute, birth2.longitude)
     const gStr1 = gender1 === 'male' ? '남성' : '여성'
     const gStr2 = gender2 === 'male' ? '남성' : '여성'
     const relation = typeof relationship === 'string' && relationship.trim() ? relationship.trim() : '미입력'
 
     const prompt = `두 사람의 궁합을 사주명리학으로 심층 분석해줘.
 
-사람1: ${name1} (${year1}년 ${month1}월 ${day1}일생, ${gStr1})
+사람1(질문자): ${name1} (${gStr1})
+${birthPromptLine(birth1)}
 ${formatManseForPrompt(manse1, '사람1')}
+결혼 상태: ${marital1 ?? '미입력'} / 직업: ${occupation1}
 
-사람2: ${name2} (${year2}년 ${month2}월 ${day2}일생, ${gStr2})
+사람2(상대): ${name2} (${gStr2})
+${birthPromptLine(birth2)}
 ${formatManseForPrompt(manse2, '사람2')}
+결혼 상태: ${marital2 ?? '미입력'} / 직업: ${occupation2}
 
 입력된 관계: ${relation}
 두 사람 모두 기혼처럼 보여도, 입력된 관계가 배우자가 아니면 서로 배우자라고 추정하지 마라.
@@ -47,6 +61,17 @@ ${periodGuidance(clock)}
 ${SHARED_INTERP_GUARDS}
 점수는 해석용 감각이지 계산표가 아니다. 계산된 만점처럼 단정하지 마라.
 
+${buildServiceContextPrompt({
+  service: 'gunghap',
+  maritalStatus: marital1,
+  occupation: occupation1,
+  relationship,
+  partnerMaritalStatus: marital2,
+  partnerOccupation: occupation2,
+})}
+
+love 항목은 선택한 관계(${relationship}) 기준으로 풀어라. 연인이 아니면 연애 케미만 전제하지 마라.
+
 반드시 아래 JSON 형식으로만 반환. 마크다운 코드블록 절대 금지.
 
 {
@@ -54,7 +79,7 @@ ${SHARED_INTERP_GUARDS}
   "overall": "종합 궁합 (4~5문장, 두 사람의 전반적인 궁합과 에너지 흐름)",
   "love": "관계 궁합 (3~4문장, 입력된 관계 기준으로)",
   "personality": "성격 궁합 (3~4문장, 성격 차이와 보완점)",
-  "money": "재물 궁합 (2~3문장, 함께할 때 돈과 관련된 운)",
+  "money": "재물 궁합 (2~3문장, 두 사람 직업 현실을 반영)",
   "longterm": "장기 궁합 (3~4문장, 오래 함께할수록 어떻게 되는지)",
   "warning": "⚠️ 조심할 것들 (2~3문장, 두 사람이 주의해야 할 점)",
   "advice": "신령의 최종 조언 (2문장, 핵심 메시지)"
