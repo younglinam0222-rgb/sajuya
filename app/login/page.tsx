@@ -4,7 +4,7 @@ import Link from 'next/link'
 
 export default function LoginPage() {
   return (
-    <div className="bg-[#0a0a0a] min-h-screen text-white max-w-[430px] mx-auto flex flex-col">
+    <div className="palace-page palace-login bg-[#0a0a0a] min-h-screen text-white max-w-[430px] mx-auto flex flex-col">
       <div className="bg-[#111] px-4 py-3 flex items-center gap-3 border-b border-[#1a1a1a]">
         <Link href="/" className="text-lg">←</Link>
         <span className="font-black text-purple-400">로그인</span>
@@ -15,7 +15,7 @@ export default function LoginPage() {
         <div className="text-xl font-black mb-2">로그인하고 사주 저장하기</div>
         <div className="text-sm text-[#666] text-center mb-8 leading-relaxed">
           로그인하면 내 사주를 저장하고<br/>언제든 다시 볼 수 있어요!<br/>
-          <span className="text-yellow-400 font-bold">가입 즉시 🪙 1엽전 지급!</span>
+          <span className="text-yellow-400 font-bold">계정당 첫 일일운세 1회 무료</span>
         </div>
 
         <div className="w-full space-y-3">

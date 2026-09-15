@@ -4,7 +4,7 @@ import Link from 'next/link'
 
 export default function PrivacyPage() {
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
+    <div className="palace-page palace-privacy min-h-screen bg-[#0a0a0f] text-white pb-24">
       <div className="max-w-md mx-auto px-4 pt-6">
         <div className="flex items-center gap-3 mb-6">
           <Link href="/" className="text-gray-400 text-xl">←</Link>

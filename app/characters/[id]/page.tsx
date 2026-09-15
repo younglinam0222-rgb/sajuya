@@ -11,7 +11,7 @@ const CHARACTERS: Record<string, {
 }> = {
   baekhalma: {
     name: '건물주 백할매', title: '부와 운명의 관리자',
-    img: '/characters/baekhalma.png', color: '#8B5CF6', bg: '#1a1025',
+    img: '/characters/baekhalma.png', color: '#C6A66D', bg: '#1a1025',
     tags: ['재물운', '직업운', '팩폭'],
     desc: '수백 년을 살아온 건물주 백할매. 달콤한 말 대신 날카로운 진실을 던진다.',
     backstory: '조선시대 거상의 후손으로 태어나 수백 년간 인간들의 재물 흥망을 지켜본 신령. 지금은 강남 한복판 건물 꼭대기에 좌정하여 돈과 직업에 관한 운명을 관장한다. 비록 말투는 거칠지만, 그 독설 안에는 반드시 핵심 진실이 담겨있다.',
@@ -22,7 +22,7 @@ const CHARACTERS: Record<string, {
   },
   doRyeong: {
     name: '근본도령', title: '사주의 근본을 꿰뚫는 자',
-    img: '/characters/doryeong.png', color: '#3B82F6', bg: '#0f1525',
+    img: '/characters/doryeong.png', color: '#80A5C4', bg: '#0f1525',
     tags: ['사주분석', '성격', '종합운세'],
     desc: '조선 최고의 역술가 가문에서 태어난 근본도령. 형처럼 다정하게, 때로는 솔직하게.',
     backstory: '대대로 역술을 업으로 삼아온 가문의 막내. 딱딱한 역술서 대신 사람 냄새 나는 말로 운명을 설명하는 것을 좋아한다. 어려운 한자 대신 요즘 말로, 무서운 예언 대신 따뜻한 위로로 사주를 전달한다.',
@@ -33,7 +33,7 @@ const CHARACTERS: Record<string, {
   },
   gumiho: {
     name: '구미호 선생', title: '연애와 인연의 지배자',
-    img: '/characters/gumiho.png', color: '#EC4899', bg: '#1a0f18',
+    img: '/characters/gumiho.png', color: '#C18C9D', bg: '#1a0f18',
     tags: ['연애운', '궁합', '인연'],
     desc: '천 년을 살아온 구미호. 수천 번의 인연과 이별을 목격한 그녀는 사랑에 관한 한 모든 것을 안다.',
     backstory: '천 년간 수많은 인간의 사랑을 지켜보고 때로는 직접 체험한 구미호. 달콤한 사랑 이야기보다 냉정한 궁합의 진실을 더 좋아한다. 독설이지만 그 안에 진심 어린 조언이 있다.',
@@ -44,7 +44,7 @@ const CHARACTERS: Record<string, {
   },
   sinRyeong: {
     name: '무등산 신령님', title: '대운과 생애를 주관하는 자',
-    img: '/characters/sinryeong.png', color: '#10B981', bg: '#0a1a14',
+    img: '/characters/sinryeong.png', color: '#8BAB98', bg: '#0a1a14',
     tags: ['대운', '건강', '인생흐름'],
     desc: '무등산 깊은 곳에서 수천 년을 수련한 신령님. 인생의 큰 흐름과 대운을 꿰뚫어본다.',
     backstory: '무등산 정상 바위 아래서 수천 년을 수련한 도인. 짧은 말 한마디에 깊은 진리를 담는 것을 좋아한다. 조용히 앉아 인생의 큰 그림을 그려준다.',
@@ -63,7 +63,7 @@ export default function CharacterDetailPage() {
 
   if (!c) {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center text-white px-4">
+      <div className="palace-page palace-character-detail min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center text-white px-4">
         <p className="text-4xl mb-4">🔍</p>
         <p className="text-lg font-bold mb-2">신령을 찾을 수 없어요</p>
         <Link href="/characters" className="text-gray-400 text-sm mt-4">← 목록으로</Link>
@@ -72,7 +72,7 @@ export default function CharacterDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
+    <div className="palace-page palace-character-detail min-h-screen bg-[#0a0a0f] text-white pb-24">
       <div className="max-w-md mx-auto">
 
         {/* 뒤로가기 헤더 */}
@@ -149,7 +149,7 @@ export default function CharacterDetailPage() {
           {/* CTA */}
           <Link href="/saju"
             className="block w-full py-4 rounded-2xl text-center font-bold text-base text-white mb-3"
-            style={{ background: `linear-gradient(135deg, ${c.color}, ${c.color}99)` }}>
+            style={{ background: `linear-gradient(135deg, ${c.color}, ${c.color}99)`, color: '#17202a' }}>
             {c.name}에게 사주 물어보기 →
           </Link>
 

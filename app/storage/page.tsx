@@ -9,8 +9,10 @@ interface Reading {
   share_id: string
   character_id: string
   created_at: string
-  saju_data: string
+  saju_data: string | {form?: {name?:string}}
   is_paid: boolean
+  access_verified: boolean
+  product: string
 }
 
 const CHAR_NAMES: Record<string, string> = {
@@ -26,10 +28,10 @@ const CHAR_IMG: Record<string, string> = {
   sinRyeong: '/characters/sinryeong.png',
 }
 const CHAR_COLOR: Record<string, string> = {
-  baekhalma: '#8B5CF6',
-  doRyeong: '#3B82F6',
-  gumiho: '#EC4899',
-  sinRyeong: '#10B981',
+  baekhalma: '#C6A66D',
+  doRyeong: '#80A5C4',
+  gumiho: '#C18C9D',
+  sinRyeong: '#8BAB98',
 }
 
 export default function StoragePage() {
@@ -62,12 +64,12 @@ export default function StoragePage() {
     return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`
   }
 
-  const getFormInfo = (sajuData: string) => {
-    try { return JSON.parse(sajuData).form } catch { return null }
+  const getFormInfo = (sajuData: Reading['saju_data']) => {
+    try { return (typeof sajuData==='string'?JSON.parse(sajuData):sajuData).form } catch { return null }
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
+    <div className="palace-page palace-storage min-h-screen bg-[#0a0a0f] text-white pb-24">
       <div className="max-w-md mx-auto px-4 pt-6">
 
         {/* 헤더 */}
@@ -112,6 +114,7 @@ export default function StoragePage() {
           )}
         </div>
 
+        {session && <Link href="/payments" className="block mb-6 px-4 py-3 rounded-xl border border-gray-600 text-sm text-amber-100">결제 · 환불 내역 확인하기 →</Link>}
         {!session ? (
           <div className="text-center py-16">
             <p className="text-4xl mb-4">🔒</p>
@@ -119,7 +122,7 @@ export default function StoragePage() {
             <p className="text-gray-500 text-sm mb-6">로그인하면 내 풀이를 저장하고<br />언제든 다시 볼 수 있어요</p>
             <Link href="/login"
               className="inline-block px-6 py-3 rounded-2xl font-bold text-white"
-              style={{ background: 'linear-gradient(135deg, #8B5CF6, #EC4899)' }}>
+              style={{ background: 'linear-gradient(135deg, #C6A66D, #C18C9D)' }}>
               로그인하기
             </Link>
           </div>
@@ -135,7 +138,7 @@ export default function StoragePage() {
             <p className="text-gray-500 text-sm mb-6">사주를 풀이받으면 여기에 저장돼요</p>
             <Link href="/saju"
               className="inline-block px-6 py-3 rounded-2xl font-bold text-white"
-              style={{ background: 'linear-gradient(135deg, #8B5CF6, #EC4899)' }}>
+              style={{ background: 'linear-gradient(135deg, #C6A66D, #C18C9D)' }}>
               사주 풀이받기 →
             </Link>
           </div>
@@ -145,11 +148,11 @@ export default function StoragePage() {
             <div className="space-y-3">
               {readings.map(r => {
                 const form = getFormInfo(r.saju_data)
-                const color = CHAR_COLOR[r.character_id] ?? '#8B5CF6'
-                const img = CHAR_IMG[r.character_id]
-                const name = CHAR_NAMES[r.character_id] ?? r.character_id
+                const color = CHAR_COLOR[r.character_id] ?? '#C6A66D'
+                const img = CHAR_IMG[r.character_id] ?? `/characters/${r.character_id.toLowerCase()}.png`
+                const name = CHAR_NAMES[r.character_id] ?? CHAR_NAMES[r.character_id==='doryeong'?'doRyeong':'sinRyeong'] ?? r.character_id
                 return (
-                  <Link key={r.id} href={`/result/${r.share_id}`}>
+                  <Link key={r.id} href={r.product==='conversation'?`/chat?guide=${r.character_id.toLowerCase()}&source=${encodeURIComponent(form?.conversation?.sourceId||'')}`:r.product==='chat'?'/consultation':`/result/${r.share_id}`}>
                     <div className="rounded-2xl overflow-hidden bg-[#111118] border border-gray-800 hover:border-gray-600 transition-all flex">
                       <div className="w-20 flex-shrink-0 overflow-hidden relative">
                         {img && <img src={img} alt={name} className="w-full h-full object-cover object-top opacity-80" />}
@@ -158,11 +161,11 @@ export default function StoragePage() {
                       <div className="flex-1 p-3">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-xs font-bold" style={{ color }}>{name}</span>
-                          {r.is_paid && (
-                            <span className="text-xs px-1.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">유료</span>
+                          {r.access_verified && (r.is_paid || ['daily','conversation'].includes(r.product)) && (
+                            <span className="text-xs px-1.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">{r.is_paid?'유료':'무료 체험'}</span>
                           )}
                         </div>
-                        {form && <p className="text-white font-bold text-sm mb-0.5">{form.name}님의 사주</p>}
+                        {form && <p className="text-white font-bold text-sm mb-0.5">{form.name}님의 {r.product==='conversation'?'대화':r.product==='chat'?'선택형 상담':'사주'}</p>}
                         <p className="text-gray-500 text-xs">{formatDate(r.created_at)}</p>
                         <p className="text-xs mt-1.5 font-medium" style={{ color }}>다시 보기 →</p>
                       </div>
@@ -177,7 +180,7 @@ export default function StoragePage() {
         {session && readings.length > 0 && (
           <Link href="/saju"
             className="block w-full mt-6 py-4 rounded-2xl text-center font-bold text-white"
-            style={{ background: 'linear-gradient(135deg, #8B5CF6, #EC4899)' }}>
+            style={{ background: 'linear-gradient(135deg, #C6A66D, #C18C9D)' }}>
             + 새 풀이 받기
           </Link>
         )}
@@ -200,7 +203,7 @@ export default function StoragePage() {
           </Link>
           <Link href="/daily" className="flex flex-col items-center -mt-4">
             <div className="w-14 h-14 rounded-full flex items-center justify-center shadow-lg border-4 border-[#0a0a0f]"
-              style={{ background: 'linear-gradient(135deg, #8B5CF6, #EC4899)' }}>
+              style={{ background: 'linear-gradient(135deg, #C6A66D, #C18C9D)' }}>
               <span className="text-2xl">⭐</span>
             </div>
             <span className="text-xs text-purple-400 mt-0.5 font-medium">무료운세</span>

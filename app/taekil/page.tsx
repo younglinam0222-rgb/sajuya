@@ -1,7 +1,9 @@
 'use client'
+import AccessNotice from '@/app/components/AccessNotice'
 
 import { useState } from 'react'
 import Link from 'next/link'
+import ReadingProgress from '@/components/palace/ReadingProgress'
 
 type Stage = 'input' | 'loading' | 'result'
 
@@ -56,54 +58,31 @@ export default function TaekilPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, calType }),
       })
-      if (!res.body) return
+      if(!res.ok) { const d=await res.json(); throw new Error(d.error||'요청 실패') }
+      if (!res.body) throw new Error('응답이 없습니다.')
 
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-      let accumulated = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        const chunk = decoder.decode(value)
-        for (const line of chunk.split('\n')) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6)
-            if (data === '[DONE]') continue
-            try {
-              const parsed = JSON.parse(data)
-              if (parsed.text) {
-                accumulated += parsed.text
-                try {
-                  const clean = accumulated.replace(/```json/g, '').replace(/```/g, '').trim()
-                  const s = clean.indexOf('{')
-                  const e = clean.lastIndexOf('}')
-                  if (s !== -1 && e !== -1) setResult(JSON.parse(clean.slice(s, e + 1)))
-                } catch {}
-              }
-            } catch {}
-          }
-        }
+      // Server has already validated and saved the complete result. Buffering avoids split UTF-8/SSE frames.
+      const wire=await res.text()
+      let accumulated='', complete=false
+      for(const line of wire.split('\n')) {
+        if(!line.startsWith('data: ')) continue
+        const value=line.slice(6).trim()
+        if(value==='[DONE]'){complete=true;continue}
+        const event=JSON.parse(value)
+        if(event.type==='error') throw new Error('해석을 완료하지 못했습니다.')
+        if(typeof event.text==='string') accumulated+=event.text
       }
+      if(!complete) throw new Error('연결이 끊겼습니다. 같은 입력으로 다시 확인해주세요.')
+      const clean=accumulated.replace(/```json|```/g,'').trim()
+      setResult(JSON.parse(clean.slice(clean.indexOf('{'),clean.lastIndexOf('}')+1)))
       setStage('result')
     } catch (e) {
-      console.error(e)
+      sessionStorage.setItem('reading-error',e instanceof Error?e.message:'해석을 완료하지 못했습니다.')
       setStage('input')
     }
   }
 
-  if (stage === 'loading') {
-    return (
-      <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center text-white px-4">
-        <div className="text-5xl mb-4">🗓️</div>
-        <p className="text-lg font-bold mb-2">{form.name}님의 {form.eventType} 길일 선정 중...</p>
-        <p className="text-gray-400 text-sm mb-8">최고의 날을 찾고 있어요</p>
-        <div className="w-64 h-1.5 bg-gray-800 rounded-full overflow-hidden">
-          <div className="h-full bg-violet-500 rounded-full animate-pulse" style={{ width: '60%' }} />
-        </div>
-      </div>
-    )
-  }
+  if (stage === 'loading') return <div className="palace-loading-page"><ReadingProgress name={form.name} character="근본도령" image="/characters/doryeong.png"/></div>
 
   if (stage === 'result') {
     const bestDates = [
@@ -115,7 +94,7 @@ export default function TaekilPage() {
     const rankLabels = ['최길일 🥇', '2위 🥈', '3위 🥉']
 
     return (
-      <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
+      <div className="palace-page palace-taekil min-h-screen bg-[#0a0a0f] text-white pb-24">
         <div className="max-w-md mx-auto px-4 pt-6">
           <div className="flex items-center gap-3 mb-6">
             <button onClick={() => setStage('input')} className="text-gray-400 text-xl">←</button>
@@ -193,13 +172,14 @@ export default function TaekilPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
+    <div className="palace-page palace-taekil min-h-screen bg-[#0a0a0f] text-white pb-24">
+      <AccessNotice daily={false} />
       <div className="max-w-md mx-auto px-4 pt-6">
         <div className="flex items-center gap-3 mb-6">
           <Link href="/" className="text-gray-400 text-xl">←</Link>
           <div>
             <h1 className="text-xl font-bold">📅 택일</h1>
-            <p className="text-gray-500 text-xs mt-0.5">중요한 날의 길일 선정 · 일부 무료</p>
+            <p className="text-gray-500 text-xs mt-0.5">중요한 날의 길일 선정 · 1회 1냥</p>
           </div>
         </div>
 

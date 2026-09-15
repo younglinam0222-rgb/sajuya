@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { NYANG_PRICE, UNLOCK_PRICE } from '@/lib/pricing'
+import { NYANG_PRICE, THREE_NYANG_PRICE } from '@/lib/pricing'
 
 interface Package {
   id: string
@@ -32,9 +32,9 @@ const PACKAGES: Package[] = [
     tag: 'BEST',
     coins: 3,
     bonus: 0,
-    price: UNLOCK_PRICE,
+    price: THREE_NYANG_PRICE,
     highlight: true,
-    desc: `사주 풀이 3회 · 낱개보다 ${(NYANG_PRICE * 3 - UNLOCK_PRICE).toLocaleString()}원 저렴`,
+    desc: `사주 풀이 3회 · 낱개보다 ${(NYANG_PRICE * 3 - THREE_NYANG_PRICE).toLocaleString()}원 저렴`,
   },
 ]
 
@@ -46,6 +46,8 @@ interface YeopjeunShopProps {
 export default function YeopjeunShop({ onClose, currentBalance = 0 }: YeopjeunShopProps) {
   const [selected, setSelected] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [error,setError]=useState('')
+  const [agreed,setAgreed]=useState(false)
   const router = useRouter()
 
   const handlePurchase = async () => {
@@ -54,6 +56,7 @@ export default function YeopjeunShop({ onClose, currentBalance = 0 }: YeopjeunSh
     if (!pkg) return
 
     setLoading(true)
+    setError('')
     try {
       const orderId = `yeopjeun_${Date.now()}`
       const res = await fetch('/api/pay/ready', {
@@ -64,14 +67,16 @@ export default function YeopjeunShop({ onClose, currentBalance = 0 }: YeopjeunSh
           amount: pkg.price,
           orderName: `사주궁 엽전 ${pkg.coins + pkg.bonus}냥`,
           packageId: pkg.id,
+          agreed,
         }),
       })
       const data = await res.json()
+      if(!res.ok) throw new Error(data.error || '결제 준비 실패')
       if (data.checkoutUrl) {
         router.push(data.checkoutUrl)
       }
     } catch (e) {
-      console.error(e)
+      setError(e instanceof Error?e.message:'결제를 준비하지 못했습니다.')
     } finally {
       setLoading(false)
     }
@@ -83,7 +88,7 @@ export default function YeopjeunShop({ onClose, currentBalance = 0 }: YeopjeunSh
     <div className="fixed inset-0 bg-black/80 z-50 flex items-end justify-center"
       onClick={onClose}>
       <div
-        className="w-full max-w-md rounded-t-3xl border-t border-gray-800 overflow-hidden"
+        className="w-full max-w-md max-h-[calc(100dvh-16px)] rounded-t-3xl border-t border-gray-800 overflow-y-auto overscroll-contain"
         style={{ background: 'linear-gradient(180deg, #13111f 0%, #0a0a0f 100%)' }}
         onClick={e => e.stopPropagation()}>
 
@@ -133,7 +138,7 @@ export default function YeopjeunShop({ onClose, currentBalance = 0 }: YeopjeunSh
                       : 'linear-gradient(135deg, #1a1025, #13111f)'
                     : '#111118',
                   border: isSelected
-                    ? `2px solid ${pkg.highlight ? '#8B5CF6' : '#6D28D9'}`
+                    ? `2px solid ${pkg.highlight ? '#C6A66D' : '#6D28D9'}`
                     : '2px solid #1f1f2e',
                 }}>
 
@@ -142,9 +147,9 @@ export default function YeopjeunShop({ onClose, currentBalance = 0 }: YeopjeunSh
                 <div className="flex items-center gap-3">
                   {/* 선택 라디오 */}
                   <div className="w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0"
-                    style={{ borderColor: isSelected ? '#8B5CF6' : '#374151' }}>
+                    style={{ borderColor: isSelected ? '#C6A66D' : '#374151' }}>
                     {isSelected && (
-                      <div className="w-2.5 h-2.5 rounded-full" style={{ background: '#8B5CF6' }} />
+                      <div className="w-2.5 h-2.5 rounded-full" style={{ background: '#C6A66D' }} />
                     )}
                   </div>
 
@@ -162,7 +167,7 @@ export default function YeopjeunShop({ onClose, currentBalance = 0 }: YeopjeunSh
                       <span className="font-bold text-sm text-white">{pkg.name}</span>
                       {pkg.tag && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded-full font-black text-black flex-shrink-0"
-                          style={{ background: 'linear-gradient(135deg, #F59E0B, #EC4899)' }}>
+                          style={{ background: 'linear-gradient(135deg, #F59E0B, #C18C9D)' }}>
                           {pkg.tag}
                         </span>
                       )}
@@ -187,13 +192,15 @@ export default function YeopjeunShop({ onClose, currentBalance = 0 }: YeopjeunSh
 
         {/* 구매 버튼 */}
         <div className="px-5 pb-8 pt-2">
+          <label className="text-xs block mb-3"><input type="checkbox" checked={agreed} onChange={e=>setAgreed(e.target.checked)}/> 상품 내용과 <a href="/terms" className="underline">이용·환불 안내</a>를 확인했습니다.</label>
+          <p role="alert" className="text-red-300 mb-2">{error}</p>
           <button
             onClick={handlePurchase}
-            disabled={!selected || loading}
+            disabled={!selected || loading || !agreed}
             className="w-full py-4 rounded-2xl font-black text-base text-white transition-all disabled:opacity-40"
             style={{
               background: selected
-                ? 'linear-gradient(135deg, #8B5CF6, #EC4899)'
+                ? 'linear-gradient(135deg, #C6A66D, #C18C9D)'
                 : '#1f1f2e',
             }}>
             {loading

@@ -3,10 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/dev.mjs",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "preview:build": "vite build --config preview/vite.config.mts && node scripts/preview-routes.mjs",
+    "preview:dev": "vite --config preview/vite.config.mts",
+    "test:security": "node --experimental-strip-types tests/policies.mjs && node tests/launch-security.mjs",
+    "test:refunds": "node tests/refunds.mjs && node --experimental-strip-types tests/refund-engine.mjs",
+    "test:chat": "node --experimental-strip-types tests/chat.mjs",
+    "test:conversation": "node --experimental-strip-types tests/conversation.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",
@@ -23,7 +29,9 @@
     "uuid": "^14.0.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@tailwindcss/postcss": "^4",
+    "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -31,6 +39,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vite": "^8.3.0"
   }
 }

@@ -9,7 +9,7 @@ const CHARACTERS = [
     name: '건물주 백할매',
     title: '부와 운명의 관리자',
     img: '/characters/baekhalma.png',
-    color: '#8B5CF6',
+    color: '#C6A66D',
     bg: 'linear-gradient(135deg, #1a1025, #2d1b69)',
     tags: ['재물운', '직업운', '팩폭'],
     price: '1900원',
@@ -24,7 +24,7 @@ const CHARACTERS = [
     name: '근본도령',
     title: '사주의 근본을 꿰뚫는 자',
     img: '/characters/doryeong.png',
-    color: '#3B82F6',
+    color: '#80A5C4',
     bg: 'linear-gradient(135deg, #0f1525, #1e3a8a)',
     tags: ['사주분석', '성격', '종합운세'],
     price: '1900원',
@@ -39,7 +39,7 @@ const CHARACTERS = [
     name: '구미호 선생',
     title: '연애와 인연의 지배자',
     img: '/characters/gumiho.png',
-    color: '#EC4899',
+    color: '#C18C9D',
     bg: 'linear-gradient(135deg, #1a0f18, #831843)',
     tags: ['연애운', '궁합', '인연'],
     price: '1900원',
@@ -54,7 +54,7 @@ const CHARACTERS = [
     name: '무등산 신령님',
     title: '대운과 생애를 주관하는 자',
     img: '/characters/sinryeong.png',
-    color: '#10B981',
+    color: '#8BAB98',
     bg: 'linear-gradient(135deg, #0a1a14, #065f46)',
     tags: ['대운', '건강', '인생흐름'],
     price: '1900원',
@@ -70,7 +70,7 @@ export default function CharactersPage() {
   const [open, setOpen] = useState<string | null>(null)
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
+    <div className="palace-page palace-characters min-h-screen bg-[#0a0a0f] text-white pb-24">
       <div className="max-w-md mx-auto px-4 pt-6">
         <div className="flex items-center gap-3 mb-2">
           <Link href="/" className="text-gray-400 text-xl">←</Link>
@@ -148,7 +148,7 @@ export default function CharactersPage() {
 
                     <Link href="/saju"
                       className="block text-center py-3 rounded-xl text-sm font-bold text-white"
-                      style={{ background: `linear-gradient(135deg, ${c.color}, ${c.color}cc)` }}>
+                      style={{ background: `linear-gradient(135deg, ${c.color}, ${c.color}cc)`, color: '#17202a' }}>
                       {c.name}에게 사주 물어보기 →
                     </Link>
                   </div>

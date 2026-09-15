@@ -11,7 +11,7 @@ function PayFailContent() {
   const shareId = orderId.split('_')[1]
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center text-white px-6 text-center">
+    <div className="palace-page palace-pay min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center text-white px-6 text-center">
       <div className="text-5xl mb-4">😶</div>
       <p className="text-lg font-black mb-2">결제가 완료되지 않았어요</p>
       <p className="text-sm text-gray-500 mb-6">{message}</p>
@@ -26,7 +26,7 @@ function PayFailContent() {
 export default function PayFailPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center text-gray-500 text-sm">
+      <div className="palace-page palace-pay min-h-screen bg-[#0a0a0f] flex items-center justify-center text-gray-500 text-sm">
         불러오는 중...
       </div>
     }>

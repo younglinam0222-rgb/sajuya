@@ -1,7 +1,9 @@
 'use client'
+import AccessNotice from '@/app/components/AccessNotice'
 
 import { useState } from 'react'
 import Link from 'next/link'
+import ReadingProgress from '@/components/palace/ReadingProgress'
 
 type Stage = 'input' | 'loading' | 'result'
 
@@ -37,11 +39,11 @@ const HOURS = [
 const RELATIONSHIPS = ['연인', '배우자', '친구', '부모', '자녀', '직장동료', '지인', '기타']
 
 const SECTIONS = [
-  { key: 'overall', icon: '💫', title: '종합 궁합', color: '#EC4899' },
+  { key: 'overall', icon: '💫', title: '종합 궁합', color: '#C18C9D' },
   { key: 'love', icon: '💕', title: '관계 궁합', color: '#F472B6' },
-  { key: 'personality', icon: '🌟', title: '성격 궁합', color: '#8B5CF6' },
-  { key: 'money', icon: '💰', title: '재물 궁합', color: '#10B981' },
-  { key: 'longterm', icon: '🌙', title: '장기 궁합', color: '#3B82F6' },
+  { key: 'personality', icon: '🌟', title: '성격 궁합', color: '#C6A66D' },
+  { key: 'money', icon: '💰', title: '재물 궁합', color: '#8BAB98' },
+  { key: 'longterm', icon: '🌙', title: '장기 궁합', color: '#80A5C4' },
   { key: 'warning', icon: '⚠️', title: '조심할 것들', color: '#EF4444' },
   { key: 'advice', icon: '🦊', title: '구미호 선생의 최종 조언', color: '#F59E0B' },
 ]
@@ -57,8 +59,8 @@ function PersonForm({
   onCalTypeChange: (t: 'solar' | 'lunar') => void
 }) {
   const isPerson1 = label === '나'
-  const activeColor = isPerson1 ? '#EC4899' : '#8B5CF6'
-  const labelColor = isPerson1 ? '#EC4899' : '#8B5CF6'
+  const activeColor = isPerson1 ? '#C18C9D' : '#C6A66D'
+  const labelColor = isPerson1 ? '#C18C9D' : '#C6A66D'
 
   return (
     <div className="bg-gray-900 rounded-xl p-3">
@@ -77,7 +79,7 @@ function PersonForm({
             <button key={t} onClick={() => onCalTypeChange(t)}
               className="px-3 py-1 rounded-lg text-xs font-medium transition-all"
               style={calType === t
-                ? { background: activeColor, color: 'white' }
+                ? { background: activeColor, color: '#17202a' }
                 : { background: '#1F2937', color: '#9CA3AF', border: '1px solid #374151' }}>
               {t === 'solar' ? '양력' : '음력'}
             </button>
@@ -107,7 +109,7 @@ function PersonForm({
             <button key={g} onClick={() => onChange(`gender${prefix}`, g)}
               className="py-2 rounded-lg text-xs font-medium transition-all"
               style={form[`gender${prefix}`] === g
-                ? { background: activeColor, color: 'white' }
+                ? { background: activeColor, color: '#17202a' }
                 : { background: '#0a0a0f', color: '#9CA3AF', border: '1px solid #374151' }}>
               {g === 'male' ? '남성' : '여성'}
             </button>
@@ -142,63 +144,38 @@ export default function GunghapPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, calType1, calType2 }),
       })
-      if (!res.body) return
+      if(!res.ok) { const d=await res.json(); throw new Error(d.error||'요청 실패') }
+      if (!res.body) throw new Error('응답이 없습니다.')
 
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-      let accumulated = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        const chunk = decoder.decode(value)
-        for (const line of chunk.split('\n')) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6)
-            if (data === '[DONE]') continue
-            try {
-              const parsed = JSON.parse(data)
-              if (parsed.text) {
-                accumulated += parsed.text
-                try {
-                  const clean = accumulated.replace(/```json/g, '').replace(/```/g, '').trim()
-                  const s = clean.indexOf('{')
-                  const e = clean.lastIndexOf('}')
-                  if (s !== -1 && e !== -1) setResult(JSON.parse(clean.slice(s, e + 1)))
-                } catch {}
-              }
-            } catch {}
-          }
-        }
+      // Server has already validated and saved the complete result. Buffering avoids split UTF-8/SSE frames.
+      const wire=await res.text()
+      let accumulated='', complete=false
+      for(const line of wire.split('\n')) {
+        if(!line.startsWith('data: ')) continue
+        const value=line.slice(6).trim()
+        if(value==='[DONE]'){complete=true;continue}
+        const event=JSON.parse(value)
+        if(event.type==='error') throw new Error('해석을 완료하지 못했습니다.')
+        if(typeof event.text==='string') accumulated+=event.text
       }
+      if(!complete) throw new Error('연결이 끊겼습니다. 같은 입력으로 다시 확인해주세요.')
+      const clean=accumulated.replace(/```json|```/g,'').trim()
+      setResult(JSON.parse(clean.slice(clean.indexOf('{'),clean.lastIndexOf('}')+1)))
       setStage('result')
     } catch (e) {
-      console.error(e)
+      sessionStorage.setItem('reading-error',e instanceof Error?e.message:'해석을 완료하지 못했습니다.')
       setStage('input')
     }
   }
 
-  if (stage === 'loading') {
-    return (
-      <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center text-white px-4">
-        <div className="w-20 h-20 rounded-full overflow-hidden mb-4 border-2 border-pink-500">
-          <img src="/characters/gumiho.png" alt="구미호" className="w-full h-full object-cover object-top" />
-        </div>
-        <p className="text-lg font-bold mb-2">{form.name1}님과 {form.name2}님의 궁합 분석 중...</p>
-        <p className="text-gray-400 text-sm mb-8">구미호 선생이 두 사람의 인연을 살펴보고 있어요</p>
-        <div className="w-64 h-1.5 bg-gray-800 rounded-full overflow-hidden">
-          <div className="h-full bg-pink-500 rounded-full animate-pulse" style={{ width: '70%' }} />
-        </div>
-      </div>
-    )
-  }
+  if (stage === 'loading') return <div className="palace-loading-page"><ReadingProgress name={form.name1} character="구미호 선생" image="/characters/gumiho.png"/></div>
 
   if (stage === 'result') {
     const score = result.score || 0
-    const scoreColor = score >= 80 ? '#10B981' : score >= 60 ? '#F59E0B' : score >= 40 ? '#3B82F6' : '#EF4444'
+    const scoreColor = score >= 80 ? '#8BAB98' : score >= 60 ? '#F59E0B' : score >= 40 ? '#80A5C4' : '#EF4444'
 
     return (
-      <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
+      <div className="palace-page palace-gunghap min-h-screen bg-[#0a0a0f] text-white pb-24">
         <div className="max-w-md mx-auto px-4 pt-6">
           <div className="flex items-center gap-3 mb-6">
             <button onClick={() => setStage('input')} className="text-gray-400 text-xl">←</button>
@@ -246,7 +223,8 @@ export default function GunghapPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
+    <div className="palace-page palace-gunghap min-h-screen bg-[#0a0a0f] text-white pb-24">
+      <AccessNotice daily={false} />
       <div className="max-w-md mx-auto px-4 pt-6">
         <div className="flex items-center gap-3 mb-6">
           <Link href="/" className="text-gray-400 text-xl">←</Link>
@@ -266,7 +244,7 @@ export default function GunghapPage() {
                 <button key={r} onClick={() => handleChange('relationship', r)}
                   className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
                   style={form.relationship === r
-                    ? { background: '#EC4899', color: 'white' }
+                    ? { background: '#C18C9D', color: '#17202a' }
                     : { background: '#111827', color: '#9CA3AF', border: '1px solid #374151' }}>
                   {r}
                 </button>
@@ -287,7 +265,7 @@ export default function GunghapPage() {
 
         <button onClick={handleSubmit} disabled={!form.name1 || !form.name2}
           className="w-full py-4 rounded-2xl font-bold text-base disabled:opacity-40 disabled:cursor-not-allowed text-white"
-          style={{ background: 'linear-gradient(135deg, #EC4899, #8B5CF6)' }}>
+          style={{ background: 'linear-gradient(135deg, #C18C9D, #C6A66D)' }}>
           궁합 보기 →
         </button>
       </div>

@@ -37,7 +37,7 @@ function PaySuccessContent() {
           setError(data.error || '결제 승인에 실패했어요.')
           return
         }
-        router.replace(shareId ? `/result/${shareId}?unlocked=1` : '/')
+        router.replace(data.redirectUrl || '/storage')
       } catch (e) {
         console.error('[사주궁] 결제 승인 요청 실패:', e)
         setStatus('error')
@@ -47,7 +47,7 @@ function PaySuccessContent() {
   }, [searchParams, router])
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center text-white px-6 text-center">
+    <div className="palace-page palace-pay min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center text-white px-6 text-center">
       {status === 'confirming' ? (
         <>
           <div className="text-4xl mb-4 animate-spin">🔮</div>
@@ -58,6 +58,7 @@ function PaySuccessContent() {
           <div className="text-5xl mb-4">😥</div>
           <p className="text-lg font-black mb-2">결제 확인에 실패했어요</p>
           <p className="text-sm text-gray-500 mb-6">{error}</p>
+          <button onClick={() => window.location.reload()} className="mb-4 underline">결제 상태 다시 확인하기</button>
           <Link href="/saju" className="px-6 py-3 rounded-2xl font-bold text-sm text-white" style={{ background: '#7c3aed' }}>
             사주 풀이로 돌아가기
           </Link>
@@ -70,7 +71,7 @@ function PaySuccessContent() {
 export default function PaySuccessPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center text-gray-500 text-sm">
+      <div className="palace-page palace-pay min-h-screen bg-[#0a0a0f] flex items-center justify-center text-gray-500 text-sm">
         불러오는 중...
       </div>
     }>

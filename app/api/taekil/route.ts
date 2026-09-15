@@ -1,9 +1,10 @@
+import { guardedGeneration, recordUsage } from '@/lib/generation-guard'
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
-export async function POST(req: NextRequest) {
+async function generate(req: NextRequest) {
   try {
     const { name, year, month, day, gender, eventType, targetMonth, targetYear } = await req.json()
 
@@ -47,18 +48,22 @@ export async function POST(req: NextRequest) {
       max_tokens: 1500,
       system: '너는 한국 전통 역법 택일 전문가야. 사주와 날짜의 상성을 분석하여 최길일을 선정한다. 구체적인 날짜를 반드시 제시한다. 반드시 JSON만 출력.',
       messages: [{ role: 'user', content: prompt }],
-    })
+    }, {signal:req.signal, maxRetries:0})
 
     const encoder = new TextEncoder()
     const readable = new ReadableStream({
       async start(controller) {
+       try {
         for await (const chunk of stream) {
           if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: chunk.delta.text })}\n\n`))
           }
         }
+        const final = await stream.finalMessage()
+        await recordUsage(final.model, final.usage)
         controller.enqueue(encoder.encode('data: [DONE]\n\n'))
         controller.close()
+       } catch (error) { controller.error(error) }
       },
     })
 
@@ -74,3 +79,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '서버 오류' }, { status: 500 })
   }
 }
+
+export const POST = guardedGeneration('taekil', generate)
+export const maxDuration = 300

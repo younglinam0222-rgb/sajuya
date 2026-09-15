@@ -1,38 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/app/api/auth/[...nextauth]/route'
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ shareId: string }> }
-) {
-  try {
-    // ✅ 수정: 로그인 안 하면 결과 내용 자체를 서버에서 내려주지 않음 (프론트 화면만 막는 건 우회 가능)
-    const session = await getServerSession(authOptions)
-    if (!session) {
-      return NextResponse.json({ error: '로그인이 필요합니다' }, { status: 401 })
-    }
-
-    const { shareId } = await params
-
-    const { data, error } = await supabaseAdmin
-      .from('readings')
-      .select('*')
-      .eq('share_id', shareId)
-      .single()
-
-    if (error || !data) {
-      return NextResponse.json({ error: '풀이를 찾을 수 없습니다' }, { status: 404 })
-    }
-
-    return NextResponse.json(data)
-  } catch {
-    return NextResponse.json({ error: '서버 오류' }, { status: 500 })
-  }
+import { requireUser, failure, AccessError } from '@/lib/server-access'
+import { createServerSupabase } from '@/lib/supabase'
+import { lockedResult } from '@/lib/access-policy'
+export async function GET(req:NextRequest,{params}:{params:Promise<{shareId:string}>}) {
+ try {
+  const user=await requireUser(req), {shareId}=await params
+  const {data,error}=await createServerSupabase().from('readings')
+   .select('share_id,user_id,character_id,saju_data,ai_result,is_paid,access_verified,product')
+   .eq('share_id',shareId).eq('user_id',user).maybeSingle()
+  if(error) throw error
+  if(!data) throw new AccessError(404,'풀이를 찾을 수 없습니다.')
+  const allowed=data.access_verified && (data.is_paid || ['daily','conversation'].includes(data.product))
+  return NextResponse.json({share_id:data.share_id,character_id:data.character_id,saju_data:data.saju_data,
+   ai_result:allowed?data.ai_result:JSON.stringify(lockedResult(data.ai_result)),is_paid:allowed,locked:!allowed,product:data.product},
+   {headers:{'Cache-Control':'private, no-store'}})
+ }catch(e){return failure(e)}
 }

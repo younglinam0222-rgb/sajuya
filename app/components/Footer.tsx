@@ -10,12 +10,12 @@ export default function Footer() {
           <Link href="/refund" className="text-xs text-gray-600 hover:text-gray-400">환불정책</Link>
           <a href="mailto:sajuya.help@gmail.com" className="text-xs text-gray-600 hover:text-gray-400">고객센터</a>
         </div>
-        <p className="text-center text-[10px] text-gray-700 leading-relaxed">
+        <p className="text-center text-xs text-slate-400 leading-relaxed">
           본 서비스는 전통 사주 해석 기반 엔터테인먼트 콘텐츠입니다.<br />
           의료·법률·재정 판단을 대체하지 않으며, 만 14세 이상 이용 가능합니다.<br />
           문의: sajuya.help@gmail.com
         </p>
-        <p className="text-center text-[10px] text-gray-800 mt-2">© 2025 사주궁</p>
+        <p className="text-center text-xs text-slate-400 mt-2">© {new Date().getFullYear()} 사주궁</p>
       </div>
     </footer>
   )

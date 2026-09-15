@@ -1,7 +1,9 @@
 'use client'
+import AccessNotice from '@/app/components/AccessNotice'
 
 import { useState } from 'react'
 import Link from 'next/link'
+import ReadingProgress from '@/components/palace/ReadingProgress'
 
 type Stage = 'input' | 'loading' | 'result'
 
@@ -35,13 +37,13 @@ const HOURS = [
 ]
 
 const SECTIONS = [
-  { key: 'current', icon: '🌊', title: '현재 대운 분석', color: '#10B981' },
-  { key: 'next10', icon: '🔭', title: '향후 10년 흐름', color: '#3B82F6' },
+  { key: 'current', icon: '🌊', title: '현재 대운 분석', color: '#8BAB98' },
+  { key: 'next10', icon: '🔭', title: '향후 10년 흐름', color: '#80A5C4' },
   { key: 'career', icon: '💼', title: '직업·재물 대운', color: '#F59E0B' },
-  { key: 'love', icon: '💕', title: '인연·관계 대운', color: '#EC4899', paid: true },
-  { key: 'health', icon: '🌿', title: '건강 대운', color: '#10B981', paid: true },
+  { key: 'love', icon: '💕', title: '인연·관계 대운', color: '#C18C9D', paid: true },
+  { key: 'health', icon: '🌿', title: '건강 대운', color: '#8BAB98', paid: true },
   { key: 'warning', icon: '⚠️', title: '조심할 것들', color: '#EF4444', paid: true },
-  { key: 'advice', icon: '🧙', title: '무등산 신령님의 핵심 조언', color: '#8B5CF6', paid: true },
+  { key: 'advice', icon: '🧙', title: '무등산 신령님의 핵심 조언', color: '#C6A66D', paid: true },
 ]
 
 export default function DaeunPage() {
@@ -61,60 +63,35 @@ export default function DaeunPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, calType }),
       })
-      if (!res.body) return
+      if(!res.ok) { const d=await res.json(); throw new Error(d.error||'요청 실패') }
+      if (!res.body) throw new Error('응답이 없습니다.')
 
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-      let accumulated = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        const chunk = decoder.decode(value)
-        for (const line of chunk.split('\n')) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6)
-            if (data === '[DONE]') continue
-            try {
-              const parsed = JSON.parse(data)
-              if (parsed.text) {
-                accumulated += parsed.text
-                try {
-                  const clean = accumulated.replace(/```json/g, '').replace(/```/g, '').trim()
-                  const s = clean.indexOf('{')
-                  const e = clean.lastIndexOf('}')
-                  if (s !== -1 && e !== -1) setResult(JSON.parse(clean.slice(s, e + 1)))
-                } catch {}
-              }
-            } catch {}
-          }
-        }
+      // Server has already validated and saved the complete result. Buffering avoids split UTF-8/SSE frames.
+      const wire=await res.text()
+      let accumulated='', complete=false
+      for(const line of wire.split('\n')) {
+        if(!line.startsWith('data: ')) continue
+        const value=line.slice(6).trim()
+        if(value==='[DONE]'){complete=true;continue}
+        const event=JSON.parse(value)
+        if(event.type==='error') throw new Error('해석을 완료하지 못했습니다.')
+        if(typeof event.text==='string') accumulated+=event.text
       }
+      if(!complete) throw new Error('연결이 끊겼습니다. 같은 입력으로 다시 확인해주세요.')
+      const clean=accumulated.replace(/```json|```/g,'').trim()
+      setResult(JSON.parse(clean.slice(clean.indexOf('{'),clean.lastIndexOf('}')+1)))
       setStage('result')
     } catch (e) {
-      console.error(e)
+      sessionStorage.setItem('reading-error',e instanceof Error?e.message:'해석을 완료하지 못했습니다.')
       setStage('input')
     }
   }
 
-  if (stage === 'loading') {
-    return (
-      <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center text-white px-4">
-        <div className="w-20 h-20 rounded-full overflow-hidden mb-4 border-2 border-green-500">
-          <img src="/characters/sinryeong.png" alt="무등산 신령님" className="w-full h-full object-cover object-top" />
-        </div>
-        <p className="text-lg font-bold mb-2">{form.name}님의 대운 분석 중...</p>
-        <p className="text-gray-400 text-sm mb-8">무등산 신령님이 대운의 흐름을 살펴보고 있어요</p>
-        <div className="w-64 h-1.5 bg-gray-800 rounded-full overflow-hidden">
-          <div className="h-full bg-green-500 rounded-full animate-pulse" style={{ width: '65%' }} />
-        </div>
-      </div>
-    )
-  }
+  if (stage === 'loading') return <div className="palace-loading-page"><ReadingProgress name={form.name} character="무등산 신령님" image="/characters/sinryeong.png"/></div>
 
   if (stage === 'result') {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
+      <div className="palace-page palace-daeun min-h-screen bg-[#0a0a0f] text-white pb-24">
         <div className="max-w-md mx-auto px-4 pt-6">
           <div className="flex items-center gap-3 mb-6">
             <button onClick={() => setStage('input')} className="text-gray-400 text-xl">←</button>
@@ -150,13 +127,14 @@ export default function DaeunPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
+    <div className="palace-page palace-daeun min-h-screen bg-[#0a0a0f] text-white pb-24">
+      <AccessNotice daily={false} />
       <div className="max-w-md mx-auto px-4 pt-6">
         <div className="flex items-center gap-3 mb-6">
           <Link href="/" className="text-gray-400 text-xl">←</Link>
           <div>
             <h1 className="text-xl font-bold">🌊 대운 해설</h1>
-            <p className="text-gray-500 text-xs mt-0.5">무등산 신령님의 10년 대운 분석 · 일부 무료</p>
+            <p className="text-gray-500 text-xs mt-0.5">무등산 신령님의 10년 대운 분석 · 1회 1냥</p>
           </div>
         </div>
 
@@ -178,7 +156,7 @@ export default function DaeunPage() {
                   <button key={t} onClick={() => setCalType(t)}
                     className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
                     style={calType === t
-                      ? { background: '#10B981', color: 'white' }
+                      ? { background: '#8BAB98', color: '#17202a' }
                       : { background: '#1F2937', color: '#9CA3AF', border: '1px solid #374151' }}>
                     {t === 'solar' ? '양력' : '음력'}
                   </button>
@@ -215,7 +193,7 @@ export default function DaeunPage() {
                   <button key={g} onClick={() => setForm(f => ({ ...f, gender: g }))}
                     className="py-2.5 rounded-xl text-sm font-medium transition-all"
                     style={form.gender === g
-                      ? { background: '#10B981', color: 'white' }
+                      ? { background: '#8BAB98', color: '#17202a' }
                       : { background: '#111827', color: '#9CA3AF', border: '1px solid #374151' }}>
                     {g === 'male' ? '남성' : '여성'}
                   </button>
@@ -227,7 +205,7 @@ export default function DaeunPage() {
 
         <button onClick={handleSubmit} disabled={!form.name}
           className="w-full py-4 rounded-2xl font-bold text-base text-white disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{ background: 'linear-gradient(135deg, #10B981, #3B82F6)' }}>
+          style={{ background: 'linear-gradient(135deg, #8BAB98, #80A5C4)' }}>
           대운 분석하기 →
         </button>
       </div>

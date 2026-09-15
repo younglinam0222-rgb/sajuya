@@ -1,9 +1,11 @@
+import { guardedGeneration, recordUsage } from '@/lib/generation-guard'
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { getServerSession } from 'next-auth'
-import { authOptions } from '@/app/api/auth/[...nextauth]/route'
+import { authOptions } from '@/lib/auth-options'
 import { createServerSupabase } from '@/lib/supabase'
 import { correctToTrueSolarTime } from '@/lib/solarTime'
+import {koreanDate,birthSolarDate} from '@/lib/manse-facts'
 // @ts-ignore — lunar-javascript는 공식 타입 정의가 없음
 import LunarJS from 'lunar-javascript'
 
@@ -11,11 +13,7 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
 // 한국 시간(KST) 기준 오늘 날짜 (YYYY-MM-DD)
 function getTodayDateKST() {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }))
-  const y = now.getFullYear()
-  const m = String(now.getMonth() + 1).padStart(2, '0')
-  const d = String(now.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
+  return koreanDate().iso
 }
 
 // ✅ 추가: 로그인한 유저의 "오늘자 캐시된 일일운세"와 "마지막 입력 프로필"을 조회
@@ -32,15 +30,13 @@ export async function GET() {
     const supabase = createServerSupabase()
     const today = getTodayDateKST()
 
-    const [{ data: cached }, { data: userRow }] = await Promise.all([
-      supabase.from('daily_readings').select('*').eq('user_id', userId).eq('reading_date', today).maybeSingle(),
-      supabase.from('users').select('birth_profile').eq('id', userId).maybeSingle(),
-    ])
+    const {data:rows,error}=await supabase.from('readings').select('saju_data,ai_result,character_id,created_at').eq('user_id',userId).eq('product','daily').eq('access_verified',true).order('created_at',{ascending:false}).limit(1)
+    if(error) throw error
+    const row=rows?.[0]
+    const date=row ? new Date(row.created_at).toLocaleDateString('en-CA',{timeZone:'Asia/Seoul'}) : null
+    return NextResponse.json({cached:row&&date===today?{manse:row.saju_data.saju,result:JSON.parse(row.ai_result),characterId:row.character_id}:null,
+      birthProfile:row?.saju_data?.form??null,trialUsed:!!row},{headers:{'Cache-Control':'private, no-store'}})
 
-    return NextResponse.json({
-      cached: cached ? { manse: cached.manse_data, result: cached.result, characterId: cached.character_id } : null,
-      birthProfile: userRow?.birth_profile ?? null,
-    })
   } catch (e) {
     console.error('[사주궁] 일일운세 조회 오류:', e)
     return NextResponse.json({ cached: null, birthProfile: null })
@@ -78,9 +74,8 @@ function calcHourPillar(year: number, month: number, day: number, h: number, m: 
   const lunar = LunarJS.Solar.fromYmdHms(year, month, day, h, m, 0).getLunar()
   return ganZhiToPillar(lunar.getTimeInGanZhi())
 }
-function calcTodayPillar() {
-  const now = new Date()
-  return calcDayPillar(now.getFullYear(), now.getMonth() + 1, now.getDate())
+function calcTodayPillar(today=koreanDate()) {
+  return calcDayPillar(today.year,today.month,today.day)
 }
 function calcManse(year: number, month: number, day: number, hourStr?: string, longitude?: number) {
   // ✅ 신규: 출생지(경도) 선택 입력 시 진태양시로 보정 (사주풀이 route.ts와 동일 로직)
@@ -114,21 +109,22 @@ const CHARACTER_VOICE: Record<string, string> = {
   sinRyeong: `너는 무등산 신령님이야. 묵직하고 근엄. "허허", "그래", "이 친구" 씀. 자연 비유 씀.`,
 }
 
-export async function POST(req: NextRequest) {
+async function generate(req: NextRequest) {
   try {
     const { name, year, month, day, hour, gender, characterId, calType, longitude, birthPlace } = await req.json()
-    // ✅ 추가: 로그인 여부 확인 (비로그인이어도 기존처럼 그대로 무료 이용 가능, 저장만 안 됨)
+    // Access and the lifetime trial reservation are enforced by guardedGeneration.
     const session = await getServerSession(authOptions)
     const userId = (session?.user as { id?: string } | undefined)?.id
 
-    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }))
-    const todayStr  = `${now.getFullYear()}년 ${now.getMonth()+1}월 ${now.getDate()}일`
+    const now = koreanDate()
+    const todayStr  = `${now.year}년 ${now.month}월 ${now.day}일`
     const genderStr = gender === 'male' ? '남성' : '여성'
     const calTypeStr = calType === 'lunar' ? '음력' : '양력'
-    const age       = now.getFullYear() - parseInt(year) + 1
+    const age       = now.year - parseInt(year) + 1
 
-    const manse      = calcManse(parseInt(year), parseInt(month), parseInt(day), hour, typeof longitude === 'number' ? longitude : undefined)
-    const todayPillar = calcTodayPillar()
+    const birth=birthSolarDate(Number(year),Number(month),Number(day),calType)
+    const manse      = calcManse(birth.year,birth.month,birth.day, hour, typeof longitude === 'number' ? longitude : undefined)
+    const todayPillar = calcTodayPillar(now)
 
     const elementNames: Record<string,string> = { '木':'나무', '火':'불', '土':'땅', '金':'금속', '水':'물' }
     const elementDesc = Object.entries(manse.elementCount)
@@ -176,8 +172,9 @@ ${voice}
       max_tokens: 1500,
       system: '너는 사주궁 서비스의 일일운세 캐릭터야. 반드시 순수 JSON만 출력. 마크다운 코드블록 절대 금지.',
       messages: [{ role: 'user', content: prompt }],
-    })
+    }, {signal:req.signal, maxRetries:0})
 
+    await recordUsage(response.model, response.usage)
     const raw = response.content[0].type === 'text' ? response.content[0].text : ''
     const clean = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
     const s = clean.indexOf('{'), e = clean.lastIndexOf('}')
@@ -186,29 +183,6 @@ ${voice}
     const parsed = JSON.parse(clean.slice(s, e + 1))
     console.log('[일일운세] 생성 완료:', response.usage.output_tokens, 'tok')
 
-    // ✅ 추가: 로그인 사용자면 오늘자 결과 + 마지막 입력 프로필을 저장 (다음 방문 시 재사용)
-    if (userId) {
-      try {
-        const supabase = createServerSupabase()
-        const today = getTodayDateKST()
-        const manseWithToday = { ...manse, todayPillar }
-        await Promise.all([
-          supabase.from('daily_readings').upsert({
-            user_id: userId,
-            reading_date: today,
-            character_id: characterId,
-            manse_data: manseWithToday,
-            result: parsed,
-          }, { onConflict: 'user_id,reading_date' }),
-          supabase.from('users').update({
-            birth_profile: { name, year, month, day, hour, gender, calType, characterId, birthPlace },
-          }).eq('id', userId),
-        ])
-      } catch (saveErr) {
-        // 저장 실패해도 결과 조회 자체는 그대로 진행 (저장은 부가 기능)
-        console.error('[사주궁] 일일운세 저장 실패:', saveErr)
-      }
-    }
 
     // ── SSE로 만세력 + 결과 전송 ────────────────────────
     const encoder = new TextEncoder()
@@ -237,3 +211,6 @@ ${voice}
     return NextResponse.json({ error: '서버 오류' }, { status: 500 })
   }
 }
+
+export const POST = guardedGeneration('daily', generate)
+export const maxDuration = 300

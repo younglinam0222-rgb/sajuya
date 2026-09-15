@@ -1,6 +1,8 @@
 'use client'
+import AccessNotice from '@/app/components/AccessNotice'
 
 import { useState, useEffect, useRef } from 'react'
+import ReadingProgress from '@/components/palace/ReadingProgress'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useSession, signIn } from 'next-auth/react'
@@ -35,13 +37,13 @@ const MARITAL_STATUSES = ['미혼(솔로)', '연애중', '기혼', '이혼/사�
 const QUESTION_INTENTS = ['인생 전반', '돈/재물', '연애/결혼', '직업/진로', '건강']
 
 const CHARACTERS = [
-  { id: 'baekhalma', name: '건물주 백할매', img: '/characters/baekhalma.png', desc: '팩폭 재물 전문', color: '#8B5CF6' },
-  { id: 'doRyeong',  name: '근본도령',       img: '/characters/doryeong.png',  desc: '다정한 종합 분석', color: '#3B82F6' },
-  { id: 'gumiho',    name: '구미호 선생',    img: '/characters/gumiho.png',    desc: '연애 궁합 전문',  color: '#EC4899' },
-  { id: 'sinRyeong', name: '무등산 신령님',  img: '/characters/sinryeong.png', desc: '대운 인생 전문',  color: '#10B981' },
+  { id: 'baekhalma', name: '건물주 백할매', img: '/characters/baekhalma.png', desc: '팩폭 재물 전문', color: '#C6A66D' },
+  { id: 'doRyeong',  name: '근본도령',       img: '/characters/doryeong.png',  desc: '다정한 종합 분석', color: '#80A5C4' },
+  { id: 'gumiho',    name: '구미호 선생',    img: '/characters/gumiho.png',    desc: '연애 궁합 전문',  color: '#C18C9D' },
+  { id: 'sinRyeong', name: '무등산 신령님',  img: '/characters/sinryeong.png', desc: '대운 인생 전문',  color: '#8BAB98' },
 ]
 
-const SEASON_COLORS: Record<string, string> = { '봄':'#10B981','여름':'#F59E0B','가을':'#F97316','겨울':'#3B82F6' }
+const SEASON_COLORS: Record<string, string> = { '봄':'#8BAB98','여름':'#F59E0B','가을':'#F97316','겨울':'#80A5C4' }
 const SEASON_ICONS:  Record<string, string> = { '봄':'🌱','여름':'☀️','가을':'🍂','겨울':'❄️' }
 const ELEMENT_COLORS: Record<string, string> = { '木':'#4ade80','火':'#f87171','土':'#fbbf24','金':'#d1d5db','水':'#60a5fa' }
 const ELEMENT_BG:    Record<string, string> = { '木':'rgba(34,197,94,.15)','火':'rgba(239,68,68,.15)','土':'rgba(234,179,8,.15)','金':'rgba(156,163,175,.15)','水':'rgba(96,165,250,.15)' }
@@ -124,28 +126,8 @@ function ManseTable({ manse, charColor }: { manse: ManseData; charColor: string 
   )
 }
 
-function LoadingScreen({ name, character, saving }: { name: string; character: typeof CHARACTERS[0]; saving?: boolean }) {
-  const [tipIdx, setTipIdx] = useState(0)
-  const [progress, setProgress] = useState(0)
-  useEffect(() => {
-    const t1 = setInterval(() => setTipIdx(i => (i + 1) % LOADING_TIPS.length), 2000)
-    const t2 = setInterval(() => setProgress(p => Math.min(p + 2, saving ? 99 : 90)), 300)
-    return () => { clearInterval(t1); clearInterval(t2) }
-  }, [saving])
-  return (
-    <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center text-white px-4">
-      <div className="w-24 h-24 rounded-full overflow-hidden mb-6 border-2" style={{ borderColor: character.color }}>
-        <img src={character.img} alt={character.name} className="w-full h-full object-cover object-top animate-breathe" />
-      </div>
-      <h2 className="text-xl font-bold mb-1">{saving ? '풀이 저장 중...' : `${name}님의 사주 분석 중`}</h2>
-      <p className="text-gray-500 text-sm mb-8">{saving ? '잠시만 기다려주세요' : `${character.name}이(가) 보고 있어요`}</p>
-      <div className="w-72 h-1.5 bg-gray-800 rounded-full overflow-hidden mb-4">
-        <div className="h-full rounded-full transition-all duration-300"
-          style={{ width: `${progress}%`, background: `linear-gradient(90deg, ${character.color}, ${character.color}aa)` }} />
-      </div>
-      <p className="text-gray-400 text-xs animate-pulse">{saving ? '저장 완료 후 자동으로 이동해요' : LOADING_TIPS[tipIdx]}</p>
-    </div>
-  )
+function LoadingScreen({name,character,saving}:{name:string;character:typeof CHARACTERS[0];saving?:boolean}){
+ return <div className="palace-loading-page"><ReadingProgress name={name} character={character.name} image={character.img} phase={saving?'saving':'calculating'}/></div>
 }
 
 function LifecycleChart({ data }: { data: LifecycleItem[] }) {
@@ -158,7 +140,7 @@ function LifecycleChart({ data }: { data: LifecycleItem[] }) {
         {data.map(d => (
           <div key={d.age} className="flex-1 flex flex-col items-center gap-1">
             <span className="text-xs text-gray-400">{d.score}</span>
-            <div className="w-full rounded-t-lg" style={{ height: `${Math.max((d.score/maxScore)*100,8)}%`, background: SEASON_COLORS[d.season]??'#8B5CF6', minHeight: 8 }} />
+            <div className="w-full rounded-t-lg" style={{ height: `${Math.max((d.score/maxScore)*100,8)}%`, background: SEASON_COLORS[d.season]??'#C6A66D', minHeight: 8 }} />
           </div>
         ))}
       </div>
@@ -267,6 +249,7 @@ export default function SajuPage() {
   const abortRef = useRef<AbortController | null>(null)
   const saveAbortRef = useRef<AbortController | null>(null)
   const requestIdRef = useRef<string | null>(null)
+  const requestBodyRef = useRef<string | null>(null)
   const receivedGroupsRef = useRef<Set<number>>(new Set())
   const titlesByIdRef = useRef<Map<string, SajuTitle>>(new Map())
   const gotDoneRef = useRef(false)
@@ -442,7 +425,7 @@ export default function SajuPage() {
     saveAbortRef.current?.abort()
     const ac = new AbortController()
     abortRef.current = ac
-    const requestId = crypto.randomUUID()
+    const requestId = mode === 'retry' && requestIdRef.current ? requestIdRef.current : crypto.randomUUID()
     requestIdRef.current = requestId
     requestedPersonalRef.current = form.personalQuestion.trim().length > 0
     gotDoneRef.current = false
@@ -476,40 +459,19 @@ export default function SajuPage() {
       personalQuestionChars: form.personalQuestion.trim().length,
     })
 
-    const reportNow = currentAssessment()
-    const retry = mode === 'retry'
-      ? {
-          groups: [...new Set([
-            ...reportNow.missingGroups,
-            ...failedParts.filter(p => p.part === 'group' && typeof p.groupIndex === 'number').map(p => p.groupIndex as number),
-          ])].filter(g => g >= 0 && g <= LAST_GROUP_INDEX),
-          strategy: !reportNow.strategyOk,
-          personal: requestedPersonalRef.current && !reportNow.personalOk,
-        }
-      : undefined
-
     let fatalMessage = ''
     try {
       const selectedRegion = KOREA_REGIONS.find(r => r.name === form.birthPlace)
+      if(mode==='full'||!requestBodyRef.current)requestBodyRef.current=JSON.stringify({
+        ...form,personalQuestion:form.personalQuestion,occupation:form.occupation||'일반인',calType,
+        characterId:selectedChar.id,partnerInfo:isRomance?partnerForm:undefined,longitude:selectedRegion?.longitude,requestId,
+      })
       const res = await fetch('/api/saju', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: ac.signal,
-        body: JSON.stringify({
-          ...form,
-          personalQuestion: form.personalQuestion,
-          occupation: form.occupation || '일반인',
-          calType,
-          characterId: selectedChar.id,
-          partnerInfo: isRomance ? partnerForm : undefined,
-          longitude: selectedRegion?.longitude,
-          requestId,
-          retry,
-        }),
+        method:'POST',headers:{'Content-Type':'application/json'},signal:ac.signal,body:requestBodyRef.current,
       })
       if (requestIdRef.current !== requestId) return
       if (!res.ok) {
-        setErrorMsg(res.status === 401 ? '로그인 후 이용할 수 있어요.' : `서버 오류(${res.status}). 다시 시도해주세요.`)
+        const info=await res.json().catch(()=>({})); setErrorMsg(info.error || `서버 오류(${res.status}). 다시 시도해주세요.`)
         setGenStatus('failed')
         setStage('input')
         return
@@ -706,7 +668,7 @@ export default function SajuPage() {
 
   if (status === 'loading') {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center text-gray-500 text-sm">
+      <div className="palace-page palace-saju min-h-screen bg-[#0a0a0f] flex items-center justify-center text-gray-500 text-sm">
         불러오는 중...
       </div>
     )
@@ -715,12 +677,12 @@ export default function SajuPage() {
   // ✅ 추가: 로그인 안 하면 사주 풀이 기능 자체를 못 쓰게 막음
   if (status === 'unauthenticated') {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center text-white px-6 text-center">
+      <div className="palace-page palace-saju min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center text-white px-6 text-center">
         <div className="text-5xl mb-5">🔮</div>
         <div className="text-xl font-black mb-2">로그인하고 사주 풀이 받기</div>
         <div className="text-sm text-gray-500 mb-8 leading-relaxed">
           사주 풀이는 로그인 후 이용할 수 있어요<br />
-          <span className="text-yellow-400 font-bold">가입 즉시 🪙 1엽전 지급!</span>
+          <span className="text-yellow-400 font-bold">계정당 첫 일일운세 1회 무료</span>
         </div>
         <div className="w-full max-w-xs space-y-3">
           <button onClick={() => signIn('kakao', { callbackUrl: '/saju' })}
@@ -751,7 +713,7 @@ export default function SajuPage() {
     const titleMap = new Map(allTitles.map(t => [String(t.id), t]))
     const generating = genStatus === 'generating'
     return (
-      <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
+      <div className="palace-page palace-saju min-h-screen bg-[#0a0a0f] text-white pb-24">
         <div className="max-w-md mx-auto px-4 pt-6">
           <div className="flex items-center gap-3 mb-6">
             <button onClick={leaveToInput} className="text-gray-400 text-xl">←</button>
@@ -761,11 +723,7 @@ export default function SajuPage() {
             </div>
           </div>
 
-          {generating && (
-            <div className="mb-4 px-3 py-2 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs">
-              해석을 생성하는 중입니다. 먼저 도착한 결과부터 보여드려요.
-            </div>
-          )}
+          {generating && <ReadingProgress compact name={form.name} character={selectedChar.name} image={selectedChar.img} phase="interpreting" count={allTitles.length}/>}
           {genStatus === 'partial' && (
             <div className="mb-4 px-3 py-2 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 text-xs">
               일부 해석만 완성됐어요.
@@ -793,7 +751,7 @@ export default function SajuPage() {
             <button
               onClick={() => handleSubmit('retry')}
               className="w-full mb-4 py-2.5 rounded-xl text-sm font-bold text-white"
-              style={{ background: selectedChar.color }}>
+              style={{ background: selectedChar.color, color: '#17202a' }}>
               실패한 항목만 다시 생성
             </button>
           )}
@@ -837,7 +795,7 @@ export default function SajuPage() {
                     <button
                       onClick={() => handleSubmit('retry')}
                       className="w-full py-2.5 rounded-xl text-sm font-bold text-white"
-                      style={{ background: selectedChar.color }}>
+                      style={{ background: selectedChar.color, color: '#17202a' }}>
                       이 질문만 다시 생성
                     </button>
                   )}
@@ -919,13 +877,14 @@ export default function SajuPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
+    <div className="palace-page palace-saju min-h-screen bg-[#0a0a0f] text-white pb-24">
+      <AccessNotice />
       <div className="max-w-md mx-auto px-4 pt-6">
         <div className="flex items-center gap-3 mb-6">
           <Link href="/" className="text-gray-400 text-xl">←</Link>
           <div>
             <h1 className="text-xl font-bold">사주 풀이</h1>
-            <p className="text-gray-500 text-xs mt-0.5">로그인하면 전체 무료 공개</p>
+            <p className="text-gray-500 text-xs mt-0.5">새 풀이 1회 1냥 · 로그인 필요</p>
           </div>
         </div>
 
@@ -975,7 +934,7 @@ export default function SajuPage() {
               <button key={q} onClick={() => setForm(f => ({ ...f, questionIntent: q }))}
                 className="px-3 py-2 rounded-xl text-sm font-medium transition-all"
                 style={form.questionIntent === q
-                  ? { background: selectedChar.color, color: 'white' }
+                  ? { background: selectedChar.color, color: '#17202a' }
                   : { background: '#111827', color: '#9CA3AF', border: '1px solid #374151' }}>
                 {q}
               </button>
@@ -1015,9 +974,9 @@ export default function SajuPage() {
                 <button key={t} onClick={() => setCalType(t)}
                   className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
                   style={calType === t
-                    ? { background: selectedChar.color, color: 'white' }
+                    ? { background: selectedChar.color, color: '#17202a' }
                     : { background: '#1F2937', color: '#9CA3AF', border: '1px solid #374151' }}>
-                  {t === 'solar' ? '양력' : '음력'}
+                  {t === 'solar' ? '양력' : '음력(평달)'}
                 </button>
               ))}
             </div>
@@ -1069,7 +1028,7 @@ export default function SajuPage() {
                 <button key={g} onClick={() => setForm(f => ({ ...f, gender: g }))}
                   className="py-2.5 rounded-xl text-sm font-medium transition-all"
                   style={form.gender === g
-                    ? { background: selectedChar.color, color: 'white' }
+                    ? { background: selectedChar.color, color: '#17202a' }
                     : { background: '#111827', color: '#9CA3AF', border: '1px solid #374151' }}>
                   {g === 'male' ? '남성' : '여성'}
                 </button>
@@ -1083,7 +1042,7 @@ export default function SajuPage() {
                 <button key={m} onClick={() => setForm(f => ({ ...f, maritalStatus: m }))}
                   className="py-2.5 rounded-xl text-sm font-medium transition-all"
                   style={form.maritalStatus === m
-                    ? { background: selectedChar.color, color: 'white' }
+                    ? { background: selectedChar.color, color: '#17202a' }
                     : { background: '#111827', color: '#9CA3AF', border: '1px solid #374151' }}>
                   {m}
                 </button>
@@ -1100,7 +1059,7 @@ export default function SajuPage() {
                   }}
                   className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
                   style={(o === '기타' ? showCustomOcc : (!showCustomOcc && form.occupation === o))
-                    ? { background: selectedChar.color, color: 'white' }
+                    ? { background: selectedChar.color, color: '#17202a' }
                     : { background: '#1F2937', color: '#9CA3AF', border: '1px solid #374151' }}>
                   {o === '기타' ? '기타(직접입력)' : o}
                 </button>
@@ -1156,7 +1115,7 @@ export default function SajuPage() {
                   <button key={g} onClick={() => setPartnerForm(f => ({ ...f, gender: g }))}
                     className="py-2.5 rounded-xl text-sm font-medium transition-all"
                     style={partnerForm.gender === g
-                      ? { background: selectedChar.color, color: 'white' }
+                      ? { background: selectedChar.color, color: '#17202a' }
                       : { background: '#111827', color: '#9CA3AF', border: '1px solid #374151' }}>
                     {g === 'male' ? '남성' : '여성'}
                   </button>
@@ -1168,10 +1127,10 @@ export default function SajuPage() {
 
         <button onClick={() => handleSubmit('full')} disabled={!form.name}
           className="w-full py-4 rounded-2xl font-bold text-lg text-white disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{ background: `linear-gradient(135deg, ${selectedChar.color}, ${selectedChar.color}bb)` }}>
+          style={{ background: `linear-gradient(135deg, ${selectedChar.color}, ${selectedChar.color}bb)`, color: '#17202a' }}>
           {selectedChar.name}에게 물어보기 →
         </button>
-        <p className="text-center text-gray-600 text-xs mt-3">로그인하면 전체 무료 공개</p>
+        <p className="text-center text-gray-600 text-xs mt-3">새 풀이 1회 1냥 · 로그인 필요</p>
       </div>
     </div>
   )

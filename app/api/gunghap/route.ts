@@ -1,9 +1,10 @@
+import { guardedGeneration, recordUsage } from '@/lib/generation-guard'
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
-export async function POST(req: NextRequest) {
+async function generate(req: NextRequest) {
   try {
     const { name1, year1, month1, day1, gender1, name2, year2, month2, day2, gender2 } = await req.json()
 
@@ -36,18 +37,22 @@ export async function POST(req: NextRequest) {
       max_tokens: 1500,
       system: '너는 구미호 선생이야. 천 년의 연애 경험으로 궁합을 꿰뚫어본다. 요염하면서도 날카롭게, 현실적으로 분석한다. 반드시 JSON만 출력.',
       messages: [{ role: 'user', content: prompt }],
-    })
+    }, {signal:req.signal, maxRetries:0})
 
     const encoder = new TextEncoder()
     const readable = new ReadableStream({
       async start(controller) {
+       try {
         for await (const chunk of stream) {
           if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: chunk.delta.text })}\n\n`))
           }
         }
+        const final = await stream.finalMessage()
+        await recordUsage(final.model, final.usage)
         controller.enqueue(encoder.encode('data: [DONE]\n\n'))
         controller.close()
+       } catch (error) { controller.error(error) }
       },
     })
 
@@ -63,3 +68,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '서버 오류' }, { status: 500 })
   }
 }
+
+export const POST = guardedGeneration('gunghap', generate)
+export const maxDuration = 300

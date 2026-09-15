@@ -18,6 +18,6 @@ declare module 'lunar-javascript' {
   class Lunar {
     static fromYmd(year: number, month: number, day: number): LunarObj
   }
-  const exportObj: { Lunar: typeof Lunar; Solar: typeof Solar }
+  const exportObj: { Lunar: typeof Lunar; Solar: typeof Solar; LunarUtil:{SHI_SHEN:Record<string,string>} }
   export = exportObj
 }

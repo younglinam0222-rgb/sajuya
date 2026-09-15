@@ -1,8 +1,10 @@
+import { guardedGeneration, recordUsage } from '@/lib/generation-guard'
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { randomUUID } from 'crypto'
 import { CHARACTERS } from '@/lib/characters'
 import { correctToTrueSolarTime } from '@/lib/solarTime'
+import {stemRelationship,branchRelationship,birthSolarDate} from '@/lib/manse-facts'
 import { GROUP_IDS, LAST_GROUP_INDEX } from '@/lib/sajuContract'
 import { sanitizeJudgmentTitles, sanitizeStrategy, sanitizeText } from '@/lib/sajuSanitize'
 // @ts-ignore — lunar-javascript는 공식 타입 정의가 없음
@@ -59,14 +61,11 @@ const BRANCH_KR = ['자','축','인','묘','진','사','오','미','신','유','
 const STEM_ELEMENT = ['木','木','火','火','土','土','金','金','水','水']
 const BRANCH_ELEMENT = ['水','土','木','木','土','火','火','土','金','金','土','水']
 const ANIMALS = ['쥐','소','호랑이','토끼','용','뱀','말','양','원숭이','닭','개','돼지']
-const SIPSIN = ['비견','겁재','식신','상관','편재','정재','편관','정관','편인','정인']
-
 function getSipsin(dayStemIdx: number, targetStemIdx: number) {
-  return SIPSIN[((targetStemIdx - dayStemIdx + 10) % 10)]
+  return stemRelationship(dayStemIdx,targetStemIdx)
 }
 function getSipsinBranch(dayStemIdx: number, branchIdx: number) {
-  const mainStemMap = [9,5,0,1,4,3,2,5,6,7,4,8]
-  return SIPSIN[((mainStemMap[branchIdx] - dayStemIdx + 10) % 10)]
+  return branchRelationship(dayStemIdx,branchIdx)
 }
 function calcYearPillar(year: number, month: number, day: number) {
   // ✅ 수정: 입춘(立春) 기준 반영 안 하던 버그 — 1월~2월 초(입춘 전) 출생자는
@@ -138,7 +137,7 @@ function calcManse(year: number, month: number, day: number, hourMinute: string,
     if (p.branchElement) elements[p.branchElement] = (elements[p.branchElement]||0) + 1
   })
   return {
-    yearPillar:  { ...yp, sipsinStem: '편인', sipsinBranch: getSipsinBranch(dayStemIdx, yp.branchIdx) },
+    yearPillar:  { ...yp, sipsinStem: getSipsin(dayStemIdx,yp.stemIdx), sipsinBranch: getSipsinBranch(dayStemIdx, yp.branchIdx) },
     monthPillar: { ...mp, sipsinStem: getSipsin(dayStemIdx, mp.stemIdx), sipsinBranch: getSipsinBranch(dayStemIdx, mp.branchIdx) },
     dayPillar:   { ...dp, sipsinStem: '일간', sipsinBranch: getSipsinBranch(dayStemIdx, dp.branchIdx) },
     hourPillar:  hp ? { ...hp, sipsinStem: getSipsin(dayStemIdx, hp.stemIdx), sipsinBranch: getSipsinBranch(dayStemIdx, hp.branchIdx) } : null,
@@ -273,7 +272,7 @@ D. 공감 → 경고 → 비유 → 팩폭
 `
 }
 
-export async function POST(req: NextRequest) {
+async function generate(req: NextRequest) {
   let setupRequestId: string | undefined
   let setupManse: unknown = null
   try {
@@ -296,7 +295,8 @@ export async function POST(req: NextRequest) {
     const voiceGuide = CHARACTER_VOICE[characterId] ?? CHARACTER_VOICE['doRyeong']
     const styleRules = getStyleRules()
 
-    const manse = calcManse(parseInt(year), parseInt(month), parseInt(day), hour ?? '', typeof longitude === 'number' ? longitude : undefined)
+    const birth = birthSolarDate(Number(year),Number(month),Number(day),body.calType)
+    const manse = calcManse(birth.year,birth.month,birth.day, hour ?? '', typeof longitude === 'number' ? longitude : undefined)
     setupManse = manse
     if (!process.env.ANTHROPIC_API_KEY) {
       return sseFailure('분석 서버 설정이 없어 풀이를 만들 수 없어요.', requestId, manse)
@@ -595,6 +595,7 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
             { ...params, max_tokens: callMaxTokens },
             { signal: workAbort.signal, maxRetries: 0 },
           )
+          await recordUsage(String(params.model), res.usage)
           const stopReason = res.stop_reason
           console.log(JSON.stringify({
             tag: '사주궁',
@@ -847,3 +848,5 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
     return sseFailure(publicErrorMessage(e), setupRequestId, setupManse)
   }
 }
+
+export const POST = guardedGeneration('saju', generate)

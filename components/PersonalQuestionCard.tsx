@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { sanitizeText } from '@/lib/sajuSanitize'
 
 function FormattedAnswer({ text, highlightColor }: { text: string; highlightColor: string }) {
@@ -27,6 +28,7 @@ export default function PersonalQuestionCard({
   retrying = false,
   retryError = '',
   onRetry,
+  supportHref,
 }: {
   question: string
   answer: string
@@ -34,6 +36,7 @@ export default function PersonalQuestionCard({
   retrying?: boolean
   retryError?: string
   onRetry?: () => void
+  supportHref?: string
 }) {
   const q = question.trim()
   if (!q) return null
@@ -51,6 +54,7 @@ export default function PersonalQuestionCard({
         <div className="space-y-3">
           <p className="text-sm text-red-300">답변을 불러오지 못했어요</p>
           {retryError && <p className="text-xs text-gray-500">{retryError}</p>}
+          {supportHref && <div><p className="text-sm leading-relaxed">이미 이용한 결과의 누락된 답변입니다. 추가 결제 없이 결제 내역에서 확인을 요청해주세요.</p><Link href={supportHref} className="block mt-3 underline text-sm">결제 내역에서 확인하기</Link></div>}
           {onRetry && (
             <button
               type="button"

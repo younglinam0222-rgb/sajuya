@@ -1,7 +1,9 @@
 'use client'
+import AccessNotice from '@/app/components/AccessNotice'
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import ReadingProgress from '@/components/palace/ReadingProgress'
 import { useSession } from 'next-auth/react'
 
 // ─── 타입 ─────────────────────────────────────────────
@@ -23,10 +25,10 @@ const MONTHS  = Array.from({ length: 12 }, (_, i) => i + 1)
 const DAYS    = Array.from({ length: 31 }, (_, i) => i + 1)
 
 const CHARACTERS = [
-  { id: 'baekhalma', name: '건물주 백할매', img: '/characters/baekhalma.png', color: '#8B5CF6', desc: '직설 팩폭' },
-  { id: 'doRyeong',  name: '근본도령',      img: '/characters/doryeong.png',  color: '#3B82F6', desc: '다정 분석' },
-  { id: 'gumiho',    name: '구미호 선생',   img: '/characters/gumiho.png',    color: '#EC4899', desc: '감성 운세' },
-  { id: 'sinRyeong', name: '무등산 신령님', img: '/characters/sinryeong.png', color: '#10B981', desc: '묵직 판결' },
+  { id: 'baekhalma', name: '건물주 백할매', img: '/characters/baekhalma.png', color: '#C6A66D', desc: '직설 팩폭' },
+  { id: 'doRyeong',  name: '근본도령',      img: '/characters/doryeong.png',  color: '#80A5C4', desc: '다정 분석' },
+  { id: 'gumiho',    name: '구미호 선생',   img: '/characters/gumiho.png',    color: '#C18C9D', desc: '감성 운세' },
+  { id: 'sinRyeong', name: '무등산 신령님', img: '/characters/sinryeong.png', color: '#8BAB98', desc: '묵직 판결' },
 ]
 
 const ELEMENT_COLORS: Record<string, string> = { '木':'#4ade80','火':'#f87171','土':'#fbbf24','金':'#d1d5db','水':'#60a5fa' }
@@ -34,9 +36,9 @@ const ELEMENT_BG:    Record<string, string> = { '木':'rgba(34,197,94,.15)','火
 
 const SECTIONS = [
   { key: 'overall', scoreKey: 'overall_score', icon: '⭐', title: '오늘의 총운', color: '#F59E0B' },
-  { key: 'money',   scoreKey: 'money_score',   icon: '💰', title: '재물운',     color: '#10B981' },
-  { key: 'love',    scoreKey: 'love_score',     icon: '💕', title: '연애운',     color: '#EC4899' },
-  { key: 'health',  scoreKey: 'health_score',   icon: '🌿', title: '건강운',     color: '#3B82F6' },
+  { key: 'money',   scoreKey: 'money_score',   icon: '💰', title: '재물운',     color: '#8BAB98' },
+  { key: 'love',    scoreKey: 'love_score',     icon: '💕', title: '연애운',     color: '#C18C9D' },
+  { key: 'health',  scoreKey: 'health_score',   icon: '🌿', title: '건강운',     color: '#80A5C4' },
 ]
 
 function getTodayKST() {
@@ -49,9 +51,9 @@ function getTodayKST() {
 function BiorhythmChart({ result, charColor }: { result: Partial<DailyResult>; charColor: string }) {
   const scores = [
     { label: '총운', score: result.overall_score ?? 0, color: '#F59E0B', icon: '⭐' },
-    { label: '재물', score: result.money_score   ?? 0, color: '#10B981', icon: '💰' },
-    { label: '연애', score: result.love_score    ?? 0, color: '#EC4899', icon: '💕' },
-    { label: '건강', score: result.health_score  ?? 0, color: '#3B82F6', icon: '🌿' },
+    { label: '재물', score: result.money_score   ?? 0, color: '#8BAB98', icon: '💰' },
+    { label: '연애', score: result.love_score    ?? 0, color: '#C18C9D', icon: '💕' },
+    { label: '건강', score: result.health_score  ?? 0, color: '#80A5C4', icon: '🌿' },
   ]
 
   // SVG 사인파 생성 (7일치 — 오늘 중심)
@@ -204,30 +206,7 @@ function ManseTableMini({ manse, charColor }: { manse: ManseData; charColor: str
 }
 
 // ─── 로딩 화면 ────────────────────────────────────────
-function LoadingScreen({ name, character }: { name: string; character: typeof CHARACTERS[0] }) {
-  const [progress, setProgress] = useState(0)
-  const tips = ['오늘 날짜 기운 계산 중...', '만세력 대조 중...', '오늘 운세 판결 중...', '행운 포인트 찾는 중...']
-  const [tipIdx, setTipIdx] = useState(0)
-  useEffect(() => {
-    const t1 = setInterval(() => setProgress(p => Math.min(p + 3, 90)), 200)
-    const t2 = setInterval(() => setTipIdx(i => (i + 1) % tips.length), 1800)
-    return () => { clearInterval(t1); clearInterval(t2) }
-  }, [])
-  return (
-    <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center text-white px-4">
-      <div className="w-20 h-20 rounded-full overflow-hidden mb-5 border-2" style={{ borderColor: character.color }}>
-        <img src={character.img} alt={character.name} className="w-full h-full object-cover object-top" />
-      </div>
-      <h2 className="text-lg font-bold mb-1">{name}님의 오늘 운세</h2>
-      <p className="text-gray-500 text-sm mb-8">{character.name}이(가) 보고 있어요</p>
-      <div className="w-64 h-1.5 bg-gray-800 rounded-full overflow-hidden mb-3">
-        <div className="h-full rounded-full transition-all duration-200"
-          style={{ width: `${progress}%`, background: `linear-gradient(90deg, ${character.color}, ${character.color}88)` }} />
-      </div>
-      <p className="text-xs text-gray-400 animate-pulse">{tips[tipIdx]}</p>
-    </div>
-  )
-}
+function LoadingScreen({name,character}:{name:string;character:typeof CHARACTERS[0]}){return <div className="palace-loading-page"><ReadingProgress name={name} character={character.name} image={character.img}/></div>}
 
 // ─── 메인 ─────────────────────────────────────────────
 export default function DailyPage() {
@@ -288,38 +267,27 @@ export default function DailyPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, calType, characterId: selectedChar.id }),
       })
-      if (!res.body) return
+      if(!res.ok) { const d=await res.json(); throw new Error(d.error||'요청 실패') }
+      if (!res.body) throw new Error('응답이 없습니다.')
 
-      const reader  = res.body.getReader()
-      const decoder = new TextDecoder()
-      let accumulated = ''
-      let done = false
-
-      while (!done) {
-        const { done: streamDone, value } = await reader.read()
-        if (streamDone) break
-        const chunk = decoder.decode(value, { stream: true })
-        for (const line of chunk.split('\n')) {
-          if (!line.startsWith('data: ')) continue
-          const data = line.slice(6).trim()
-          if (data === '[DONE]') { done = true; break }
-          try {
-            const parsed = JSON.parse(data)
-            if (parsed.type === 'manse') { setManse(parsed.data); continue }
-            if (parsed.text) {
-              accumulated += parsed.text
-              try {
-                const clean = accumulated.replace(/```json/g,'').replace(/```/g,'').trim()
-                const s = clean.indexOf('{'), e = clean.lastIndexOf('}')
-                if (s !== -1 && e !== -1) setResult(JSON.parse(clean.slice(s, e+1)))
-              } catch {}
-            }
-          } catch {}
-        }
+      // Server has already validated and saved the complete result. Buffering avoids split UTF-8/SSE frames.
+      const wire=await res.text()
+      let accumulated='', complete=false
+      for(const line of wire.split('\n')) {
+        if(!line.startsWith('data: ')) continue
+        const value=line.slice(6).trim()
+        if(value==='[DONE]'){complete=true;continue}
+        const event=JSON.parse(value)
+        if(event.type==='error') throw new Error('해석을 완료하지 못했습니다.')
+        if(event.type==='manse') setManse(event.data)
+        if(typeof event.text==='string') accumulated+=event.text
       }
+      if(!complete) throw new Error('연결이 끊겼습니다. 같은 입력으로 다시 확인해주세요.')
+      const clean=accumulated.replace(/```json|```/g,'').trim()
+      setResult(JSON.parse(clean.slice(clean.indexOf('{'),clean.lastIndexOf('}')+1)))
       setStage('result')
     } catch (e) {
-      console.error(e)
+      sessionStorage.setItem('reading-error',e instanceof Error?e.message:'해석을 완료하지 못했습니다.')
       setStage('input')
     }
   }
@@ -329,7 +297,7 @@ export default function DailyPage() {
   // ✅ 추가: 로그인 사용자의 오늘자 캐시 확인 중 잠깐 뜨는 화면 (깜빡임 방지)
   if (checkingCache && stage === 'input') {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center text-gray-500 text-sm">
+      <div className="palace-page palace-daily min-h-screen bg-[#0a0a0f] flex items-center justify-center text-gray-500 text-sm">
         오늘의 운세 불러오는 중...
       </div>
     )
@@ -342,7 +310,7 @@ export default function DailyPage() {
       : 0
 
     return (
-      <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
+      <div className="palace-page palace-daily min-h-screen bg-[#0a0a0f] text-white pb-24">
         <div className="max-w-md mx-auto px-4 pt-6">
 
           {/* 헤더 */}
@@ -450,7 +418,8 @@ export default function DailyPage() {
 
   // ── 입력 화면 ──────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
+    <div className="palace-page palace-daily min-h-screen bg-[#0a0a0f] text-white pb-24">
+      <AccessNotice daily={true} />
       <div className="max-w-md mx-auto px-4 pt-6">
 
         {/* 헤더 */}
@@ -505,9 +474,9 @@ export default function DailyPage() {
                 <button key={t} onClick={() => setCalType(t)}
                   className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
                   style={calType === t
-                    ? { background: selectedChar.color, color: 'white' }
+                    ? { background: selectedChar.color, color: '#17202a' }
                     : { background: '#1F2937', color: '#9CA3AF', border: '1px solid #374151' }}>
-                  {t === 'solar' ? '양력' : '음력'}
+                  {t === 'solar' ? '양력' : '음력(평달)'}
                 </button>
               ))}
             </div>
@@ -549,7 +518,7 @@ export default function DailyPage() {
                 <button key={g} onClick={() => setForm(f => ({ ...f, gender: g }))}
                   className="py-2.5 rounded-xl text-sm font-medium transition-all"
                   style={form.gender === g
-                    ? { background: selectedChar.color, color: 'white' }
+                    ? { background: selectedChar.color, color: '#17202a' }
                     : { background: '#111827', color: '#9CA3AF', border: '1px solid #374151' }}>
                   {g === 'male' ? '남성' : '여성'}
                 </button>
@@ -560,10 +529,10 @@ export default function DailyPage() {
 
         <button onClick={handleSubmit} disabled={!form.name}
           className="w-full py-4 rounded-2xl font-bold text-base text-white disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{ background: `linear-gradient(135deg, ${selectedChar.color}, ${selectedChar.color}bb)` }}>
+          style={{ background: `linear-gradient(135deg, ${selectedChar.color}, ${selectedChar.color}bb)`, color: '#17202a' }}>
           {selectedChar.name}에게 오늘 운세 묻기 ✨
         </button>
-        <p className="text-center text-gray-600 text-xs mt-3">매일 무료 · 만세력 기반 분석</p>
+        <p className="text-center text-gray-600 text-xs mt-3">최초 1회 무료 · 만세력 기반 분석</p>
       </div>
     </div>
   )
