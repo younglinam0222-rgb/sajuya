@@ -22,7 +22,7 @@ export async function refundBody(req:NextRequest){
 export const isId=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v)
 export const refundPorts:RefundPorts={
  rpc,
- async order(id){const {data,error}=await createServerSupabase().from('commerce_orders').select('order_id,payment_key,amount,refunded_amount,refund_review').eq('order_id',id).single();if(error||!data?.payment_key)throw Error('order');return data},
+ async order(id){const {data,error}=await createServerSupabase().from('commerce_orders').select('order_id,payment_key,amount,refunded_amount,refund_review,product').eq('order_id',id).single();if(error||!data?.payment_key)throw Error('order');return data},
  async known(id){const {data,error}=await createServerSupabase().from('refund_requests').select('id,status,transaction_key').eq('order_id',id);if(error)throw error;return data??[]},
  async payment(key){const response=await toss('/payments/'+encodeURIComponent(key));if(!response.ok)throw Error('provider unavailable');return response.json()},
  async cancel(key,amount,marker,idempotency){const response=await toss('/payments/'+encodeURIComponent(key)+'/cancel',{method:'POST',headers:{'Idempotency-Key':idempotency},body:JSON.stringify({cancelReason:marker,cancelAmount:amount})});if(!response.ok)throw Error('provider cancel unconfirmed');return response.json()},
@@ -42,14 +42,27 @@ export async function runRefundBatch(){
 }
 export async function refundSnapshot(user:string,admin=false){return rpc('refund_snapshot',{p_user:user,p_admin:admin})}
 
-// Owner can link a real out-of-band Toss cancellation ONLY to an already-reserved request.
+// Linking records a cancellation already completed at Toss; it never sends another cancel.
 export async function externalRefundMatches(id:string){
- const {data:r,error}=await createServerSupabase().from('refund_requests').select('id,order_id,status,amount,held,spend_attempt').eq('id',id).single()
+ const {data:r,error}=await createServerSupabase().from('refund_requests').select('id,order_id,status,kind,amount,held,spend_attempt').eq('id',id).single()
  if(error||!r)throw new AccessError(404,'요청이 없습니다.')
- if(!['blocked','uncertain','processing'].includes(r.status)||(!r.held&&!r.spend_attempt))return []
+ const unreserved=r.kind==='external'&&r.status==='review'&&!r.held&&!r.spend_attempt
+ if(!unreserved&&(!['blocked','uncertain','processing'].includes(r.status)||(!r.held&&!r.spend_attempt)))return []
  const order=await refundPorts.order(r.order_id),payment=await refundPorts.payment(order.payment_key),known=await refundPorts.known(r.order_id)
  if(payment.orderId!==order.order_id||payment.paymentKey!==order.payment_key||payment.totalAmount!==order.amount||payment.currency!=='KRW')throw new AccessError(409,'결제 정보가 일치하지 않습니다.')
- return (payment.cancels??[]).filter(c=>c.cancelStatus==='DONE'&&c.cancelAmount===r.amount&&!known.some(k=>k.transaction_key===c.transactionKey)).map(c=>({transactionKey:c.transactionKey,amount:c.cancelAmount}))
+ const cancels=payment.cancels??[]
+ if(!Array.isArray(cancels)||cancels.some(c=>!Number.isSafeInteger(c.cancelAmount)||c.cancelAmount<=0||!c.transactionKey)
+ ||!Number.isSafeInteger(payment.balanceAmount)||payment.balanceAmount<0
+ ||payment.balanceAmount!==order.amount-cancels.filter(c=>c.cancelStatus==='DONE').reduce((sum,c)=>sum+c.cancelAmount,0))
+  throw new AccessError(409,'토스 취소 금액과 잔액을 대조하지 못했습니다.')
+ const matches=[]
+ for(const c of cancels){
+  if(c.cancelStatus!=='DONE'||!Number.isSafeInteger(c.cancelAmount)||c.cancelAmount<=0||known.some(k=>k.transaction_key===c.transactionKey))continue
+  if(unreserved){const q=await rpc('external_refund_quote',{p_id:id,p_amount:c.cancelAmount});if(!q?.eligible)continue}
+  else if(c.cancelAmount!==r.amount)continue
+  matches.push({transactionKey:c.transactionKey,amount:c.cancelAmount})
+ }
+ return matches
 }
 export async function attachExternalRefund(id:string,transaction:string,actor:string,note:string){
  const matches=await externalRefundMatches(id),match=matches.find(c=>c.transactionKey===transaction)

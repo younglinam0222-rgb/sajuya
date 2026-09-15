@@ -1,110 +1,104 @@
+import { guardedGeneration, recordUsage } from '@/lib/generation-guard'
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { getServerSession } from 'next-auth'
-import { authOptions } from '@/app/api/auth/[...nextauth]/route'
+import { authOptions } from '@/lib/auth-options'
 import { createServerSupabase } from '@/lib/supabase'
-import { requireContentNotice } from '@/lib/contentNoticeGuard'
-import { rejectCrossSiteCookieMutation } from '@/lib/requestGuard'
-import { assertNoElementCitationMismatch } from '@/lib/elementCitationCheck'
-import {
-  calcDayPillar,
-  calcManse,
-  collectGeneratedText,
-  formatManseForPrompt,
-  generationClock,
-  SHARED_INTERP_GUARDS,
-} from '@/lib/sajuCalc'
-import { birthPromptLine, resolveBirthFromRequest } from '@/lib/birthInput'
-import { normalizeMaritalStatus, resolveOccupation } from '@/lib/profileOptions'
-import { buildServiceContextPrompt } from '@/lib/serviceContextPrompt'
-import { isPaymentsEnabled } from '@/lib/paymentFlags'
-import { createSupabaseDailyQuotaStore } from '@/lib/dailyQuotaSupabase'
-import {
-  DAILY_LOGIN_REQUIRED_MESSAGE,
-  completeDailyGeneration,
-  failDailyGeneration,
-  getDailyQuotaStatus,
-  reserveDailyGeneration,
-  type DailyUsageRow,
-} from '@/lib/dailyQuota'
+import { correctToTrueSolarTime } from '@/lib/solarTime'
+import {koreanDate,birthSolarDate} from '@/lib/manse-facts'
+import LunarJS from 'lunar-javascript'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
-function sessionUserId(session: unknown): string | null {
-  const user = (session as { user?: { id?: string } } | null)?.user
-  return user?.id ?? null
+// 한국 시간(KST) 기준 오늘 날짜 (YYYY-MM-DD)
+function getTodayDateKST() {
+  return koreanDate().iso
 }
 
-function quotaErrorStatus(code: string): number {
-  if (code === 'IN_PROGRESS') return 409
-  if (code === 'INVALID_REQUEST') return 400
-  return 403
-}
-
-function sseFromResult(manse: unknown, parsed: unknown) {
-  const encoder = new TextEncoder()
-  const readable = new ReadableStream({
-    start(controller) {
-      controller.enqueue(encoder.encode(
-        `data: ${JSON.stringify({ type: 'manse', data: manse })}\n\n`,
-      ))
-      const jsonStr = JSON.stringify(parsed)
-      const chunkSize = 200
-      for (let i = 0; i < jsonStr.length; i += chunkSize) {
-        controller.enqueue(encoder.encode(
-          `data: ${JSON.stringify({ text: jsonStr.slice(i, i + chunkSize) })}\n\n`,
-        ))
-      }
-      controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-      controller.close()
-    },
-  })
-  return new NextResponse(readable, {
-    headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' },
-  })
-}
-
+// ✅ 추가: 로그인한 유저의 "오늘자 캐시된 일일운세"와 "마지막 입력 프로필"을 조회
+// 로그인 안 한 사용자는 이 라우트를 호출하지 않으므로 기존 무료 이용 흐름은 그대로 유지됨
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
-    const userId = sessionUserId(session)
-    if (!userId) {
-      return NextResponse.json({
-        cached: null,
-        birthProfile: null,
-        quota: null,
-        paymentsEnabled: isPaymentsEnabled(),
-      })
+    if (!session?.user) {
+      return NextResponse.json({ cached: null, birthProfile: null })
     }
+    const userId = (session.user as { id?: string }).id
+    if (!userId) return NextResponse.json({ cached: null, birthProfile: null })
 
-    const store = createSupabaseDailyQuotaStore()
     const supabase = createServerSupabase()
-    const now = new Date()
-    const [quota, userRow] = await Promise.all([
-      getDailyQuotaStatus(store, userId, now),
-      supabase.from('users').select('birth_profile').eq('id', userId).maybeSingle(),
-    ])
+    const today = getTodayDateKST()
 
-    return NextResponse.json({
-      cached: quota.cached
-        ? { manse: quota.cached.manse, result: quota.cached.result, characterId: quota.cached.characterId }
-        : null,
-      birthProfile: userRow.data?.birth_profile ?? null,
-      quota: {
-        usageDate: quota.usageDate,
-        freeStatus: quota.freeStatus,
-        canGenerateFree: quota.canGenerateFree,
-        hasCachedResult: quota.hasCachedResult,
-        message: quota.canGenerateFree ? null : (quota.freeStatus === 'pending'
-          ? '오늘의 운세를 이미 생성 중이에요. 잠시 후 다시 확인해주세요.'
-          : '오늘 무료 이용을 완료했어요. 기존 결과를 확인하거나 내일 다시 이용해주세요'),
-      },
-      paymentsEnabled: isPaymentsEnabled(),
-    })
+    const {data:rows,error}=await supabase.from('readings').select('saju_data,ai_result,character_id,created_at').eq('user_id',userId).eq('product','daily').eq('access_verified',true).order('created_at',{ascending:false}).limit(1)
+    if(error) throw error
+    const row=rows?.[0]
+    const date=row ? new Date(row.created_at).toLocaleDateString('en-CA',{timeZone:'Asia/Seoul'}) : null
+    return NextResponse.json({cached:row&&date===today?{manse:row.saju_data.saju,result:JSON.parse(row.ai_result),characterId:row.character_id}:null,
+      birthProfile:row?.saju_data?.form??null,trialUsed:!!row},{headers:{'Cache-Control':'private, no-store'}})
+
   } catch (e) {
     console.error('[사주궁] 일일운세 조회 오류:', e)
-    return NextResponse.json({ cached: null, birthProfile: null, quota: null, paymentsEnabled: isPaymentsEnabled() })
+    return NextResponse.json({ cached: null, birthProfile: null })
   }
+}
+
+const STEMS    = ['甲','乙','丙','丁','戊','己','庚','辛','壬','癸']
+const BRANCHES = ['子','丑','寅','卯','辰','巳','午','未','申','酉','戌','亥']
+const STEM_KR  = ['갑','을','병','정','무','기','경','신','임','계']
+const BRANCH_KR = ['자','축','인','묘','진','사','오','미','신','유','술','해']
+const STEM_ELEMENT   = ['木','木','火','火','土','土','金','金','水','水']
+const BRANCH_ELEMENT = ['水','土','木','木','土','火','火','土','金','金','土','水']
+const ANIMALS = ['쥐','소','호랑이','토끼','용','뱀','말','양','원숭이','닭','개','돼지']
+
+// ✅ 수정: saju/route.ts와 동일한 버그(월주/일주/연주 계산 오류) 발견돼서 동일하게 교체.
+// 자체 수식 대신 검증된 lunar-javascript 라이브러리 사용.
+function ganZhiToPillar(ganzhi: string) {
+  const stemChar = ganzhi[0], branchChar = ganzhi[1]
+  const si = STEMS.indexOf(stemChar), bi = BRANCHES.indexOf(branchChar)
+  return { stem: stemChar, branch: branchChar, stemKr: STEM_KR[si], branchKr: BRANCH_KR[bi], stemElement: STEM_ELEMENT[si], branchElement: BRANCH_ELEMENT[bi], stemIdx: si, branchIdx: bi }
+}
+function calcYearPillar(year: number, month: number, day: number) {
+  const lunar = LunarJS.Solar.fromYmd(year, month, day).getLunar()
+  return ganZhiToPillar(lunar.getYearInGanZhiByLiChun())
+}
+function calcMonthPillar(year: number, month: number, day: number) {
+  const lunar = LunarJS.Solar.fromYmd(year, month, day).getLunar()
+  return ganZhiToPillar(lunar.getMonthInGanZhi())
+}
+function calcDayPillar(year: number, month: number, day: number) {
+  const lunar = LunarJS.Solar.fromYmd(year, month, day).getLunar()
+  return ganZhiToPillar(lunar.getDayInGanZhi())
+}
+function calcHourPillar(year: number, month: number, day: number, h: number, m: number) {
+  const lunar = LunarJS.Solar.fromYmdHms(year, month, day, h, m, 0).getLunar()
+  return ganZhiToPillar(lunar.getTimeInGanZhi())
+}
+function calcTodayPillar(today=koreanDate()) {
+  return calcDayPillar(today.year,today.month,today.day)
+}
+function calcManse(year: number, month: number, day: number, hourStr?: string, longitude?: number) {
+  // ✅ 신규: 출생지(경도) 선택 입력 시 진태양시로 보정 (사주풀이 route.ts와 동일 로직)
+  let y = year, mo = month, d = day, hm = hourStr
+  if (longitude && hourStr) {
+    const c = correctToTrueSolarTime(year, month, day, hourStr, longitude)
+    y = c.correctedYear; mo = c.correctedMonth; d = c.correctedDay; hm = c.correctedHourMinute
+  }
+  const yp = calcYearPillar(y, mo, d)
+  const mp = calcMonthPillar(y, mo, d)
+  const dp = calcDayPillar(y, mo, d)
+  let hp = null
+  if (hm) {
+    const h = parseInt(hm.split(':')[0])
+    const m = hm.split(':')[1] ? parseInt(hm.split(':')[1]) : 0
+    if (!isNaN(h) && h >= 0 && h <= 23) hp = calcHourPillar(y, mo, d, h, m)
+  }
+  const elements: Record<string, number> = { '木':0, '火':0, '土':0, '金':0, '水':0 }
+  const pillars = [yp, mp, dp, ...(hp ? [hp] : [])]
+  pillars.forEach(p => {
+    elements[p.stemElement] = (elements[p.stemElement]||0) + 1
+    elements[p.branchElement] = (elements[p.branchElement]||0) + 1
+  })
+  return { yearPillar: yp, monthPillar: mp, dayPillar: dp, hourPillar: hp, elementCount: elements, animal: ANIMALS[yp.branchIdx] }
 }
 
 const CHARACTER_VOICE: Record<string, string> = {
@@ -114,85 +108,42 @@ const CHARACTER_VOICE: Record<string, string> = {
   sinRyeong: `너는 무등산 신령님이야. 묵직하고 근엄. "허허", "그래", "이 친구" 씀. 자연 비유 씀.`,
 }
 
-export async function POST(req: NextRequest) {
-  let reservedUsage: DailyUsageRow | null = null
-  let store: ReturnType<typeof createSupabaseDailyQuotaStore> | null = null
+async function generate(req: NextRequest) {
   try {
-    const csrf = rejectCrossSiteCookieMutation(req)
-    if (csrf) return csrf
-    const notice = await requireContentNotice()
-    if (!notice.ok) return notice.response
-    const userId = notice.userId
-    if (!userId) {
-      return NextResponse.json({ error: DAILY_LOGIN_REQUIRED_MESSAGE }, { status: 401 })
-    }
-
-    const body = await req.json()
-    const { name, gender, characterId } = body
-    const birth = resolveBirthFromRequest(body)
-    if ('error' in birth) return NextResponse.json({ error: birth.error }, { status: 400 })
-    const marital = normalizeMaritalStatus(body.maritalStatus)
-    const occupation = resolveOccupation(body.occupation) || '미입력'
-
-    const now = new Date()
-    store = createSupabaseDailyQuotaStore()
-    const reserved = await reserveDailyGeneration(store, {
-      userId,
-      requestId: body.requestId,
-      now,
-      confirmPaidRegenerate: body.confirmPaidRegenerate,
-      paymentsEnabled: isPaymentsEnabled(),
-    })
-    if (!reserved.ok) {
-      return NextResponse.json({ error: reserved.error, code: reserved.code }, { status: quotaErrorStatus(reserved.code) })
-    }
-    reservedUsage = reserved.usage
-
-    if (reserved.reused) {
-      const cached = reserved.usage.result && reserved.usage.manse_data
-        ? { manse: reserved.usage.manse_data, result: reserved.usage.result, characterId: reserved.usage.character_id }
-        : await store.getFreeReading(userId, reserved.usage.usage_date)
-      if (!cached) {
-        return NextResponse.json({ error: '저장된 오늘의 운세를 찾지 못했어요. 잠시 후 다시 확인해주세요.' }, { status: 409 })
-      }
-      return sseFromResult(
-        cached.manse,
-        cached.result,
-      )
-    }
-
-    const clock = generationClock(now)
-    const todayStr = `${clock.currentYear}년 ${clock.currentMonth}월 ${clock.currentDay}일`
+    const { name, year, month, day, hour, gender, characterId, calType, longitude } = await req.json()
+    // Access and the lifetime trial reservation are enforced by guardedGeneration.
+    const now = koreanDate()
+    const todayStr  = `${now.year}년 ${now.month}월 ${now.day}일`
     const genderStr = gender === 'male' ? '남성' : '여성'
-    const age = clock.currentYear - birth.solarYear + 1
+    const calTypeStr = calType === 'lunar' ? '음력' : '양력'
+    const age       = now.year - parseInt(year) + 1
 
-    const manse = calcManse(birth.solarYear, birth.solarMonth, birth.solarDay, birth.hourMinute, birth.longitude)
-    const todayPillar = calcDayPillar(clock.currentYear, clock.currentMonth, clock.currentDay)
+    const birth=birthSolarDate(Number(year),Number(month),Number(day),calType)
+    const manse      = calcManse(birth.year,birth.month,birth.day, hour, typeof longitude === 'number' ? longitude : undefined)
+    const todayPillar = calcTodayPillar(now)
+
+    const elementNames: Record<string,string> = { '木':'나무', '火':'불', '土':'땅', '金':'금속', '水':'물' }
+    const elementDesc = Object.entries(manse.elementCount)
+      .map(([el, cnt]) => `${elementNames[el]} ${cnt}개`).join(', ')
 
     const voice = CHARACTER_VOICE[characterId] ?? CHARACTER_VOICE['doRyeong']
 
     const prompt = `
 ${voice}
 
-오늘은 ${todayStr}이야. 생성 기준일 ${clock.generatedDateKST} (Asia/Seoul).
+오늘은 ${todayStr}이야.
 오늘 날짜 일주: ${todayPillar.stem}${todayPillar.branch} (${todayPillar.stemKr}${todayPillar.branchKr})
 
-상담자: ${name} (${genderStr}, ${age}세, ${manse.animal}띠)
-${birthPromptLine(birth)}
-${formatManseForPrompt(manse, '상담자')}
-${SHARED_INTERP_GUARDS}
-
-${buildServiceContextPrompt({ service: 'daily', maritalStatus: marital, occupation })}
+상담자: ${name} (${year}년 ${month}월 ${day}일생 ${calTypeStr}, ${manse.animal}띠, ${genderStr}, ${age}세)
+사주 기운: ${elementDesc}
+일간: ${manse.dayPillar.stem}(${manse.dayPillar.stemKr}) — ${manse.dayPillar.stemElement} 기운
+연주: ${manse.yearPillar.stem}${manse.yearPillar.branch} / 월주: ${manse.monthPillar.stem}${manse.monthPillar.branch} / 일주: ${manse.dayPillar.stem}${manse.dayPillar.branch} / 시주: ${manse.hourPillar ? manse.hourPillar.stem+manse.hourPillar.branch : '미상'}
 
 오늘 날짜 기운과 이 사람 사주 기운이 어떻게 만나는지 분석해서 일일운세를 줘.
 캐릭터 말투 100% 유지. 어려운 명리 용어 절대 금지. 20-30대 말로.
-오행 개수는 위에 준 숫자만 인용하고 다시 세지 마라.
-점수는 해석용 감각이지 계산표가 아니다. 계산된 사실처럼 단정하지 마라.
 - "~가 아니라 ~야" / "봐봐, ~잖아" / "솔직히 ~" 패턴 섞어서
 - 판결하듯이 써. 읽으면 "맞다" 싶게
 - 각 섹션 3~4문장. 구체적으로.
-- 연애운 항목은 위 결혼 상태에 맞게만 쓰고, 대운·택일용 연애 문구를 복붙하지 마라.
-- 재물운은 입력된 직업(${occupation})의 오늘 현장 기준으로.
 
 반드시 아래 JSON만 출력. 마크다운 없이. 점수는 0~100 사이 정수.
 
@@ -201,7 +152,7 @@ ${buildServiceContextPrompt({ service: 'daily', maritalStatus: marital, occupati
   "overall_score": 75,
   "money": "재물운 2~3문장",
   "money_score": 70,
-  "love": "관계/인연 운 2~3문장 (결혼 상태에 맞게)",
+  "love": "연애운 2~3문장",
   "love_score": 80,
   "health": "건강운 2~3문장",
   "health_score": 65,
@@ -211,76 +162,51 @@ ${buildServiceContextPrompt({ service: 'daily', maritalStatus: marital, occupati
 }
 `
 
-    let parsed: Record<string, unknown> | null = null
-    let lastErr: unknown = null
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      const response = await client.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 1500,
-        system: '너는 사주궁 서비스의 일일운세 캐릭터야. 반드시 순수 JSON만 출력. 마크다운 코드블록 절대 금지.',
-        messages: [{ role: 'user', content: prompt }],
-      })
-      try {
-        const raw = response.content[0].type === 'text' ? response.content[0].text : ''
-        const clean = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
-        const s = clean.indexOf('{'), e = clean.lastIndexOf('}')
-        if (s === -1 || e === -1) throw new Error('JSON 파싱 실패')
-        const next = JSON.parse(clean.slice(s, e + 1))
-        assertNoElementCitationMismatch(collectGeneratedText([next]), manse.elementCount)
-        parsed = next
-        console.log(JSON.stringify({
-          tag: '일일운세',
-          phase: 'generated',
-          attempt,
-          calcVersion: manse.calcVersion,
-          outputTokens: response.usage.output_tokens,
-        }))
-        break
-      } catch (e) {
-        lastErr = e
-        console.error(JSON.stringify({
-          tag: '일일운세',
-          phase: 'validate',
-          attempt,
-          kind: e instanceof Error && e.message.includes('오행 수치 불일치') ? 'validation' : 'parse',
-        }))
-      }
-    }
-    if (!parsed) throw lastErr instanceof Error ? lastErr : new Error('일일운세 생성 실패')
+    // ── 논스트리밍으로 완성 후 전송 (파싱 안정성) ──────
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1500,
+      system: '너는 사주궁 서비스의 일일운세 캐릭터야. 반드시 순수 JSON만 출력. 마크다운 코드블록 절대 금지.',
+      messages: [{ role: 'user', content: prompt }],
+    }, {signal:req.signal, maxRetries:0})
 
-    const manseWithToday = { ...manse, todayPillar }
-    if (!store || !reservedUsage) throw new Error('quota store missing')
-    await completeDailyGeneration(store, reservedUsage, {
-      characterId: characterId || 'doRyeong',
-      manse: manseWithToday,
-      result: parsed,
-    }, now)
+    await recordUsage(response.model, response.usage)
+    const raw = response.content[0].type === 'text' ? response.content[0].text : ''
+    const clean = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
+    const s = clean.indexOf('{'), e = clean.lastIndexOf('}')
+    if (s === -1 || e === -1) throw new Error('JSON 파싱 실패')
 
-    if (reservedUsage.kind === 'free') {
-      try {
-        const supabase = createServerSupabase()
-        await supabase.from('users').update({
-          birth_profile: {
-            name, gender, characterId,
-            year: body.year, month: body.month, day: body.day, hour: body.hour,
-            calType: body.calType, isLeapMonth: body.isLeapMonth,
-            timeMode: body.timeMode, timePeriod: body.timePeriod, birthPlace: body.birthPlace,
-            maritalStatus: marital, occupation,
-          },
-        }).eq('id', userId)
-      } catch (saveErr) {
-        console.error('[사주궁] 일일운세 프로필 저장 실패:', saveErr)
-      }
-    }
+    const parsed = JSON.parse(clean.slice(s, e + 1))
+    console.log('[일일운세] 생성 완료:', response.usage.output_tokens, 'tok')
 
-    return sseFromResult(manseWithToday, parsed)
+
+    // ── SSE로 만세력 + 결과 전송 ────────────────────────
+    const encoder = new TextEncoder()
+    const readable = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(
+          `data: ${JSON.stringify({ type: 'manse', data: { ...manse, todayPillar } })}\n\n`
+        ))
+        const jsonStr = JSON.stringify(parsed)
+        const chunkSize = 200
+        for (let i = 0; i < jsonStr.length; i += chunkSize) {
+          controller.enqueue(encoder.encode(
+            `data: ${JSON.stringify({ text: jsonStr.slice(i, i + chunkSize) })}\n\n`
+          ))
+        }
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+        controller.close()
+      },
+    })
+
+    return new NextResponse(readable, {
+      headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' },
+    })
   } catch (e) {
     console.error('[일일운세] 서버 오류:', e)
-    if (store && reservedUsage) {
-      try { await failDailyGeneration(store, reservedUsage) } catch (failErr) {
-        console.error('[일일운세] 실패 처리 오류:', failErr)
-      }
-    }
     return NextResponse.json({ error: '서버 오류' }, { status: 500 })
   }
 }
+
+export const POST = guardedGeneration('daily', generate)
+export const maxDuration = 300

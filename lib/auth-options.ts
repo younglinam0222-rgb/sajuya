@@ -1,13 +1,11 @@
+import type { NextAuthOptions } from 'next-auth'
 import KakaoProvider from 'next-auth/providers/kakao'
 import GoogleProvider from 'next-auth/providers/google'
-import { createClient } from '@supabase/supabase-js'
+import { createServerSupabase } from './supabase'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const supabaseAdmin = createServerSupabase()
 
-export const authOptions = {
+export const authOptions: NextAuthOptions = {
   providers: [
     KakaoProvider({
       clientId: process.env.KAKAO_CLIENT_ID!,
@@ -27,7 +25,7 @@ export const authOptions = {
       },
       token: 'https://nid.naver.com/oauth2.0/token',
       userinfo: 'https://openapi.naver.com/v1/nid/me',
-      profile(profile: any) {
+      profile(profile: {response: {id: string; name: string; email: string; profile_image: string}}) {
         return {
           id: profile.response.id,
           name: profile.response.name,
@@ -40,7 +38,7 @@ export const authOptions = {
     },
   ],
   callbacks: {
-    async signIn({ user }: { user: any }) {
+    async signIn({ user }) {
       try {
         const { data: existing } = await supabaseAdmin
           .from('users')
@@ -61,15 +59,16 @@ export const authOptions = {
           })
           if(insertError && insertError.code!=='23505') return false
         }
-      } catch (e) {
+      } catch {
         console.error('signIn DB error')
         return false
       }
       return true
     },
-    async session({ session, token }: { session: any; token: any }) {
+    async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.sub as string
+        const user = session.user as typeof session.user & {id: string; yeobjeun_balance?: number}
+        user.id = token.sub as string
 
         // 세션에 잔액 포함
         try {
@@ -78,12 +77,12 @@ export const authOptions = {
             .select('yeobjeun_balance')
             .eq('id', token.sub)
             .single()
-          if (data) session.user.yeobjeun_balance = data.yeobjeun_balance
+          if (data) user.yeobjeun_balance = data.yeobjeun_balance
         } catch {}
       }
       return session
     },
-    async jwt({ token }: { token: any }) {
+    async jwt({ token }) {
       return token
     },
   },
@@ -92,4 +91,3 @@ export const authOptions = {
   },
   secret: process.env.NEXTAUTH_SECRET,
 }
-

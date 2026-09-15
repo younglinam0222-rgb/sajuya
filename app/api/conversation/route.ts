@@ -3,15 +3,16 @@ import Anthropic from '@anthropic-ai/sdk'
 import {CHAT_GUIDES,compactChatManse} from '@/lib/chat-flow'
 import {validConversation,readConversation,conversationRoom,compactConversation,type ConversationTurn} from '@/lib/conversation'
 import {createServerSupabase} from '@/lib/supabase'
+import {readSavedReading as parse} from '@/lib/saved-reading'
 import {requireUser,AccessError,failure} from '@/lib/server-access'
 import {guardedGeneration,recordUsage} from '@/lib/generation-guard'
 import {replayWire} from '@/lib/generation-result'
 export const runtime='nodejs'
 export const maxDuration=120
 const enabled=()=>process.env.CONVERSATION_ENABLED==='true'&&process.env.CONVERSATION_COST_COINS==='1'&&!!process.env.ANTHROPIC_API_KEY
-const parse=(raw:unknown):any=>typeof raw==='string'?JSON.parse(raw):raw
 const day=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul'}).format(new Date())
-function turn(row:any):ConversationTurn|null{try{const c=parse(row.saju_data).form.conversation;return {id:row.share_id,roomId:c.roomId,sourceId:c.sourceId,characterId:row.character_id,message:c.message,answer:readConversation(row.ai_result),createdAt:row.created_at,free:!row.is_paid}}catch{return null}}
+type SavedTurnRow={saju_data:unknown;share_id:string;character_id:string;ai_result:unknown;created_at:string;is_paid:boolean}
+function turn(row:SavedTurnRow):ConversationTurn|null{try{const c=parse(row.saju_data).form.conversation;if(!c)return null;return {id:row.share_id,roomId:c.roomId,sourceId:c.sourceId,characterId:row.character_id,message:c.message,answer:readConversation(row.ai_result),createdAt:row.created_at,free:!row.is_paid}}catch{return null}}
 export async function GET(req:NextRequest){try{
  const user=await requireUser(req),db=createServerSupabase()
  const selectedSource=req.nextUrl.searchParams.get('sourceId'),selectedGuide=req.nextUrl.searchParams.get('characterId')
@@ -57,7 +58,7 @@ export async function POST(req:NextRequest){try{
   if(['running','failed'].includes(j.status)&&c.maxCoins!==input.maxCoins)throw new AccessError(409,'답변 이용 조건이 변경됐어요. 최대 사용 엽전을 다시 확인해주세요.')
   if(j.status==='running'){
    if(Date.now()-Date.parse(j.updated_at)>20*60*1000)return await generate(new NextRequest(req.url,{method:'POST',headers:req.headers,body:JSON.stringify({...j.input,requestId:input.requestId})}))
-   throw new AccessError(409,'답변을 준비 중입니다. 잠시 후 같은 요청으로 확인해주세요.')
+   throw new AccessError(409,'답변을 준비 중입니다. 잠시 후 같은 요청으로 확인해주세요.','GENERATION_PENDING')
   }
   if(j.status==='refunded')throw new AccessError(403,'환불된 대화입니다. 새 질문을 보내주세요.')
   if(j.status==='done'){

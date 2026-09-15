@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { sanitizeText } from '@/lib/sajuSanitize'
 
 function FormattedAnswer({ text, highlightColor }: { text: string; highlightColor: string }) {
@@ -24,18 +25,18 @@ export default function PersonalQuestionCard({
   question,
   answer,
   charColor,
-  locked = false,
   retrying = false,
   retryError = '',
   onRetry,
+  supportHref,
 }: {
   question: string
   answer: string
   charColor: string
-  locked?: boolean
   retrying?: boolean
   retryError?: string
   onRetry?: () => void
+  supportHref?: string
 }) {
   const q = question.trim()
   if (!q) return null
@@ -45,17 +46,15 @@ export default function PersonalQuestionCard({
       <div className="flex items-center gap-2 mb-2">
         <span>🔮</span>
         <span className="font-bold text-sm" style={{ color: charColor }}>족집게 질문</span>
-        {locked && <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-800 text-gray-400">잠김</span>}
       </div>
       <p className="text-sm text-white font-medium mb-3">“{sanitizeText(q)}”</p>
-      {locked ? (
-        <p className="text-sm text-gray-400">전체보기를 구매하면 답변을 확인할 수 있어요</p>
-      ) : answer.trim() ? (
+      {answer.trim() ? (
         <FormattedAnswer text={answer} highlightColor={charColor} />
       ) : (
         <div className="space-y-3">
           <p className="text-sm text-red-300">답변을 불러오지 못했어요</p>
           {retryError && <p className="text-xs text-gray-500">{retryError}</p>}
+          {supportHref && <div><p className="text-sm leading-relaxed">이미 이용한 결과의 누락된 답변입니다. 추가 결제 없이 결제 내역에서 확인을 요청해주세요.</p><Link href={supportHref} className="block mt-3 underline text-sm">결제 내역에서 확인하기</Link></div>}
           {onRetry && (
             <button
               type="button"

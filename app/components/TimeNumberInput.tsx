@@ -1,11 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 
 interface TimeNumberInputProps {
   value: string           // "HH:MM" 형식 또는 빈 문자열('모름')
   onChange: (value: string) => void
-  exactOnly?: boolean     // 대략 시간대 칩을 숨기고 시·분만 받는다
 }
 
 // ✅ 신규: 12지지 시진(자시~해시)은 전통 용어라 낯설어하는 사람이 많아서,
@@ -35,32 +34,25 @@ const selectClass = "flex-1 bg-gray-900 border border-gray-700 rounded-xl px-3 p
 // 드롭다운(select) 클릭 방식으로 전면 교체. 오차 없이 정확한 값을 그대로 고를 수 있고,
 // 손가락으로 스크롤 휠을 여러 번 돌리던 예전 네이티브 <input type="time">과 달리
 // 목록에서 한 번 탭하면 바로 선택되는 방식이라 빠름.
-export default function TimeNumberInput({ value, onChange, exactOnly = false }: TimeNumberInputProps) {
-  const [h, setH] = useState('')
-  const [m, setM] = useState('')
-
-  // 부모의 value(HH:MM)가 외부에서 바뀌는 경우(예: 쿼리 파라미터로 프리필) 동기화
-  useEffect(() => {
-    if (value) {
-      const [vh, vm] = value.split(':')
-      setH(vh); setM(vm)
-    } else {
-      setH(''); setM('')
-    }
-  }, [value])
-
-  const emit = (hh: string, mm: string) => {
-    if (hh === '' || mm === '') { onChange(''); return }
-    onChange(`${hh}:${mm}`)
+export default function TimeNumberInput({ value, onChange }: TimeNumberInputProps) {
+  const readValue = (nextValue: string) => {
+    const [h = '', m = ''] = nextValue.split(':')
+    return { source: nextValue, h, m }
   }
+  const [draft, setDraft] = useState(() => readValue(value))
+  // External profile changes replace the draft; partially entered times survive our own onChange('') updates.
+  if (draft.source !== value) setDraft(readValue(value))
+  const { h, m } = draft
 
-  const handleH = (v: string) => { setH(v); emit(v, m) }
-  const handleM = (v: string) => { setM(v); emit(h, v) }
-  const handlePreset = (presetH: number) => {
-    const hh = String(presetH).padStart(2, '0')
-    setH(hh); setM('00'); emit(hh, '00')
+  const update = (nextH: string, nextM: string) => {
+    const nextValue = nextH === '' || nextM === '' ? '' : `${nextH}:${nextM}`
+    setDraft({ source: nextValue, h: nextH, m: nextM })
+    onChange(nextValue)
   }
-  const handleClear = () => { setH(''); setM(''); onChange('') }
+  const handleH = (v: string) => update(v, m)
+  const handleM = (v: string) => update(h, v)
+  const handlePreset = (presetH: number) => update(String(presetH).padStart(2, '0'), '00')
+  const handleClear = () => update('', '')
 
   return (
     <div>
@@ -78,19 +70,17 @@ export default function TimeNumberInput({ value, onChange, exactOnly = false }: 
             className="text-xs text-gray-600 underline flex-shrink-0">지우기</button>
         )}
       </div>
-      {!exactOnly && (
-        <div>
-          <p className="text-[10px] text-gray-500 mb-1">💭 시간을 전혀 모르면 — 대략 이때쯤이었다 싶은 것만 골라도 돼요</p>
-          <div className="flex flex-wrap gap-1.5">
-            {BROAD_PRESETS.map(p => (
-              <button key={p.label} type="button" onClick={() => handlePreset(p.h)}
-                className="px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-gray-900 border border-gray-700 text-gray-300 active:bg-gray-800">
-                {p.label} <span className="text-gray-600">({p.range})</span>
-              </button>
-            ))}
-          </div>
+      <div>
+        <p className="text-[10px] text-gray-500 mb-1">💭 시간을 전혀 모르면 — 대략 이때쯤이었다 싶은 것만 골라도 돼요</p>
+        <div className="flex flex-wrap gap-1.5">
+          {BROAD_PRESETS.map(p => (
+            <button key={p.label} type="button" onClick={() => handlePreset(p.h)}
+              className="px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-gray-900 border border-gray-700 text-gray-300 active:bg-gray-800">
+              {p.label} <span className="text-gray-600">({p.range})</span>
+            </button>
+          ))}
         </div>
-      )}
+      </div>
       <div className="flex flex-wrap gap-1.5 mt-3">
         {SIJIN_PRESETS.map(p => (
           <button key={p.label} type="button" onClick={() => handlePreset(p.h)}
@@ -99,11 +89,7 @@ export default function TimeNumberInput({ value, onChange, exactOnly = false }: 
           </button>
         ))}
       </div>
-      <p className="text-[10px] text-gray-600 mt-1">
-        {exactOnly
-          ? '정확한 시각만 시주로 계산합니다. 대략적인 시간대는 위 시간 구분에서 따로 고르세요.'
-          : '시간을 정확히 아시면 위 드롭다운에서 직접 선택, 어느 정도 아시면 12시진 버튼을, 전혀 모르시면 맨 위 큰 카테고리를 눌러주세요.'}
-      </p>
+      <p className="text-[10px] text-gray-600 mt-1">시간을 정확히 아시면 위 드롭다운에서 직접 선택, 어느 정도 아시면 12시진 버튼을, 전혀 모르시면 맨 위 큰 카테고리를 눌러주세요.</p>
     </div>
   )
 }

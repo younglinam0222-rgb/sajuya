@@ -1,27 +1,21 @@
 'use client'
+import AccessNotice from '@/app/components/AccessNotice'
+import ReadingResult, { sajuReadingSections } from '@/app/components/reading/ReadingResult'
 
-import { useState, useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useState, useEffect, useRef } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useSession, signIn } from 'next-auth/react'
 import TimeNumberInput from '@/app/components/TimeNumberInput'
 import { KOREA_REGIONS } from '@/lib/solarTime'
-import { sanitizeText } from '@/lib/sajuSanitize'
 import { appendSseChunk, parseSseFrame } from '@/lib/sajuSse'
-import { assessFreeStage, FREE_TITLE_IDS } from '@/lib/sajuScope'
-import { normalizePersonalAnswer, PEAK_GUIDE_LABEL, sortTitlesById } from '@/lib/sajuContract'
-import { titleIsFree } from '@/lib/readingAccess'
-import { SAJU_UNLOCK_NYANG } from '@/lib/pricing'
-import PersonalQuestionLabel from '@/app/components/PersonalQuestionLabel'
-import ContentNoticeShortHint from '@/app/components/ContentNoticeShortHint'
-import { applyGenerateGate } from '@/lib/contentNoticeClient'
-import { contentNoticeHref } from '@/lib/safeNextPath'
+import { assessCompletion, GROUP_IDS, LAST_GROUP_INDEX, normalizePersonalAnswer, sortTitlesById } from '@/lib/sajuContract'
 
 interface SajuTitle {
   id: string; category?: string; title: string; teaser: string; is_free: boolean; content: string
 }
 interface LifecycleItem {
-  age: string; score?: number; season: string; desc: string
+  age: string; score: number; season: string; desc: string
 }
 interface Strategy {
   overview: string; golden_period: string; lifecycle: LifecycleItem[]; peak_guide: string; warning: string; final_word?: string
@@ -29,8 +23,12 @@ interface Strategy {
 interface SajuResult {
   titles: SajuTitle[]; strategy: Strategy; disclaimer?: string; personalAnswer?: { question: string; answer: string }
 }
+interface MansePillar {
+  stem: string; branch: string; stemKr?: string; branchKr?: string
+  stemElement: string; branchElement: string; sipsinStem?: string; sipsinBranch?: string
+}
 interface ManseData {
-  yearPillar: any; monthPillar: any; dayPillar: any; hourPillar: any
+  yearPillar: MansePillar; monthPillar: MansePillar; dayPillar: MansePillar; hourPillar: MansePillar | null
   elementCount: Record<string, number>; animal: string; hourStr: string
 }
 
@@ -48,11 +46,6 @@ const CHARACTERS = [
   { id: 'sinRyeong', name: '무등산 신령님',  img: '/characters/sinryeong.png', desc: '대운 인생 전문',  color: '#10B981' },
 ]
 
-const SEASON_COLORS: Record<string, string> = { '봄':'#10B981','여름':'#F59E0B','가을':'#F97316','겨울':'#3B82F6' }
-const SEASON_ICONS:  Record<string, string> = { '봄':'🌱','여름':'☀️','가을':'🍂','겨울':'❄️' }
-const ELEMENT_COLORS: Record<string, string> = { '木':'#4ade80','火':'#f87171','土':'#fbbf24','金':'#d1d5db','水':'#60a5fa' }
-const ELEMENT_BG:    Record<string, string> = { '木':'rgba(34,197,94,.15)','火':'rgba(239,68,68,.15)','土':'rgba(234,179,8,.15)','金':'rgba(156,163,175,.15)','水':'rgba(96,165,250,.15)' }
-
 // ✅ 신규: 전략 결과 맨 아래에 캐릭터별로 다르게 붙는 마무리 한마디 라벨
 const FINAL_WORD_LABEL: Record<string, { icon: string; label: string }> = {
   baekhalma: { icon: '🧓', label: '할매의 진심 한마디' },
@@ -65,8 +58,8 @@ const LOADING_TIPS = [
   '사주팔자 계산하는 중...',
   '오행 분석하는 중...',
   '판결문 12개 작성하는 중...',
-  '인생 흐름 정리하는 중...',
-  '전략 문장 작성하는 중...',
+  '인생 흐름 계산하는 중...',
+  '전성기 전략 수립하는 중...',
 ]
 
 type Stage = 'input' | 'loading' | 'result'
@@ -77,59 +70,6 @@ type FailedPart = {
   groupIndex?: number
   message: string
   retryable: boolean
-}
-
-function ManseTable({ manse, charColor }: { manse: ManseData; charColor: string }) {
-  const pillars = [
-    { label: '시주', p: manse.hourPillar },
-    { label: '일주', p: manse.dayPillar },
-    { label: '월주', p: manse.monthPillar },
-    { label: '연주', p: manse.yearPillar },
-  ]
-  return (
-    <div className="rounded-2xl overflow-hidden border border-gray-800 mb-4">
-      <div className="py-2 text-center text-xs font-black text-yellow-400 tracking-widest bg-[#111118] border-b border-gray-800">
-        만세력 (四柱八字)
-      </div>
-      <div className="grid grid-cols-4 text-center border-b border-gray-800">
-        {pillars.map(({ label }) => (
-          <div key={label} className="py-1.5 text-[10px] font-bold text-gray-600 bg-[#0d0d0d]">{label}</div>
-        ))}
-      </div>
-      <div className="grid grid-cols-4 text-center border-b border-gray-800">
-        {pillars.map(({ label, p }) => (
-          <div key={label} className="py-2" style={{ background: p ? ELEMENT_BG[p.stemElement]||'#111118' : '#111118' }}>
-            <div className="text-2xl font-black leading-none" style={{ color: p ? ELEMENT_COLORS[p.stemElement]||'#fff' : '#333' }}>{p ? p.stem : '?'}</div>
-            <div className="text-[10px] text-gray-400 font-bold mt-0.5">{p?.stemKr ?? ''}</div>
-            <div className="text-[9px] text-gray-500 mt-0.5">{p?.stemElement}</div>
-            <div className="text-[9px] text-gray-500">{p?.sipsinStem}</div>
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-4 text-center border-b border-gray-800">
-        {pillars.map(({ label, p }) => (
-          <div key={label} className="py-2" style={{ background: p ? ELEMENT_BG[p.branchElement]||'#111118' : '#111118' }}>
-            <div className="text-2xl font-black leading-none" style={{ color: p ? ELEMENT_COLORS[p.branchElement]||'#fff' : '#333' }}>{p ? p.branch : '?'}</div>
-            <div className="text-[10px] text-gray-400 font-bold mt-0.5">{p?.branchKr ?? ''}</div>
-            <div className="text-[9px] text-gray-500 mt-0.5">{p?.branchElement}</div>
-            <div className="text-[9px] text-gray-500">{p?.sipsinBranch}</div>
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-5 text-center bg-[#0d0d0d]">
-        {(['木','火','土','金','水'] as const).map(el => (
-          <div key={el} className="py-1.5 border-r border-gray-800 last:border-r-0">
-            <div className="text-xs font-black" style={{ color: ELEMENT_COLORS[el] }}>{el}</div>
-            <div className="text-[10px] text-gray-600">{manse.elementCount[el]??0}개</div>
-          </div>
-        ))}
-      </div>
-      <div className="px-3 py-2 bg-[#111118] text-xs text-gray-500">
-        {manse.animal}띠 · {manse.hourStr}
-        <div className="text-[10px] text-gray-600 mt-1">오행 개수는 겉글자 기준. 지지 십성은 본기(정기). 지장간 합산 아님.</div>
-      </div>
-    </div>
-  )
 }
 
 function LoadingScreen({ name, character, saving }: { name: string; character: typeof CHARACTERS[0]; saving?: boolean }) {
@@ -156,99 +96,18 @@ function LoadingScreen({ name, character, saving }: { name: string; character: t
   )
 }
 
-function LifecycleChart({ data }: { data: LifecycleItem[] }) {
-  if (!data?.length) return null
-  return (
-    <div className="rounded-2xl p-4 bg-[#111118] border border-gray-800">
-      <div className="flex items-center gap-2 mb-4"><span>📊</span><span className="font-bold text-sm text-white">나이대별 흐름</span><span className="text-[10px] text-gray-500">해석 · 계산 점수 아님</span></div>
-      <div className="flex items-end gap-2 h-16 mb-3">
-        {data.map(d => (
-          <div key={d.age} className="flex-1 flex flex-col items-center gap-1">
-            <div className="w-full rounded-t-lg h-10" style={{ background: SEASON_COLORS[d.season]??'#8B5CF6' }} />
-          </div>
-        ))}
-      </div>
-      <div className="flex gap-2 mb-3">
-        {data.map(d => (
-          <div key={d.age} className="flex-1 text-center">
-            <p className="text-xs text-gray-400">{d.age}</p>
-            <p className="text-xs">{SEASON_ICONS[d.season]??'✨'}</p>
-          </div>
-        ))}
-      </div>
-      <div className="space-y-1.5">
-        {data.map(d => (
-          <div key={d.age} className="flex items-start gap-2">
-            <span className="text-xs font-bold text-gray-500 w-8 flex-shrink-0">{d.age}</span>
-            <span className="text-xs" style={{ color: SEASON_COLORS[d.season]??'#fff' }}>{SEASON_ICONS[d.season]} {d.season}</span>
-            <span className="text-xs text-gray-400">{d.desc}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ✅ 수정: 데드코드(open state) 제거
-function TitleCard({ item, charColor, idx, locked }: { item: SajuTitle; charColor: string; idx: number; locked?: boolean }) {
-  return (
-    <div className="rounded-2xl overflow-hidden border" style={{ borderColor: `${charColor}40`, background: '#111118' }}>
-      <div className="p-4">
-        <div className="flex items-center gap-1.5 mb-2">
-          <span className="inline-block text-xs font-bold px-2 py-1 rounded-full"
-            style={{ background: `${charColor}25`, color: charColor }}>{idx+1}</span>
-          {item.category && (
-            <span className="inline-block text-[10px] font-bold px-2 py-1 rounded-full bg-gray-800 text-gray-300">
-              {item.category}
-            </span>
-          )}
-          {locked && <span className="ml-auto text-gray-600">🔒</span>}
-        </div>
-        <p className="font-bold text-base leading-snug text-white">{sanitizeText(item.title)}</p>
-        {locked ? (
-          <>
-            {item.teaser && <p className="text-xs text-gray-500 mt-1">{sanitizeText(item.teaser)}</p>}
-            <p className="text-xs text-gray-600 mt-3">전체보기는 결과 화면에서 엽전 {SAJU_UNLOCK_NYANG}냥으로 열 수 있어요.</p>
-          </>
-        ) : item.content ? (
-          <div className="text-gray-300 text-sm leading-relaxed mt-4">
-            {sanitizeText(item.content).split('\n').map((line, i) => (
-              line.startsWith('⚠️')
-                ? <p key={i} className="mt-4 text-yellow-300 font-medium">{line}</p>
-                : line === ''
-                  ? <div key={i} className="h-4" />
-                  : <p key={i}>{line}</p>
-            ))}
-          </div>
-        ) : null}
-      </div>
-    </div>
-  )
-}
-
-// ✅ 신규: "인생 전략 분석" 섹션(전성기 활용법·조심할 시기)도 판결문 카드처럼
-// 항목별 줄바꿈 + 강조 색상이 먹히도록, 텍스트를 줄 단위로 쪼개서 렌더링하는 공용 헬퍼.
-// ⚠️ 수정: AI가 응답에 실제 줄바꿈(\n)을 안 넣어주는 경우가 있어서, 줄바꿈 유무와
-// 상관없이 "첫째/둘째/셋째/⚠️" 앞에서 강제로 문단을 끊도록 정규식으로 보강.
-function FormattedStrategyText({ text, highlightColor = '#fbbf24' }: { text: string; highlightColor?: string }) {
-  const normalized = sanitizeText(text).replace(/\s*(첫째,|둘째,|셋째,|넷째,|다섯째,|⚠️)/g, '\n$1').trim()
-  const lines = normalized.split('\n').map(l => l.trim()).filter(l => l !== '')
-  return (
-    <div className="text-gray-300 text-sm leading-relaxed space-y-3">
-      {lines.map((line, i) => {
-        const isNumbered = /^(첫째|둘째|셋째|넷째|다섯째|\d+[.)])/.test(line)
-        const isWarning = line.startsWith('⚠️')
-        return (isNumbered || isWarning) ? (
-          <p key={i} className="font-semibold" style={{ color: highlightColor }}>{line}</p>
-        ) : (
-          <p key={i}>{line}</p>
-        )
-      })}
-    </div>
-  )
-}
-
 export default function SajuPage() {
+  return <Suspense fallback={<div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center text-gray-500 text-sm">불러오는 중...</div>}><SajuRoute /></Suspense>
+}
+
+function SajuRoute() {
+  const searchParams = useSearchParams()
+  const query = searchParams.toString()
+  return <SajuForm key={query} initialQuery={query} />
+}
+
+function SajuForm({ initialQuery }: { initialQuery: string }) {
+  const initialParams = new URLSearchParams(initialQuery)
   const router = useRouter()
   const { status } = useSession()
   const [stage, setStage] = useState<Stage>('input')
@@ -261,13 +120,14 @@ export default function SajuPage() {
   const [missingHint, setMissingHint] = useState<string[]>([])
   const [savedShareId, setSavedShareId] = useState<string | null>(null)
   const [incompleteSaved, setIncompleteSaved] = useState(false)
-  const [selectedChar, setSelectedChar] = useState(CHARACTERS[0])
-  const [calType, setCalType] = useState<'solar'|'lunar'>('solar')
-  const [form, setForm] = useState({
-    name: '', year: '1990', month: '1', day: '1',
-    hour: '', gender: 'female', occupation: '직장인', maritalStatus: '미혼(솔로)', questionIntent: '인생 전반', personalQuestion: '',
-    birthPlace: '',
-  })
+  const [selectedChar, setSelectedChar] = useState(() => CHARACTERS.find(character => character.id === initialParams.get('character')) ?? CHARACTERS[0])
+  const [calType, setCalType] = useState<'solar'|'lunar'>(() => initialParams.get('calType') === 'lunar' ? 'lunar' : 'solar')
+  const [form, setForm] = useState(() => ({
+    name: initialParams.get('name') ?? '', year: initialParams.get('year') ?? '1990',
+    month: initialParams.get('month') ?? '1', day: initialParams.get('day') ?? '1',
+    hour: initialParams.get('hour') ?? '', gender: initialParams.get('gender') === 'male' ? 'male' : 'female',
+    occupation: '직장인', maritalStatus: '미혼(솔로)', questionIntent: '인생 전반', personalQuestion: '', birthPlace: '',
+  }))
   const [partnerForm, setPartnerForm] = useState({
     name: '', year: '1990', month: '1', day: '1', hour: '', gender: 'male',
   })
@@ -279,6 +139,8 @@ export default function SajuPage() {
   const abortRef = useRef<AbortController | null>(null)
   const saveAbortRef = useRef<AbortController | null>(null)
   const requestIdRef = useRef<string | null>(null)
+  const requestBodyRef = useRef<string | null>(null)
+  const submittingRef = useRef(false)
   const receivedGroupsRef = useRef<Set<number>>(new Set())
   const titlesByIdRef = useRef<Map<string, SajuTitle>>(new Map())
   const gotDoneRef = useRef(false)
@@ -286,16 +148,6 @@ export default function SajuPage() {
   const savedShareIdRef = useRef<string | null>(null)
   const saveFingerprintRef = useRef<string | null>(null)
   const timingRef = useRef<{ submitAt: number; firstManse?: number; firstJudgment?: number; allRequired?: number; saveDone?: number }>({ submitAt: 0 })
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    if (new URLSearchParams(window.location.search).get('from') !== 'share') return
-    void fetch('/api/share/events', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event: 'share_cta_start' }),
-    })
-  }, [])
 
   useEffect(() => {
     return () => {
@@ -306,26 +158,6 @@ export default function SajuPage() {
 
   const isRomance = form.questionIntent === '연애/결혼'
 
-  // ✅ 신규: 오늘의 운세(/daily) 등에서 "전체 사주 풀이 보기" 버튼으로 넘어올 때
-  // URL 쿼리(?name=...&year=...)로 입력값을 미리 채워줌 (전환 마찰 감소)
-  // useSearchParams 훅 대신 window.location으로 읽어서 정적 프리렌더링 이슈(Suspense 필요) 회피
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const params = new URLSearchParams(window.location.search)
-    if (!params.has('name')) return
-    setForm(f => ({
-      ...f,
-      name: params.get('name') ?? f.name,
-      year: params.get('year') ?? f.year,
-      month: params.get('month') ?? f.month,
-      day: params.get('day') ?? f.day,
-      hour: params.get('hour') ?? f.hour,
-      gender: params.get('gender') ?? f.gender,
-    }))
-    const cal = params.get('calType')
-    if (cal === 'lunar' || cal === 'solar') setCalType(cal)
-  }, [])
-
   const publishResult = (next: Partial<SajuResult>) => {
     finalResultRef.current = next
     setResult(next)
@@ -333,13 +165,16 @@ export default function SajuPage() {
 
   const mergeTitleList = (): SajuTitle[] => sortTitlesById([...titlesByIdRef.current.values()])
 
-  const currentAssessment = () => assessFreeStage({
+  const currentAssessment = () => assessCompletion({
     titles: mergeTitleList(),
+    strategy: finalResultRef.current.strategy,
+    personal: finalResultRef.current.personalAnswer,
+    requestedPersonal: requestedPersonalRef.current,
     receivedGroupIndexes: receivedGroupsRef.current,
     gotDone: gotDoneRef.current,
   })
 
-  const hintFromReport = (report: ReturnType<typeof assessFreeStage>) => {
+  const hintFromReport = (report: ReturnType<typeof assessCompletion>) => {
     const hints: string[] = []
     if (!report.gotDone) hints.push('서버 완료 신호([DONE]) 없음')
     if (report.missingGroups.length) hints.push(`그룹 ${report.missingGroups.map(g => g + 1).join(', ')}`)
@@ -400,20 +235,7 @@ export default function SajuPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: saveAbort.signal,
-        body: JSON.stringify({
-          shareId: savedShareIdRef.current ?? undefined,
-          requestId,
-          isComplete: complete,
-          characterId: selectedChar.id,
-          occupationId: form.occupation,
-          sajuData: {
-            form: { ...form, calType },
-            saju: finalManseRef.current,
-            partner: isRomance ? partnerForm : null,
-          },
-          aiResult: JSON.stringify(payload),
-          isPaid: false,
-        }),
+        body: JSON.stringify({ requestId }),
       })
       if (requestIdRef.current !== requestId) return
       if (!saveRes.ok) throw new Error(`save_http_${saveRes.status}`)
@@ -451,17 +273,19 @@ export default function SajuPage() {
 
   const handleSubmit = async (mode: 'full' | 'retry' = 'full') => {
     if (mode !== 'full' && mode !== 'retry') mode = 'full'
-    if (!form.name) return
-    if (status === 'unauthenticated') {
+    if (!form.name.trim()) return
+    if (status !== 'authenticated') {
       setErrorMsg('로그인 후 이용할 수 있어요.')
       return
     }
 
+    if (submittingRef.current) return
+    submittingRef.current = true
     abortRef.current?.abort()
     saveAbortRef.current?.abort()
     const ac = new AbortController()
     abortRef.current = ac
-    const requestId = crypto.randomUUID()
+    const requestId = mode === 'retry' && requestIdRef.current ? requestIdRef.current : crypto.randomUUID()
     requestIdRef.current = requestId
     requestedPersonalRef.current = form.personalQuestion.trim().length > 0
     gotDoneRef.current = false
@@ -495,51 +319,20 @@ export default function SajuPage() {
       personalQuestionChars: form.personalQuestion.trim().length,
     })
 
-    const reportNow = currentAssessment()
-    const retry = mode === 'retry'
-      ? {
-          groups: [...new Set([
-            ...reportNow.missingGroups,
-            ...failedParts.filter(p => p.part === 'group' && typeof p.groupIndex === 'number').map(p => p.groupIndex as number),
-          ])].filter(g => g === 0),
-          strategy: false,
-          personal: false,
-        }
-      : undefined
-
     let fatalMessage = ''
     try {
       const selectedRegion = KOREA_REGIONS.find(r => r.name === form.birthPlace)
+      if(mode==='full'||!requestBodyRef.current)requestBodyRef.current=JSON.stringify({
+        ...form,personalQuestion:form.personalQuestion,occupation:form.occupation||'일반인',calType,
+        characterId:selectedChar.id,partnerInfo:isRomance?partnerForm:undefined,longitude:selectedRegion?.longitude,requestId,
+      })
       const res = await fetch('/api/saju', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: ac.signal,
-        body: JSON.stringify({
-          ...form,
-          personalQuestion: form.personalQuestion,
-          occupation: form.occupation,
-          calType,
-          characterId: selectedChar.id,
-          partnerInfo: isRomance ? partnerForm : undefined,
-          longitude: selectedRegion?.longitude,
-          requestId,
-          retry,
-          phase: 'free',
-        }),
+        method:'POST',headers:{'Content-Type':'application/json'},signal:ac.signal,body:requestBodyRef.current,
       })
       if (requestIdRef.current !== requestId) return
       if (!res.ok) {
-        const gate = await applyGenerateGate(res, '/saju')
-        if (gate === 'notice' || gate === 'login') {
-          setGenStatus('idle')
-          setStage('input')
-          return
-        }
-        setErrorMsg(
-          gate === 'unavailable'
-            ? '콘텐츠 안내 확인을 저장할 수 없어 생성을 시작하지 않았습니다.'
-            : res.status === 401 ? '로그인 후 이용할 수 있어요.' : `서버 오류(${res.status}). 다시 시도해주세요.`
-        )
+        const info = await res.json().catch(() => ({}))
+        setErrorMsg(info.error || `서버 오류(${res.status}). 다시 시도해주세요.`)
         setGenStatus('failed')
         setStage('input')
         return
@@ -591,7 +384,7 @@ export default function SajuPage() {
           return
         }
         if (parsed.type === 'group') {
-          if (typeof parsed.groupIndex !== 'number' || parsed.groupIndex !== 0) {
+          if (typeof parsed.groupIndex !== 'number' || parsed.groupIndex < 0 || parsed.groupIndex > LAST_GROUP_INDEX) {
             clientLog('invalid_group_index', { groupIndex: parsed.groupIndex ?? null })
             return
           }
@@ -731,6 +524,8 @@ export default function SajuPage() {
       setGenStatus(hasAny ? 'partial' : 'failed')
       setErrorMsg('분석 중 오류가 발생했습니다. 다시 시도해주세요.')
       setStage(hasAny ? 'result' : 'input')
+    } finally {
+      submittingRef.current = false
     }
   }
 
@@ -750,20 +545,20 @@ export default function SajuPage() {
         <div className="text-xl font-black mb-2">로그인하고 사주 풀이 받기</div>
         <div className="text-sm text-gray-500 mb-8 leading-relaxed">
           사주 풀이는 로그인 후 이용할 수 있어요<br />
-          <span className="text-yellow-400 font-bold">가입 즉시 🪙 1엽전 지급!</span>
+          <span className="text-yellow-400 font-bold">계정당 첫 일일운세 1회 무료</span>
         </div>
         <div className="w-full max-w-xs space-y-3">
-          <button onClick={() => signIn('kakao', { callbackUrl: contentNoticeHref('/saju') })}
+          <button onClick={() => signIn('kakao', { callbackUrl: `/saju?character=${encodeURIComponent(selectedChar.id)}` })}
             className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
             style={{ background: '#fee500', color: '#3c1e1e' }}>
             <span className="text-xl">💬</span> 카카오로 시작하기
           </button>
-          <button onClick={() => signIn('google', { callbackUrl: contentNoticeHref('/saju') })}
+          <button onClick={() => signIn('google', { callbackUrl: `/saju?character=${encodeURIComponent(selectedChar.id)}` })}
             className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
             style={{ background: '#fff', color: '#333', border: '1px solid #e5e7eb' }}>
             <span style={{ fontSize: '18px', fontWeight: 900, color: '#4285F4' }}>G</span> 구글로 시작하기
           </button>
-          <button onClick={() => signIn('naver', { callbackUrl: contentNoticeHref('/saju') })}
+          <button onClick={() => signIn('naver', { callbackUrl: `/saju?character=${encodeURIComponent(selectedChar.id)}` })}
             className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
             style={{ background: '#03c75a', color: '#fff' }}>
             <span className="text-xl font-black">N</span> 네이버로 시작하기
@@ -777,163 +572,55 @@ export default function SajuPage() {
   if (stage === 'loading') return <LoadingScreen name={form.name} character={selectedChar} />
 
   if (stage === 'result' && (result.titles?.length || manse || result.strategy || result.personalAnswer || genStatus === 'generating')) {
-    const allTitles = result.titles ?? []
-    const titleMap = new Map(allTitles.map(t => [String(t.id), t]))
+    const titleMap = new Map((result.titles ?? []).map(item => [String(item.id), item]))
     const generating = genStatus === 'generating'
-    return (
-      <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
-        <div className="max-w-md mx-auto px-4 pt-6">
-          <div className="flex items-center gap-3 mb-6">
-            <button onClick={leaveToInput} className="text-gray-400 text-xl">←</button>
-            <div>
-              <h1 className="text-lg font-bold">{form.name}님의 사주 풀이</h1>
-              <p className="text-gray-500 text-xs">{selectedChar.name} · {form.questionIntent}</p>
-            </div>
-          </div>
-
-          {generating && (
-            <div className="mb-4 px-3 py-2 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs">
-              해석을 생성하는 중입니다. 먼저 도착한 결과부터 보여드려요.
-            </div>
-          )}
-          {genStatus === 'partial' && (
-            <div className="mb-4 px-3 py-2 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 text-xs">
-              일부 해석만 완성됐어요.
-              {missingHint.length > 0 && <span> 누락: {missingHint.join(' · ')}</span>}
-            </div>
-          )}
-          {genStatus === 'complete' && saveStatus === 'failed' && (
-            <div className="mb-4 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs">
-              해석은 완료됐지만 저장에 실패했어요.
-            </div>
-          )}
-          {genStatus === 'complete' && saveStatus === 'saving' && (
-            <div className="mb-4 px-3 py-2 rounded-xl bg-gray-800 text-gray-300 text-xs">
-              해석 완료 · 저장 중...
-            </div>
-          )}
-          {saveStatus === 'failed' && (
-            <button
-              onClick={() => requestIdRef.current && saveReading(requestIdRef.current, genStatus === 'complete')}
-              className="w-full mb-4 py-2.5 rounded-xl text-sm font-bold bg-red-500/20 text-red-200 border border-red-500/30">
-              저장만 다시 시도
-            </button>
-          )}
-          {genStatus === 'partial' && !generating && (
-            <button
-              onClick={() => handleSubmit('retry')}
-              className="w-full mb-4 py-2.5 rounded-xl text-sm font-bold text-white"
-              style={{ background: selectedChar.color }}>
-              실패한 항목만 다시 생성
-            </button>
-          )}
-          {incompleteSaved && savedShareId && genStatus !== 'complete' && (
-            <div className="mb-4 px-3 py-2 rounded-xl bg-gray-800 text-gray-400 text-xs">
-              미완료 상태로 임시 저장했어요. 완성본으로 저장하지 않았습니다.
-            </div>
-          )}
-          {failedParts.length > 0 && !generating && (
-            <div className="mb-4 px-3 py-2 rounded-xl bg-gray-900 border border-gray-800 text-gray-400 text-xs space-y-1">
-              {failedParts.map((p, i) => (
-                <p key={`${p.part}-${p.groupIndex ?? 'x'}-${i}`}>
-                  {p.part === 'group' ? `${(p.groupIndex ?? 0) + 1}번 그룹` : p.part === 'strategy' ? '인생 전략' : p.part === 'personal' ? '족집게 질문' : '전체'} 실패
-                  {p.retryable ? '' : ' (재시도 불가)'}
-                </p>
-              ))}
-            </div>
-          )}
-
-          {(result.personalAnswer || form.personalQuestion.trim()) && (
-            <div className="mb-4 rounded-2xl p-4 border-2" style={{ background: `${selectedChar.color}18`, borderColor: selectedChar.color }}>
-              <div className="flex items-center gap-2 mb-2">
-                <span>🔮</span>
-                <span className="font-bold text-sm" style={{ color: selectedChar.color }}>족집게 질문</span>
-              </div>
-              <p className="text-sm text-white font-medium mb-3">
-                “{sanitizeText(result.personalAnswer?.question || form.personalQuestion)}”
-              </p>
-              {result.personalAnswer?.answer ? (
-                <p className="text-sm text-gray-500">족집게 답변은 결과 화면에서 엽전 {SAJU_UNLOCK_NYANG}냥으로 전체보기할 수 있어요.</p>
-              ) : (
-                <div className="space-y-3">
-                  <p className="text-sm text-gray-400">
-                    {generating
-                      ? '질문에 대한 답변을 작성하는 중...'
-                      : failedParts.some(p => p.part === 'personal')
-                        ? '족집게 답변 생성에 실패했어요.'
-                        : '족집게 답변이 아직 도착하지 않았어요.'}
-                  </p>
-                  {!generating && (
-                    <button
-                      onClick={() => handleSubmit('retry')}
-                      className="w-full py-2.5 rounded-xl text-sm font-bold text-white"
-                      style={{ background: selectedChar.color }}>
-                      이 질문만 다시 생성
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {manse && <ManseTable manse={manse} charColor={selectedChar.color} />}
-
-          <div className="mb-2">
-            <p className="text-xs text-gray-500 mb-2 font-medium">✨ 판결 {allTitles.length}가지{generating ? ' · 도착하는 대로 표시' : ''}</p>
-            <div className="space-y-3">
-              {FREE_TITLE_IDS.map((id, i) => {
-                const item = titleMap.get(String(id))
-                if (item) {
-                  const titleIndex = allTitles.findIndex(t => String(t.id) === String(item.id))
-                  const locked = !titleIsFree(item, titleIndex >= 0 ? titleIndex : i, allTitles)
-                  return <TitleCard key={item.id} item={item} charColor={selectedChar.color} idx={i} locked={locked} />
-                }
-                return (
-                  <div key={`pending-${id}`} className="rounded-2xl border border-dashed border-gray-800 bg-[#111118] p-4 text-xs text-gray-500">
-                    {id}번 판결문 {generating ? '작성 중...' : '아직 도착하지 않았어요'}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-          {result.strategy && (
-            <div className="mt-6 rounded-2xl p-4 bg-[#111118] border border-gray-800">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">⚔️</span>
-                  <h2 className="font-bold text-base">인생 전략 분석</h2>
-                </div>
-                <span className="text-gray-600">🔒</span>
-              </div>
-              <p className="text-xs text-gray-500">전체보기는 결과 화면에서 엽전 {SAJU_UNLOCK_NYANG}냥입니다.</p>
-            </div>
-          )}
-
-          {savedShareId && (
-            <Link href={`/result/${savedShareId}`}
-              className="block w-full mt-4 py-3.5 rounded-2xl font-bold text-sm text-white text-center"
-              style={{ background: selectedChar.color }}>
-              결과에서 전체보기 (1냥)
-            </Link>
-          )}
-
-          {result.disclaimer && <p className="text-gray-600 text-xs text-center mt-6">{result.disclaimer}</p>}
-          <button onClick={leaveToInput} className="w-full mt-4 py-3 rounded-2xl text-sm text-gray-400 border border-gray-800">다시 분석하기</button>
-          <Link href="/" className="block mt-3 text-center text-gray-500 text-sm">홈으로</Link>
-        </div>
-      </div>
-    )
+    const readingSections = sajuReadingSections({
+      titles: GROUP_IDS.flat().map(id => titleMap.get(String(id)) ?? { id: String(id), title: `${id}번째 해석`, content: '' }),
+      strategy: result.strategy,
+      personal: form.personalQuestion.trim() ? { question: form.personalQuestion, answer: result.personalAnswer?.answer || '' } : null,
+      pendingPersonal: <div className="rr-prose"><p>{generating ? '질문에 대한 답변을 작성하는 중이에요.' : '질문의 답변을 아직 받지 못했어요.'}</p>
+        {!generating && <button type="button" onClick={() => handleSubmit('retry')}>같은 요청 다시 확인</button>}</div>,
+      finalWordLabel: FINAL_WORD_LABEL[selectedChar.id]?.label,
+    })
+    return <ReadingResult
+      title={`${form.name}님의 사주 해석`}
+      subtitle={`${form.year}.${form.month}.${form.day} · ${calType === 'lunar' ? '음력' : '양력'} · ${form.questionIntent}`}
+      character={selectedChar.id}
+      characterName={selectedChar.name}
+      manse={manse}
+      sections={readingSections}
+      expectedCoreCount={12}
+      pending={generating}
+      statusLabel={generating ? '해석 작성 중' : genStatus === 'complete' ? '나의 해석' : '도착한 해석'}
+      disclaimer={result.disclaimer}
+      onBack={leaveToInput}
+      actionLabel="입력 화면으로"
+      notice={<>
+        {generating && <aside className="rr-status" role="status">해석을 생성하는 중입니다. 먼저 도착한 결과부터 보여드려요.</aside>}
+        {genStatus === 'partial' && <aside className="rr-status" role="status"><strong>일부 해석만 완성됐어요.</strong>{missingHint.length > 0 && <p>누락: {missingHint.join(' · ')}</p>}</aside>}
+        {genStatus === 'complete' && saveStatus === 'failed' && <aside className="rr-status" role="status">해석은 완료됐지만 저장에 실패했어요.</aside>}
+        {genStatus === 'complete' && saveStatus === 'saving' && <aside className="rr-status" role="status">해석 완료 · 저장 중...</aside>}
+        {saveStatus === 'failed' && <div className="rr-status"><button type="button" onClick={() => requestIdRef.current && saveReading(requestIdRef.current, genStatus === 'complete')}>저장만 다시 시도</button></div>}
+        {genStatus === 'partial' && !generating && <div className="rr-status"><button type="button" onClick={() => handleSubmit('retry')}>같은 요청 다시 확인</button></div>}
+        {incompleteSaved && savedShareId && genStatus !== 'complete' && <aside className="rr-status">미완료 상태로 임시 저장했어요. 완성본으로 저장하지 않았습니다.</aside>}
+        {failedParts.length > 0 && !generating && <aside className="rr-status">{failedParts.map((part, index) => <p key={`${part.part}-${part.groupIndex ?? 'x'}-${index}`}>
+          {part.part === 'group' ? `${(part.groupIndex ?? 0) + 1}번 그룹` : part.part === 'strategy' ? '인생 전략' : part.part === 'personal' ? '족집게 질문' : '전체'} 실패{part.retryable ? '' : ' (재시도 불가)'}
+        </p>)}</aside>}
+      </>}
+    >
+      {savedShareId && <Link href={`/result/${encodeURIComponent(savedShareId)}`}>저장된 결과 보기 →</Link>}
+    </ReadingResult>
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
+    <div className="palace-page palace-saju min-h-screen bg-[#0a0a0f] text-white pb-24">
+      <AccessNotice />
       <div className="max-w-md mx-auto px-4 pt-6">
         <div className="flex items-center gap-3 mb-6">
           <Link href="/" className="text-gray-400 text-xl">←</Link>
           <div>
             <h1 className="text-xl font-bold">사주 풀이</h1>
-            <p className="text-gray-500 text-xs mt-0.5">전체보기는 엽전 1냥</p>
+            <p className="text-gray-500 text-xs mt-0.5">새 풀이 1회 1냥 · 로그인 필요</p>
           </div>
         </div>
 
@@ -993,9 +680,9 @@ export default function SajuPage() {
 
         {/* ✅ 신규: 직접 궁금한 거 자유 입력 (선택) — 채워지면 결과 맨 위에 전용 답변 카드로 표시 */}
         <div className="mb-4">
-          <PersonalQuestionLabel>
+          <label className="text-xs text-gray-400 mb-2 block">
             🔮 족집게 질문 <span className="text-gray-600">(선택)</span>
-          </PersonalQuestionLabel>
+          </label>
           <textarea
             value={form.personalQuestion}
             onChange={e => setForm(f => ({ ...f, personalQuestion: e.target.value }))}
@@ -1025,7 +712,7 @@ export default function SajuPage() {
                   style={calType === t
                     ? { background: selectedChar.color, color: 'white' }
                     : { background: '#1F2937', color: '#9CA3AF', border: '1px solid #374151' }}>
-                  {t === 'solar' ? '양력' : '음력'}
+                  {t === 'solar' ? '양력' : '음력(평달)'}
                 </button>
               ))}
             </div>
@@ -1174,13 +861,12 @@ export default function SajuPage() {
           </div>
         )}
 
-        <button onClick={() => handleSubmit('full')} disabled={!form.name}
+        <button onClick={() => handleSubmit('full')} disabled={!form.name.trim()}
           className="w-full py-4 rounded-2xl font-bold text-lg text-white disabled:opacity-40 disabled:cursor-not-allowed"
           style={{ background: `linear-gradient(135deg, ${selectedChar.color}, ${selectedChar.color}bb)` }}>
           {selectedChar.name}에게 물어보기 →
         </button>
-        <ContentNoticeShortHint />
-        <p className="text-center text-gray-600 text-xs mt-3">전체보기는 엽전 1냥 · 이후 무료 재열람</p>
+        <p className="text-center text-gray-600 text-xs mt-3">새 풀이 1회 1냥 · 로그인 필요</p>
       </div>
     </div>
   )

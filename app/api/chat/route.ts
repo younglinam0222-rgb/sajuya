@@ -2,13 +2,13 @@ import {NextRequest,NextResponse} from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import {CHAT_VERSION,CHAT_GUIDES,CHAT_TOPICS,validChatInput,readChatAnswer,compactChatManse} from '@/lib/chat-flow'
 import {createServerSupabase} from '@/lib/supabase'
+import {readSavedReading as parse} from '@/lib/saved-reading'
 import {requireUser,AccessError,failure} from '@/lib/server-access'
 import {guardedGeneration,recordUsage} from '@/lib/generation-guard'
 export const runtime='nodejs'
 export const maxDuration=120
 const day=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul'}).format(new Date())
 const enabled=()=>process.env.CHAT_ENABLED==='true'&&process.env.CHAT_COST_COINS==='1'&&!!process.env.ANTHROPIC_API_KEY
-const parse=(raw:unknown)=>typeof raw==='string'?JSON.parse(raw):raw as Record<string,any>
 export async function GET(req:NextRequest){
  try{
   const user=await requireUser(req),db=createServerSupabase()
@@ -20,7 +20,7 @@ export async function GET(req:NextRequest){
   ])
   if([profileRows,historyRows,wallet,usage].some(r=>r.error))throw Error('Cannot load consultation')
   const profiles=(profileRows.data||[]).filter(r=>r.is_paid||r.product==='daily').flatMap(r=>{try{const saved=parse(r.saju_data);compactChatManse(saved?.saju);const f=saved?.form;return f?.name?[{id:r.share_id,label:`${f.name} · ${f.year}.${f.month}.${f.day}`}]:[]}catch{return []}})
-  const records=(historyRows.data||[]).flatMap(r=>{try{const f=parse(r.saju_data)?.form;return [{id:r.share_id,topicId:f.chat.topicId,characterId:r.character_id,answers:f.chat.answers,note:f.chat.note,createdAt:r.created_at,result:readChatAnswer(r.ai_result)}]}catch{return []}})
+  const records=(historyRows.data||[]).flatMap(r=>{try{const f=parse(r.saju_data)?.form;if(!f.chat)return [];return [{id:r.share_id,topicId:f.chat.topicId,characterId:r.character_id,answers:f.chat.answers,note:f.chat.note,createdAt:r.created_at,result:readChatAnswer(r.ai_result)}]}catch{return []}})
   return NextResponse.json({enabled:enabled(),cost:enabled()?1:null,balance:wallet.data?.yeobjeun_balance||0,remaining:Math.max(0,5-(usage.count||0)),profiles,records},{headers:{'Cache-Control':'private, no-store'}})
  }catch(e){return failure(e)}
 }

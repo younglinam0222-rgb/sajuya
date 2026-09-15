@@ -59,10 +59,11 @@ export function readChatAnswer(raw:unknown):ChatAnswer {
 }
 export function compactChatManse(raw:unknown) {
  if(!raw||typeof raw!=='object')throw Error('저장된 사주 정보가 없습니다.')
- const data=raw as Record<string,any>,out:Record<string,unknown>={}
+ const data=raw as Record<string,unknown>,out:Record<string,unknown>={}
  for(const key of ['yearPillar','monthPillar','dayPillar','hourPillar']) {
-  const p=data[key]; if(!p){out[key]=null;continue}
-  out[key]=Object.fromEntries(['stem','branch','stemElement','branchElement','sipsinStem','sipsinBranch'].filter(k=>typeof p[k]==='string').map(k=>[k,p[k].slice(0,30)]))
+  const value=data[key]; if(!value||typeof value!=='object'||Array.isArray(value)){out[key]=null;continue}
+  const p=value as Record<string,unknown>
+  out[key]=Object.fromEntries(['stem','branch','stemElement','branchElement','sipsinStem','sipsinBranch'].filter(k=>typeof p[k]==='string').map(k=>[k,String(p[k]).slice(0,30)]))
  }
  if(!out.dayPillar||!Object.keys(out.dayPillar).length)throw Error('사주 원국을 확인해주세요.')
  return out

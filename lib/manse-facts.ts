@@ -1,4 +1,3 @@
-// @ts-ignore lunar-javascript has no bundled TypeScript definitions.
 import LunarJS from 'lunar-javascript'
 const STEMS=['甲','乙','丙','丁','戊','己','庚','辛','壬','癸']
 const names:Record<string,string>={'比肩':'비견','劫财':'겁재','食神':'식신','伤官':'상관','偏财':'편재','正财':'정재','七杀':'편관','正官':'정관','偏印':'편인','正印':'정인'}

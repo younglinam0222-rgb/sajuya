@@ -9,8 +9,10 @@ interface Reading {
   share_id: string
   character_id: string
   created_at: string
-  saju_data: string
+  saju_data: string | {form?: {name?:string}}
   is_paid: boolean
+  access_verified: boolean
+  product: string
 }
 
 const CHAR_NAMES: Record<string, string> = {
@@ -26,57 +28,52 @@ const CHAR_IMG: Record<string, string> = {
   sinRyeong: '/characters/sinryeong.png',
 }
 const CHAR_COLOR: Record<string, string> = {
-  baekhalma: '#8B5CF6',
-  doRyeong: '#3B82F6',
-  gumiho: '#EC4899',
-  sinRyeong: '#10B981',
+  baekhalma: '#c6a66d',
+  doRyeong: '#8daabc',
+  gumiho: '#bf94a4',
+  sinRyeong: '#94b29c',
 }
 
 export default function StoragePage() {
-  const { data: session } = useSession()
+  const { data: session, status } = useSession()
   const [readings, setReadings] = useState<Reading[]>([])
   const [loading, setLoading] = useState(true)
   const [showLogout, setShowLogout] = useState(false)
 
+  const [loadError, setLoadError] = useState('')
+  const [loadedUser, setLoadedUser] = useState<string|null>(null)
+  const userId = (session?.user as {id?:string})?.id ?? null
   useEffect(() => {
-    if (session?.user) fetchReadings()
-    else setLoading(false)
-  }, [session])
-
-  const fetchReadings = async () => {
-    try {
-      const res = await fetch('/api/storage')
-      if (res.ok) {
-        const data = await res.json()
-        setReadings(data.readings ?? [])
-      }
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setLoading(false)
-    }
-  }
+    if (!userId) return
+    const controller = new AbortController()
+    fetch('/api/storage', {signal:controller.signal, cache:'no-store'})
+      .then(async res => { const data = await res.json(); if (!res.ok) throw new Error(data.error || '보관함을 불러오지 못했어요.'); return data })
+      .then(data => { if (!controller.signal.aborted) { setReadings(data.readings ?? []); setLoadError('') } })
+      .catch(e => { if (!controller.signal.aborted) setLoadError(e instanceof Error ? e.message : '보관함 연결을 확인해주세요.') })
+      .finally(() => { if (!controller.signal.aborted) { setLoading(false); setLoadedUser(userId) } })
+    return () => controller.abort()
+  }, [userId])
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr)
     return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`
   }
 
-  const getFormInfo = (sajuData: string) => {
-    try { return JSON.parse(sajuData).form } catch { return null }
+  const getFormInfo = (sajuData: Reading['saju_data']) => {
+    try { return (typeof sajuData==='string'?JSON.parse(sajuData):sajuData).form } catch { return null }
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
+    <div className="palace-page palace-storage min-h-screen bg-[#0c1119] text-white pb-24">
       <div className="max-w-md mx-auto px-4 pt-6">
 
         {/* 헤더 */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <Link href="/" className="text-gray-400 text-xl">←</Link>
+            <Link href="/" className="text-[#a7b3c3] text-xl">←</Link>
             <div>
-              <h1 className="text-xl font-bold">📦 보관함</h1>
-              <p className="text-gray-500 text-xs mt-0.5">내 사주 풀이 저장 목록</p>
+              <h1 className="[font-family:var(--palace-serif)] text-xl font-bold">📦 보관함</h1>
+              <p className="text-[#a7b3c3] text-xs mt-0.5">내 사주 풀이 저장 목록</p>
             </div>
           </div>
 
@@ -85,25 +82,25 @@ export default function StoragePage() {
             <div className="relative">
               <button
                 onClick={() => setShowLogout(!showLogout)}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-800 text-xs text-gray-300">
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#202b39] text-xs text-[#c4cdd8]">
                 {session.user?.image
                   ? <img src={session.user.image} className="w-5 h-5 rounded-full" alt="" />
                   : <span>👤</span>}
                 <span className="max-w-[60px] truncate">{session.user?.name}</span>
-                <span className="text-gray-600">▼</span>
+                <span className="text-[#9eabbd]">▼</span>
               </button>
 
               {showLogout && (
-                <div className="absolute right-0 top-10 bg-[#1a1a2e] border border-gray-700 rounded-2xl p-2 z-50 min-w-[180px]">
+                <div className="absolute right-0 top-10 bg-[#202b39] border border-[#455365] rounded-lg p-2 z-50 min-w-[180px]">
                   {/* ✅ 신규: 네이버 로그인 검수용 — 이메일 정보가 실제로 화면에
                       쓰이고 있다는 걸 증명하기 위해 계정 정보 표시 */}
-                  <div className="px-3 py-2 text-xs text-gray-500 border-b border-gray-800 mb-1">
-                    <p className="text-gray-300 font-medium truncate">{session.user?.name}님</p>
+                  <div className="px-3 py-2 text-xs text-[#a7b3c3] border-b border-[#344151] mb-1">
+                    <p className="text-[#c4cdd8] font-medium truncate">{session.user?.name}님</p>
                     <p className="truncate">{session.user?.email}</p>
                   </div>
                   <button
                     onClick={() => signOut({ callbackUrl: '/' })}
-                    className="w-full px-3 py-2 text-sm text-red-400 hover:bg-gray-800 rounded-xl text-left">
+                    className="w-full px-3 py-2 text-sm text-red-400 hover:bg-[#202b39] rounded-md text-left">
                     🚪 로그아웃
                   </button>
                 </div>
@@ -112,58 +109,59 @@ export default function StoragePage() {
           )}
         </div>
 
-        {!session ? (
+        {session && <Link href="/payments" className="block mb-6 px-4 py-3 rounded-md border border-[#5c6a7b] text-sm text-amber-100">결제 · 환불 내역 확인하기 →</Link>}
+        {status === 'loading' || (session && (loading || loadedUser !== userId)) ? <p className="py-12 text-center text-[#a7b3c3]" role="status">보관함을 불러오는 중이에요.</p> : loadError && session ? <div className="py-12 text-center" role="alert"><p>{loadError}</p><button className="mt-4 underline" onClick={()=>window.location.reload()}>다시 확인하기</button></div> : !session ? (
           <div className="text-center py-16">
             <p className="text-4xl mb-4">🔒</p>
             <p className="font-bold text-lg mb-2">로그인이 필요해요</p>
-            <p className="text-gray-500 text-sm mb-6">로그인하면 내 풀이를 저장하고<br />언제든 다시 볼 수 있어요</p>
-            <Link href="/login"
-              className="inline-block px-6 py-3 rounded-2xl font-bold text-white"
-              style={{ background: 'linear-gradient(135deg, #8B5CF6, #EC4899)' }}>
+            <p className="text-[#a7b3c3] text-sm mb-6">로그인하면 내 풀이를 저장하고<br />언제든 다시 볼 수 있어요</p>
+            <Link href="/login?callbackUrl=%2Fstorage"
+              className="inline-block px-6 py-3 rounded-lg font-bold text-white"
+              style={{ background: '#c6a66d', color: '#17202c' }}>
               로그인하기
             </Link>
           </div>
         ) : loading ? (
           <div className="flex flex-col items-center py-16 gap-4">
             <div className="text-4xl animate-spin">🔮</div>
-            <p className="text-gray-500 text-sm">풀이 목록 불러오는 중...</p>
+            <p className="text-[#a7b3c3] text-sm">풀이 목록 불러오는 중...</p>
           </div>
         ) : readings.length === 0 ? (
           <div className="text-center py-16">
             <p className="text-5xl mb-4">📭</p>
             <p className="font-bold text-lg mb-2">아직 저장된 풀이가 없어요</p>
-            <p className="text-gray-500 text-sm mb-6">사주를 풀이받으면 여기에 저장돼요</p>
+            <p className="text-[#a7b3c3] text-sm mb-6">사주를 풀이받으면 여기에 저장돼요</p>
             <Link href="/saju"
-              className="inline-block px-6 py-3 rounded-2xl font-bold text-white"
-              style={{ background: 'linear-gradient(135deg, #8B5CF6, #EC4899)' }}>
+              className="inline-block px-6 py-3 rounded-lg font-bold text-white"
+              style={{ background: '#c6a66d', color: '#17202c' }}>
               사주 풀이받기 →
             </Link>
           </div>
         ) : (
           <>
-            <p className="text-xs text-gray-500 mb-3">총 {readings.length}개 풀이</p>
+            <p className="text-xs text-[#a7b3c3] mb-3">총 {readings.length}개 풀이</p>
             <div className="space-y-3">
               {readings.map(r => {
                 const form = getFormInfo(r.saju_data)
-                const color = CHAR_COLOR[r.character_id] ?? '#8B5CF6'
-                const img = CHAR_IMG[r.character_id]
-                const name = CHAR_NAMES[r.character_id] ?? r.character_id
+                const color = CHAR_COLOR[r.character_id] ?? '#c6a66d'
+                const img = CHAR_IMG[r.character_id] ?? `/characters/${r.character_id.toLowerCase()}.png`
+                const name = CHAR_NAMES[r.character_id] ?? CHAR_NAMES[r.character_id==='doryeong'?'doRyeong':r.character_id==='sinryeong'?'sinRyeong':r.character_id] ?? r.character_id
                 return (
-                  <Link key={r.id} href={`/result/${r.share_id}`}>
-                    <div className="rounded-2xl overflow-hidden bg-[#111118] border border-gray-800 hover:border-gray-600 transition-all flex">
+                  <Link key={r.id} href={r.product==='conversation'?`/chat?guide=${r.character_id.toLowerCase()}&source=${encodeURIComponent(form?.conversation?.sourceId||'')}`:r.product==='chat'?'/consultation':`/result/${r.share_id}`}>
+                    <div className="rounded-lg overflow-hidden bg-[#17202c] border border-[#344151] hover:border-[#5c6a7b] transition-all flex">
                       <div className="w-20 flex-shrink-0 overflow-hidden relative">
                         {img && <img src={img} alt={name} className="w-full h-full object-cover object-top opacity-80" />}
-                        <div className="absolute inset-0" style={{ background: 'linear-gradient(to right, transparent, #111118)' }} />
+                        <div className="absolute inset-0" style={{ background: 'linear-gradient(to right, transparent, #17202c)' }} />
                       </div>
                       <div className="flex-1 p-3">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-xs font-bold" style={{ color }}>{name}</span>
-                          {r.is_paid && (
-                            <span className="text-xs px-1.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">유료</span>
+                          {r.access_verified && (r.is_paid || ['daily','conversation'].includes(r.product)) && (
+                            <span className="text-xs px-1.5 py-0.5 rounded-full bg-[#d4bc92]/20 text-[#d4bc92]">{r.is_paid?'유료':'무료 체험'}</span>
                           )}
                         </div>
-                        {form && <p className="text-white font-bold text-sm mb-0.5">{form.name}님의 사주</p>}
-                        <p className="text-gray-500 text-xs">{formatDate(r.created_at)}</p>
+                        {form && <p className="text-white font-bold text-sm mb-0.5">{form.name}님의 {r.product==='conversation'?'대화':r.product==='chat'?'선택형 상담':'사주'}</p>}
+                        <p className="text-[#a7b3c3] text-xs">{formatDate(r.created_at)}</p>
                         <p className="text-xs mt-1.5 font-medium" style={{ color }}>다시 보기 →</p>
                       </div>
                     </div>
@@ -176,8 +174,8 @@ export default function StoragePage() {
 
         {session && readings.length > 0 && (
           <Link href="/saju"
-            className="block w-full mt-6 py-4 rounded-2xl text-center font-bold text-white"
-            style={{ background: 'linear-gradient(135deg, #8B5CF6, #EC4899)' }}>
+            className="block w-full mt-6 py-4 rounded-lg text-center font-bold text-white"
+            style={{ background: '#c6a66d', color: '#17202c' }}>
             + 새 풀이 받기
           </Link>
         )}
@@ -188,30 +186,30 @@ export default function StoragePage() {
         <div className="fixed inset-0 z-40" onClick={() => setShowLogout(false)} />
       )}
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-[#0a0a0f] border-t border-gray-800 z-50">
+      <nav className="fixed bottom-0 left-0 right-0 bg-[#0c1119] border-t border-[#344151] z-50">
         <div className="max-w-md mx-auto flex items-center justify-around py-1 px-2">
           <Link href="/" className="flex flex-col items-center gap-0.5 py-2 px-3">
             <span className="text-xl">🏠</span>
-            <span className="text-xs text-gray-500">홈</span>
+            <span className="text-xs text-[#a7b3c3]">홈</span>
           </Link>
           <Link href="/saju" className="flex flex-col items-center gap-0.5 py-2 px-3">
             <span className="text-xl">🔮</span>
-            <span className="text-xs text-gray-500">사주</span>
+            <span className="text-xs text-[#a7b3c3]">사주</span>
           </Link>
           <Link href="/daily" className="flex flex-col items-center -mt-4">
-            <div className="w-14 h-14 rounded-full flex items-center justify-center shadow-lg border-4 border-[#0a0a0f]"
-              style={{ background: 'linear-gradient(135deg, #8B5CF6, #EC4899)' }}>
+            <div className="w-14 h-14 rounded-full flex items-center justify-center shadow-lg border-4 border-[#0c1119]"
+              style={{ background: '#c6a66d', color: '#17202c' }}>
               <span className="text-2xl">⭐</span>
             </div>
-            <span className="text-xs text-purple-400 mt-0.5 font-medium">운세</span>
+            <span className="text-xs text-[#c6a66d] mt-0.5 font-medium">일일운세</span>
           </Link>
           <Link href="/storage" className="flex flex-col items-center gap-0.5 py-2 px-3">
             <span className="text-xl">📦</span>
-            <span className="text-xs text-purple-400 font-medium">보관함</span>
+            <span className="text-xs text-[#c6a66d] font-medium">보관함</span>
           </Link>
           <Link href="/characters" className="flex flex-col items-center gap-0.5 py-2 px-3">
             <span className="text-xl">👁</span>
-            <span className="text-xs text-gray-500">신령</span>
+            <span className="text-xs text-[#a7b3c3]">신령</span>
           </Link>
         </div>
       </nav>

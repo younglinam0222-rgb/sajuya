@@ -9,22 +9,25 @@ const fake=createServer(async(req,res)=>{
  let raw='';for await(const chunk of req)raw+=chunk
  const b=JSON.parse(raw||'{}'),u=new URL(req.url,'http://localhost');calls.push({path:u.pathname,body:b})
  res.setHeader('Content-Type','application/json')
- if(u.pathname==='/rest/v1/generation_requests')return res.end(JSON.stringify({job_id:u.searchParams.get('request_id')==='eq.consent-request'?'old-conversation':'old-year-job'}))
- if(u.pathname==='/rest/v1/generation_jobs')return res.end(JSON.stringify(u.searchParams.get('id')==='eq.old-conversation'?{fingerprint:'previous-conversation-year',product:'conversation',input:conversationInput,status:'failed',updated_at:'2025-12-31T12:00:00Z'}:{fingerprint:'server-owned-previous-year',product:'saju',input:base}))
+ if(u.pathname==='/rest/v1/generation_requests')return res.end(JSON.stringify({job_id:u.searchParams.get('request_id')==='eq.pending-request'?'running-conversation':u.searchParams.get('request_id')==='eq.consent-request'?'old-conversation':'old-year-job'}))
+ if(u.pathname==='/rest/v1/generation_jobs')return res.end(JSON.stringify(u.searchParams.get('id')==='eq.running-conversation'?{fingerprint:'current-conversation-year',product:'conversation',input:conversationInput,status:'running',updated_at:new Date().toISOString()}:u.searchParams.get('id')==='eq.old-conversation'?{fingerprint:'previous-conversation-year',product:'conversation',input:conversationInput,status:'failed',updated_at:'2025-12-31T12:00:00Z'}:{fingerprint:'server-owned-previous-year',product:'saju',input:base}))
+ if(u.pathname==='/rest/v1/rpc/reserve_generation'&&b.p_request==='busy-request')return res.end(JSON.stringify({error:'busy'}))
  if(u.pathname==='/rest/v1/rpc/reserve_generation')return res.end(JSON.stringify({cached:true,response:'data: '+JSON.stringify({text:'saved'})+'\n\ndata: [DONE]\n\n'}))
  if(u.pathname==='/rest/v1/commerce_orders')return res.end(JSON.stringify({order_id:'pending-unlock',product:'unlock',amount:4900,status:'pending'}))
  if(u.pathname==='/rest/v1/readings')return res.end(JSON.stringify({share_id:'locked',user_id:'buyer',is_paid:true,access_verified:false,product:'saju',saju_data:{form:{}},ai_result:JSON.stringify({titles:[{title:'SAMPLE',content:'ONE_ONLY'},{title:'HIDDEN',content:'PAID_SECRET'}],personalAnswer:{answer:'PRIVATE_QUESTION'}})}))
  res.end('null')
 })
 await new Promise(r=>fake.listen(3110,'127.0.0.1',r))
-const server=spawn(process.execPath,['node_modules/next/dist/bin/next','start','-H','127.0.0.1','-p','3107'],{env:{PATH:process.env.PATH,NEXTAUTH_URL:origin,NEXTAUTH_SECRET:'build-placeholder',NEXT_PUBLIC_SUPABASE_URL:'http://127.0.0.1:3110',NEXT_PUBLIC_SUPABASE_ANON_KEY:'build-placeholder',SUPABASE_SERVICE_ROLE_KEY:'build-placeholder',CONVERSATION_ENABLED:'true',CONVERSATION_COST_COINS:'1',ANTHROPIC_API_KEY:'test-placeholder-cached-responses-only'},stdio:'ignore'})
+const server=spawn(process.execPath,['node_modules/next/dist/bin/next','start','-H','127.0.0.1','-p','3107'],{env:{PATH:process.env.PATH,NEXTAUTH_URL:origin,NEXTAUTH_SECRET:'build-placeholder',SUPABASE_URL:'http://127.0.0.1:3110',NEXT_PUBLIC_SUPABASE_URL:'http://127.0.0.1:3110',NEXT_PUBLIC_SUPABASE_ANON_KEY:'build-placeholder',SUPABASE_SERVICE_ROLE_KEY:'build-placeholder',CONVERSATION_ENABLED:'true',CONVERSATION_COST_COINS:'1',ANTHROPIC_API_KEY:'test-placeholder-cached-responses-only'},stdio:['ignore','pipe','pipe']})
+let logs='';server.stdout.on('data',b=>{logs=(logs+b).slice(-20000)});server.stderr.on('data',b=>{logs=(logs+b).slice(-20000)})
+const expectStatus=async(response,status,label)=>{const result=await response;assert.equal(result.status,status,`${label}: ${result.status}; body=${(await result.clone().text()).slice(0,1000)}; mockPaths=${JSON.stringify(calls.map(c=>c.path))}`);return result}
 try{
- let ready=false;for(let i=0;i<60;i++){try{if((await fetch(origin)).status===200){ready=true;break}}catch{}await new Promise(r=>setTimeout(r,200))}assert.ok(ready,'isolated Next server startup')
+ let ready=false;for(let i=0;i<60;i++){try{if((await fetch(origin)).status===200){ready=true;break}}catch{}if(server.exitCode!==null)throw Error('isolated Next server exited: '+logs);await new Promise(r=>setTimeout(r,200))}assert.ok(ready,'isolated Next server startup: '+logs)
  const auth={Cookie:'next-auth.session-token='+await encode({token:{sub:'buyer'},secret:'build-placeholder'}),'Content-Type':'application/json',Origin:origin}
  const post=(route,body,headers=auth)=>fetch(origin+'/api/'+route,{method:'POST',headers,body:JSON.stringify(body)})
  for(const route of ['saju','daily','gunghap','daeun','yearly','taekil','chat','conversation','attendance','readings/save','pay/ready','pay/confirm','refunds','readings/known/share'])assert.equal((await post(route,{},{})).status,401,route)
  for(const route of ['readings/known','result/known','storage','pay/order/known','refunds'])assert.equal((await fetch(origin+'/api/'+route)).status,401,route)
- assert.equal((await post('saju',{...base,requestId:'same-request-2026'})).status,200)
+ await expectStatus(post('saju',{...base,requestId:'same-request-2026'}),200,'cached saju replay through runtime SUPABASE_URL')
  assert.equal(calls.find(c=>c.path==='/rest/v1/rpc/reserve_generation').body.p_hash,'server-owned-previous-year')
  const count=calls.length
  assert.equal((await post('saju',{...base,retry:{personal:true}})).status,400)
@@ -38,9 +41,13 @@ try{
  const locked=await fetch(origin+'/api/readings/locked',{headers:auth});assert.equal(locked.status,200);const body=await locked.text();assert.ok(body.includes('ONE_ONLY'));assert.ok(!body.includes('PAID_SECRET'));assert.ok(!body.includes('PRIVATE_QUESTION'))
  assert.equal((await fetch(origin+'/api/pay/order/pending-unlock',{headers:auth})).status,503)
  const retry={sourceId:'source',characterId:'baekhalma',message:'이전 질문',previousId:null,requestId:'consent-request',maxCoins:0,consent:true},before=calls.filter(c=>c.path==='/rest/v1/rpc/reserve_generation').length
- assert.equal((await post('conversation',retry)).status,409)
+ const priceConflict=await post('conversation',retry);assert.equal(priceConflict.status,409);assert.equal((await priceConflict.json()).code,undefined,'price conflict requires renewed consent, not pending retry')
  assert.equal(calls.filter(c=>c.path==='/rest/v1/rpc/reserve_generation').length,before,'changed maximum must not reserve')
- assert.equal((await post('conversation',{...retry,maxCoins:1})).status,200)
+ await expectStatus(post('conversation',{...retry,maxCoins:1}),200,'conversation retry through runtime SUPABASE_URL')
  assert.equal(calls.filter(c=>c.path==='/rest/v1/rpc/reserve_generation').at(-1).body.p_hash,'previous-conversation-year')
- console.log('PASS: real local Next HTTP; 19 auth gates; one sample only; cross-origin denial; stored fingerprint replay; changed input denial; invalid date/time and legacy retry no writes; paused products and pending unlock checkout blocked')
-}finally{server.kill('SIGTERM');await new Promise(r=>fake.close(r))}
+ const pendingBefore=calls.filter(c=>c.path==='/rest/v1/rpc/reserve_generation').length
+ const pending=await post('conversation',{...retry,maxCoins:1,requestId:'pending-request'});assert.equal(pending.status,409);assert.equal((await pending.json()).code,'GENERATION_PENDING')
+ assert.equal(calls.filter(c=>c.path==='/rest/v1/rpc/reserve_generation').length,pendingBefore,'pending conversation must not reserve again')
+ const busy=await post('saju',{...base,requestId:'busy-request'});assert.equal(busy.status,409);assert.equal((await busy.json()).code,'GENERATION_PENDING')
+ console.log('PASS: pending request machine code; price conflict distinction; real local Next HTTP; 19 auth gates; one sample only; cross-origin denial; stored fingerprint replay; changed input denial; invalid date/time and legacy retry no writes; paused products and pending unlock checkout blocked')
+}finally{server.kill('SIGTERM');if(server.exitCode===null)await new Promise(r=>server.once('exit',r));await new Promise(r=>fake.close(r))}

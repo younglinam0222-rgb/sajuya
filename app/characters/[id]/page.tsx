@@ -11,7 +11,7 @@ const CHARACTERS: Record<string, {
 }> = {
   baekhalma: {
     name: '건물주 백할매', title: '부와 운명의 관리자',
-    img: '/characters/baekhalma.png', color: '#8B5CF6', bg: '#1a1025',
+    img: '/characters/baekhalma.png', color: '#c6a66d', bg: '#222a34',
     tags: ['재물운', '직업운', '팩폭'],
     desc: '수백 년을 살아온 건물주 백할매. 달콤한 말 대신 날카로운 진실을 던진다.',
     backstory: '조선시대 거상의 후손으로 태어나 수백 년간 인간들의 재물 흥망을 지켜본 신령. 지금은 강남 한복판 건물 꼭대기에 좌정하여 돈과 직업에 관한 운명을 관장한다. 비록 말투는 거칠지만, 그 독설 안에는 반드시 핵심 진실이 담겨있다.',
@@ -22,7 +22,7 @@ const CHARACTERS: Record<string, {
   },
   doRyeong: {
     name: '근본도령', title: '사주의 근본을 꿰뚫는 자',
-    img: '/characters/doryeong.png', color: '#3B82F6', bg: '#0f1525',
+    img: '/characters/doryeong.png', color: '#8daabc', bg: '#182431',
     tags: ['사주분석', '성격', '종합운세'],
     desc: '조선 최고의 역술가 가문에서 태어난 근본도령. 형처럼 다정하게, 때로는 솔직하게.',
     backstory: '대대로 역술을 업으로 삼아온 가문의 막내. 딱딱한 역술서 대신 사람 냄새 나는 말로 운명을 설명하는 것을 좋아한다. 어려운 한자 대신 요즘 말로, 무서운 예언 대신 따뜻한 위로로 사주를 전달한다.',
@@ -33,7 +33,7 @@ const CHARACTERS: Record<string, {
   },
   gumiho: {
     name: '구미호 선생', title: '연애와 인연의 지배자',
-    img: '/characters/gumiho.png', color: '#EC4899', bg: '#1a0f18',
+    img: '/characters/gumiho.png', color: '#bf94a4', bg: '#28232a',
     tags: ['연애운', '궁합', '인연'],
     desc: '천 년을 살아온 구미호. 수천 번의 인연과 이별을 목격한 그녀는 사랑에 관한 한 모든 것을 안다.',
     backstory: '천 년간 수많은 인간의 사랑을 지켜보고 때로는 직접 체험한 구미호. 달콤한 사랑 이야기보다 냉정한 궁합의 진실을 더 좋아한다. 독설이지만 그 안에 진심 어린 조언이 있다.',
@@ -44,7 +44,7 @@ const CHARACTERS: Record<string, {
   },
   sinRyeong: {
     name: '무등산 신령님', title: '대운과 생애를 주관하는 자',
-    img: '/characters/sinryeong.png', color: '#10B981', bg: '#0a1a14',
+    img: '/characters/sinryeong.png', color: '#94b29c', bg: '#192821',
     tags: ['대운', '건강', '인생흐름'],
     desc: '무등산 깊은 곳에서 수천 년을 수련한 신령님. 인생의 큰 흐름과 대운을 꿰뚫어본다.',
     backstory: '무등산 정상 바위 아래서 수천 년을 수련한 도인. 짧은 말 한마디에 깊은 진리를 담는 것을 좋아한다. 조용히 앉아 인생의 큰 그림을 그려준다.',
@@ -63,27 +63,27 @@ export default function CharacterDetailPage() {
 
   if (!c) {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center text-white px-4">
+      <div className="palace-page palace-characters min-h-screen bg-[#0c1119] flex flex-col items-center justify-center text-white px-4">
         <p className="text-4xl mb-4">🔍</p>
         <p className="text-lg font-bold mb-2">신령을 찾을 수 없어요</p>
-        <Link href="/characters" className="text-gray-400 text-sm mt-4">← 목록으로</Link>
+        <Link href="/characters" className="text-[#a7b3c3] text-sm mt-4">← 목록으로</Link>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
+    <div className="palace-page palace-characters min-h-screen bg-[#0c1119] text-white pb-24">
       <div className="max-w-md mx-auto">
 
         {/* 뒤로가기 헤더 */}
         <div className="flex items-center gap-3 px-4 pt-6 mb-4">
-          <button onClick={() => router.back()} className="text-gray-400 text-xl">←</button>
-          <h1 className="text-xl font-bold">{c.name}</h1>
+          <button onClick={() => router.back()} className="text-[#a7b3c3] text-xl">←</button>
+          <h1 className="[font-family:var(--palace-serif)] text-xl font-bold">{c.name}</h1>
         </div>
 
         {/* 캐릭터 이미지 헤더 — 풀샷 */}
-        <div className="relative mx-4 rounded-3xl overflow-hidden mb-4" style={{ border: `1px solid ${c.color}40` }}>
-          <div className="h-80 relative" style={{ background: `linear-gradient(135deg, ${c.bg}, #0a0a0f)` }}>
+        <div className="relative mx-4 rounded-lg overflow-hidden mb-4" style={{ border: `1px solid ${c.color}40` }}>
+          <div className="h-80 relative" style={{ background: `linear-gradient(135deg, ${c.bg}, #0c1119)` }}>
             <img
               src={c.img}
               alt={c.name}
@@ -95,7 +95,7 @@ export default function CharacterDetailPage() {
             {/* 텍스트 오버레이 */}
             <div className="absolute bottom-0 left-0 right-0 p-5">
               <p className="text-xs font-medium mb-1" style={{ color: c.color }}>{c.title}</p>
-              <h2 className="text-2xl font-black mb-2">{c.name}</h2>
+              <h2 className="[font-family:var(--palace-serif)] text-2xl font-semibold mb-2">{c.name}</h2>
               <div className="flex gap-2 flex-wrap">
                 {c.tags.map(t => (
                   <span key={t} className="text-xs px-2.5 py-1 rounded-full"
@@ -110,50 +110,50 @@ export default function CharacterDetailPage() {
 
         <div className="px-4">
           {/* 대표 멘트 */}
-          <div className="rounded-2xl p-4 mb-3 bg-[#111118] border border-gray-800">
+          <div className="rounded-lg p-4 mb-3 bg-[#17202c] border border-[#344151]">
             <p className="text-xs mb-2" style={{ color: c.color }}>💬 대표 멘트</p>
-            <p className="text-gray-200 text-sm italic leading-relaxed">{c.quote}</p>
+            <p className="text-[#e0e5ec] text-sm italic leading-relaxed">{c.quote}</p>
           </div>
 
           {/* 뒷이야기 */}
-          <div className="rounded-2xl p-4 mb-3 bg-[#111118] border border-gray-800">
-            <p className="text-xs text-gray-500 mb-2">📖 뒷이야기</p>
-            <p className="text-gray-300 text-sm leading-relaxed">{c.backstory}</p>
+          <div className="rounded-lg p-4 mb-3 bg-[#17202c] border border-[#344151]">
+            <p className="text-xs text-[#a7b3c3] mb-2">📖 뒷이야기</p>
+            <p className="text-[#c4cdd8] text-sm leading-relaxed">{c.backstory}</p>
           </div>
 
           {/* 성격 + 전문분야 */}
           <div className="grid grid-cols-2 gap-2 mb-3">
-            <div className="rounded-2xl p-3 bg-[#111118] border border-gray-800">
-              <p className="text-xs text-gray-500 mb-1">성격</p>
-              <p className="text-xs text-gray-300 leading-relaxed">{c.personality}</p>
+            <div className="rounded-lg p-3 bg-[#17202c] border border-[#344151]">
+              <p className="text-xs text-[#a7b3c3] mb-1">성격</p>
+              <p className="text-xs text-[#c4cdd8] leading-relaxed">{c.personality}</p>
             </div>
-            <div className="rounded-2xl p-3 bg-[#111118] border border-gray-800">
-              <p className="text-xs text-gray-500 mb-1">전문분야</p>
-              <p className="text-xs text-gray-300 leading-relaxed">{c.specialty}</p>
+            <div className="rounded-lg p-3 bg-[#17202c] border border-[#344151]">
+              <p className="text-xs text-[#a7b3c3] mb-1">전문분야</p>
+              <p className="text-xs text-[#c4cdd8] leading-relaxed">{c.specialty}</p>
             </div>
           </div>
 
           {/* 이 신령이 알려주는 것들 */}
-          <div className="rounded-2xl p-4 mb-4 bg-[#111118] border border-gray-800">
-            <p className="text-xs text-gray-500 mb-2">🔮 이 신령이 알려주는 것들</p>
+          <div className="rounded-lg p-4 mb-4 bg-[#17202c] border border-[#344151]">
+            <p className="text-xs text-[#a7b3c3] mb-2">🔮 이 신령이 알려주는 것들</p>
             <div className="space-y-1.5">
               {c.sections.map((s, i) => (
                 <div key={i} className="flex items-center gap-2">
                   <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: c.color }} />
-                  <span className="text-sm text-gray-300">{s}</span>
+                  <span className="text-sm text-[#c4cdd8]">{s}</span>
                 </div>
               ))}
             </div>
           </div>
 
           {/* CTA */}
-          <Link href="/saju"
-            className="block w-full py-4 rounded-2xl text-center font-bold text-base text-white mb-3"
-            style={{ background: `linear-gradient(135deg, ${c.color}, ${c.color}99)` }}>
+          <Link href={`/saju?character=${encodeURIComponent(id)}`}
+            className="block w-full py-4 rounded-lg text-center font-bold text-base text-white mb-3"
+            style={{ background: c.color, color: '#17202c' }}>
             {c.name}에게 사주 물어보기 →
           </Link>
 
-          <Link href="/characters" className="block text-center text-gray-500 text-sm pb-4">
+          <Link href="/characters" className="block text-center text-[#a7b3c3] text-sm pb-4">
             ← 다른 신령 보기
           </Link>
         </div>

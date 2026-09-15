@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
-import { createClient } from '@supabase/supabase-js'
+import { createServerSupabase } from '@/lib/supabase'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const supabase = createServerSupabase()
 
 export async function GET(req: NextRequest) {
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
@@ -16,13 +13,13 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await supabase
     .from('readings')
-    .select('id, share_id, character_id, created_at, saju_data, is_paid')
+    .select('id, share_id, character_id, created_at, saju_data, is_paid, product, access_verified')
     .eq('user_id', token.sub)
     .order('created_at', { ascending: false })
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: '보관함을 불러오지 못했습니다.' }, { status: 500 })
   }
 
-  return NextResponse.json({ readings: data ?? [] })
+  return NextResponse.json({ readings: data ?? [] }, { headers: { 'Cache-Control': 'private, no-store' } })
 }

@@ -10,9 +10,15 @@ export type KakaoDiagnostics = {
   origin: string
 }
 
-function getKakao(): any | null {
+type KakaoSDK = {
+  isInitialized?: () => boolean
+  init: (key: string) => void
+  Share?: {sendDefault: (options: Record<string, unknown>) => void}
+}
+
+function getKakao(): KakaoSDK | null {
   if (typeof window === 'undefined') return null
-  return (window as any).Kakao ?? null
+  return (window as Window & {Kakao?: KakaoSDK}).Kakao ?? null
 }
 
 export function getKakaoDiagnostics(): KakaoDiagnostics {

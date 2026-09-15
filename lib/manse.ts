@@ -89,7 +89,7 @@ function getJDN(year: number, month: number, day: number): number {
 // HH:MM → 시진 인덱스 (자시 야/조 분리)
 export function timeStrToBranchIndex(timeStr: string | null): number {
   if (!timeStr) return 6 // 시간 모름 → 오시(낮 12시) 기본값
-  const [h, m] = timeStr.split(':').map(Number)
+  const [h] = timeStr.split(':').map(Number)
   if (isNaN(h)) return 6
   // 야자시: 23:00 이후 → 자시(0)
   if (h === 23) return 0

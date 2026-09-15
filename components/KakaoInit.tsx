@@ -9,7 +9,7 @@ export default function KakaoInit() {
   if (!jsKey) return null
 
   const initKakao = () => {
-    const Kakao = (window as any).Kakao
+    const Kakao = (window as Window & { Kakao?: { isInitialized(): boolean; init(key: string): void } }).Kakao
     if (!Kakao) return
     try {
       if (!Kakao.isInitialized()) Kakao.init(jsKey)

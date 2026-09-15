@@ -218,14 +218,42 @@ DECLARE r refund_requests; o commerce_orders; s credit_spends; uid text; BEGIN
  INSERT INTO refund_events(refund_id,event,actor,note) VALUES(p_id,'succeeded',r.actor_id,p_transaction);
  RETURN to_jsonb(r);
 END $$;
+-- A provider-completed cancellation may precede our own reservation. Only an exact
+-- purchase-lot allocation can be attached here; spent or ambiguous amounts stay in review.
+CREATE OR REPLACE FUNCTION external_refund_quote(p_id uuid,p_amount integer) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE r refund_requests; o commerce_orders; l credit_lots; n integer; uid text; BEGIN
+ SELECT user_id INTO uid FROM refund_requests WHERE id=p_id;
+ PERFORM 1 FROM users WHERE id=uid FOR UPDATE;
+ SELECT * INTO r FROM refund_requests WHERE id=p_id;
+ SELECT * INTO o FROM commerce_orders WHERE order_id=r.order_id;
+ SELECT * INTO l FROM credit_lots WHERE order_id=r.order_id;
+ IF r.kind<>'external' OR r.status<>'review' OR r.held<>0 OR r.spend_attempt IS NOT NULL
+ OR o.status<>'done' OR l.kind IS DISTINCT FROM 'paid' OR p_amount IS NULL OR p_amount<=0
+ OR p_amount>o.amount-o.refunded_amount THEN RETURN jsonb_build_object('eligible',false); END IF;
+ SELECT s INTO n FROM generate_series(1,l.available) s
+ WHERE least(o.amount-o.refunded_amount,ceil(o.amount::numeric*s/greatest(o.coins,1))::integer)=p_amount
+ ORDER BY s LIMIT 1;
+ RETURN jsonb_build_object('eligible',n IS NOT NULL,'coins',n,'amount',p_amount);
+END $$;
 CREATE OR REPLACE FUNCTION settle_external_refund(p_id uuid,p_transaction text,p_amount integer,p_actor text,p_note text) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
-DECLARE r refund_requests; uid text; result jsonb; BEGIN
+DECLARE r refund_requests; uid text; result jsonb; q jsonb; l credit_lots; n integer; BEGIN
  IF p_actor IS NULL OR length(trim(p_note))<1 OR length(p_note)>600 THEN RAISE EXCEPTION 'decision required'; END IF;
  SELECT user_id INTO uid FROM refund_requests WHERE id=p_id;
  PERFORM 1 FROM users WHERE id=uid FOR UPDATE;
  SELECT * INTO r FROM refund_requests WHERE id=p_id FOR UPDATE;
  IF r.status='succeeded' AND r.transaction_key=p_transaction AND r.amount=p_amount THEN RETURN to_jsonb(r); END IF;
+ IF r.kind='external' AND r.status='review' AND r.held=0 AND r.spend_attempt IS NULL THEN
+  q=external_refund_quote(p_id,p_amount);
+  IF NOT coalesce((q->>'eligible')::boolean,false) THEN RAISE EXCEPTION 'external amount requires manual allocation'; END IF;
+  n=(q->>'coins')::integer;
+  SELECT * INTO l FROM credit_lots WHERE order_id=r.order_id FOR UPDATE;
+  UPDATE credit_lots SET available=available-n WHERE id=l.id;
+  UPDATE users SET yeobjeun_balance=yeobjeun_balance-n WHERE id=r.user_id;
+  UPDATE refund_requests SET status='blocked',coins=n,amount=p_amount,held=n,lot_id=l.id
+   WHERE id=p_id RETURNING * INTO r;
+ END IF;
  IF r.id IS NULL OR r.status NOT IN ('blocked','uncertain','processing') OR (r.held=0 AND r.spend_attempt IS NULL) THEN RAISE EXCEPTION 'request not reserved'; END IF;
  UPDATE refund_requests SET actor_id=p_actor,decision_note=p_note WHERE id=p_id;
  result=settle_refund(p_id,p_transaction,p_amount);
@@ -244,10 +272,67 @@ DECLARE o commerce_orders; r refund_requests; uid text; BEGIN
  PERFORM 1 FROM users WHERE id=uid FOR UPDATE;
  SELECT * INTO o FROM commerce_orders WHERE order_id=p_order FOR UPDATE;
  UPDATE commerce_orders SET refund_review=true WHERE order_id=p_order;
+ -- A refunded legacy unlock must not remain publicly readable during review.
+ IF o.product='unlock' THEN
+  UPDATE readings SET access_verified=false,is_paid=false,share_token=NULL WHERE id=o.reading_id;
+ END IF;
  SELECT * INTO r FROM refund_requests WHERE order_id=p_order AND status IN ('review','queued','processing','uncertain','blocked') FOR UPDATE;
  IF r.id IS NULL THEN
   INSERT INTO refund_requests(user_id,order_id,kind,status,request_key,review_reason) VALUES(o.user_id,p_order,'external','review','external-'||gen_random_uuid(),p_note);
  ELSE UPDATE refund_requests SET status=CASE WHEN submitted_at IS NULL AND held=0 THEN 'review' ELSE 'blocked' END,review_reason=p_note,lease_until=NULL,updated_at=now() WHERE id=r.id; END IF;
+END $$;
+
+-- Called only after the server independently verifies this historical payment at Toss.
+-- This maps one known unlock purchase; it never converts an aggregate wallet into paid credit.
+CREATE OR REPLACE FUNCTION register_legacy_payment(p_order text,p_key text,p_amount integer,p_share text) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE p payments; r readings; o commerce_orders; BEGIN
+ SELECT * INTO p FROM payments WHERE order_id=p_order AND toss_payment_key=p_key AND amount=p_amount AND status='done';
+ IF p.id IS NULL OR p_amount<>4900 OR p_share !~ '^[a-f0-9]{8,32}$'
+ OR p_order !~ ('^unlock_'||p_share||'_[0-9]+$') THEN RAISE EXCEPTION 'legacy payment mismatch'; END IF;
+ PERFORM 1 FROM users WHERE id=p.user_id FOR UPDATE;
+ SELECT * INTO r FROM readings WHERE share_id=p_share AND user_id=p.user_id FOR UPDATE;
+ IF r.id IS NULL OR (p.reading_id IS NOT NULL AND p.reading_id<>r.id) THEN RAISE EXCEPTION 'legacy reading mismatch'; END IF;
+ INSERT INTO commerce_orders(order_id,user_id,product,amount,coins,reading_id,payment_key,consent_version,created_at)
+ VALUES(p_order,p.user_id,'unlock',p_amount,0,r.id,p_key,'legacy-provider-verified',p.created_at)
+ ON CONFLICT(order_id) DO NOTHING;
+ SELECT * INTO o FROM commerce_orders WHERE order_id=p_order;
+ IF o.user_id<>p.user_id OR o.product<>'unlock' OR o.reading_id IS DISTINCT FROM r.id
+ OR o.payment_key IS DISTINCT FROM p_key OR o.amount<>p_amount THEN RAISE EXCEPTION 'legacy order conflict'; END IF;
+END $$;
+
+-- A full provider-confirmed unlock cancellation can revoke access without a credit-lot guess.
+-- No cancellation POST is made here; each existing Toss transaction is recorded exactly once.
+CREATE OR REPLACE FUNCTION settle_canceled_unlock(p_order text,p_key text,p_amount integer,p_transactions jsonb) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE o commerce_orders; uid text; c jsonb; seen refund_requests; rid uuid; total bigint; BEGIN
+ SELECT user_id INTO uid FROM commerce_orders WHERE order_id=p_order;
+ PERFORM 1 FROM users WHERE id=uid FOR UPDATE;
+ SELECT * INTO o FROM commerce_orders WHERE order_id=p_order FOR UPDATE;
+ IF o.order_id IS NULL OR o.product<>'unlock' OR o.coins<>0 OR o.payment_key IS DISTINCT FROM p_key OR o.amount<>p_amount
+ OR jsonb_typeof(p_transactions) IS DISTINCT FROM 'array' THEN RAISE EXCEPTION 'unlock cancellation mismatch'; END IF;
+ IF jsonb_array_length(p_transactions)=0 THEN RAISE EXCEPTION 'cancellation evidence missing'; END IF;
+ SELECT sum((v->>'cancelAmount')::integer) INTO total FROM jsonb_array_elements(p_transactions) v;
+ IF total IS DISTINCT FROM p_amount::bigint OR EXISTS(SELECT 1 FROM jsonb_array_elements(p_transactions) v
+ WHERE v->>'cancelStatus' IS DISTINCT FROM 'DONE' OR coalesce(v->>'transactionKey','')='' OR (v->>'cancelAmount')::integer<=0)
+ OR (SELECT count(DISTINCT v->>'transactionKey') FROM jsonb_array_elements(p_transactions) v)<>jsonb_array_length(p_transactions)
+ THEN RAISE EXCEPTION 'cancellation evidence mismatch'; END IF;
+ IF EXISTS(SELECT 1 FROM refund_requests WHERE order_id=p_order AND status IN ('review','queued','processing','uncertain','blocked') AND (held>0 OR spend_attempt IS NOT NULL))
+ THEN RAISE EXCEPTION 'unlock reservation mismatch'; END IF;
+ UPDATE refund_requests SET status='rejected',review_reason='토스 전체 취소 내역으로 별도 정산되었습니다.',lease_until=NULL,updated_at=now()
+ WHERE order_id=p_order AND status IN ('review','queued','processing','uncertain','blocked');
+ FOR c IN SELECT value FROM jsonb_array_elements(p_transactions) LOOP
+  SELECT * INTO seen FROM refund_requests WHERE transaction_key=c->>'transactionKey';
+  IF seen.id IS NOT NULL THEN
+   IF seen.order_id<>p_order OR seen.status<>'succeeded' OR seen.amount<>(c->>'cancelAmount')::integer THEN RAISE EXCEPTION 'transaction mismatch'; END IF;
+  ELSE
+   INSERT INTO refund_requests(user_id,order_id,kind,status,request_key,amount,transaction_key,actor_id)
+   VALUES(o.user_id,p_order,'external','succeeded','provider-'||gen_random_uuid(),(c->>'cancelAmount')::integer,c->>'transactionKey','provider-reconcile') RETURNING id INTO rid;
+   INSERT INTO refund_events(refund_id,event,actor,note) VALUES(rid,'external_unlock_settled','provider-reconcile',c->>'transactionKey');
+  END IF;
+ END LOOP;
+ UPDATE readings SET access_verified=false,is_paid=false,share_token=NULL WHERE id=o.reading_id;
+ UPDATE commerce_orders SET status='canceled',refunded_amount=amount,refund_review=false WHERE order_id=p_order;
 END $$;
 
 CREATE OR REPLACE FUNCTION public.reserve_generation(p_user text,p_hash text,p_product text,p_request text,p_input jsonb)
@@ -366,14 +451,23 @@ END $$;
 
 -- Old full-cancel handler must not subtract credits a second time after this migration.
 CREATE OR REPLACE FUNCTION cancel_payment(p_order text,p_key text,p_amount integer)
-RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$ BEGIN
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE o commerce_orders; uid text; BEGIN
  IF NOT EXISTS(SELECT 1 FROM commerce_orders WHERE order_id=p_order AND payment_key=p_key AND amount=p_amount) THEN RAISE EXCEPTION 'payment mismatch'; END IF;
+ SELECT user_id INTO uid FROM commerce_orders WHERE order_id=p_order;
+ PERFORM 1 FROM users WHERE id=uid FOR UPDATE;
+ SELECT * INTO o FROM commerce_orders WHERE order_id=p_order FOR UPDATE;
+ IF o.product='unlock' THEN
+  UPDATE readings SET is_paid=false,access_verified=false,share_token=NULL WHERE id=o.reading_id;
+  UPDATE commerce_orders SET status='canceled',refunded_amount=amount,refund_review=false WHERE order_id=p_order;
+  RETURN jsonb_build_object('canceled',true);
+ END IF;
  PERFORM flag_external_refund(p_order,'토스 취소 내역과 엽전 사용 내역의 대조가 필요합니다.');
  RETURN jsonb_build_object('review',true);
 END $$;
 DO $$ DECLARE f record; BEGIN
  FOR f IN SELECT p.oid::regprocedure signature FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
- WHERE n.nspname='public' AND p.proname IN ('ensure_credit_wallet','refund_snapshot','prepare_refund','request_refund','refund_review_quote','decide_refund','claim_refund','mark_refund','settle_refund','settle_external_refund','clear_refund_review','flag_external_refund','reserve_generation','finish_generation','complete_payment','check_attendance','cancel_payment') LOOP
+ WHERE n.nspname='public' AND p.proname IN ('ensure_credit_wallet','refund_snapshot','prepare_refund','request_refund','refund_review_quote','decide_refund','claim_refund','mark_refund','settle_refund','external_refund_quote','settle_external_refund','clear_refund_review','flag_external_refund','register_legacy_payment','settle_canceled_unlock','reserve_generation','finish_generation','complete_payment','check_attendance','cancel_payment') LOOP
  EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC,anon,authenticated',f.signature);
  EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO service_role',f.signature);
  END LOOP;

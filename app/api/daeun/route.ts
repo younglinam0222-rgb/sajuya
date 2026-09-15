@@ -1,88 +1,58 @@
+import { guardedGeneration, recordUsage } from '@/lib/generation-guard'
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
-import { requireContentNotice } from '@/lib/contentNoticeGuard'
-import { rejectCrossSiteCookieMutation } from '@/lib/requestGuard'
-import {
-  SHARED_INTERP_GUARDS,
-  calcManse,
-  formatManseForPrompt,
-  formatSeunForPrompt,
-  generationClock,
-  periodGuidance,
-} from '@/lib/sajuCalc'
-import { birthPromptLine, resolveBirthFromRequest } from '@/lib/birthInput'
-import { normalizeMaritalStatus, resolveOccupation } from '@/lib/profileOptions'
-import { buildServiceContextPrompt } from '@/lib/serviceContextPrompt'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
-export async function POST(req: NextRequest) {
+async function generate(req: NextRequest) {
   try {
-    const csrf = rejectCrossSiteCookieMutation(req)
-    if (csrf) return csrf
-    const notice = await requireContentNotice()
-    if (!notice.ok) return notice.response
-    const body = await req.json()
-    const { name, gender } = body
-    const birth = resolveBirthFromRequest(body)
-    if ('error' in birth) return NextResponse.json({ error: birth.error }, { status: 400 })
-    const marital = normalizeMaritalStatus(body.maritalStatus)
-    const occupation = resolveOccupation(body.occupation) || '미입력'
+    const { name, year, month, day, hour, gender } = await req.json()
 
-    const clock = generationClock()
-    const manse = calcManse(birth.solarYear, birth.solarMonth, birth.solarDay, birth.hourMinute, birth.longitude)
-    const age = clock.currentYear - birth.solarYear + 1
+    const currentYear = new Date().getFullYear()
+    const age = currentYear - parseInt(year) + 1
+    const animals = ['쥐','소','호랑이','토끼','용','뱀','말','양','원숭이','닭','개','돼지']
+    const animal = animals[(parseInt(year) - 4) % 12]
     const genderStr = gender === 'male' ? '남성' : '여성'
-    const thisYearSeun = formatSeunForPrompt(manse.dayPillar.stemIdx, clock.currentYear)
+    const hourStr = hour !== '' ? `${hour}시` : '시간 미상'
 
     const prompt = `사주명리학 대운 분석을 해줘.
 
-상담자: ${name} (${genderStr}, 현재 ${age}세)
-${birthPromptLine(birth)}
-${formatManseForPrompt(manse, '상담자')}
-올해 세운(일간 기준): ${thisYearSeun.year} ${thisYearSeun.ganzhi} (${thisYearSeun.sipsin})
-${periodGuidance(clock)}
-
-이번 계산에는 대운 시작 나이, 순행/역행, 대운 간지 목록이 없다.
-특정 나이를 계산된 대운 시작·전성기처럼 쓰지 마라. 점수도 만들지 마라.
-대운을 계산했다고 미래 사건 예측이 검증된 것처럼 말하지 마라.
-질환·증상을 겪는다고 단정하거나 치료처럼 안내하지 마라.
-${SHARED_INTERP_GUARDS}
-
-${buildServiceContextPrompt({ service: 'daeun', maritalStatus: marital, occupation })}
-
-인연·관계 대운은 위 결혼 상태에 맞게만 쓰고, 오늘의 운세/택일용 연애 문구를 복붙하지 마라.
-직업·재물 대운은 실제 직업(${occupation}) 사례로.
+상담자: ${name} (${year}년 ${month}월 ${day}일 ${hourStr}생, ${animal}띠, ${genderStr}, 현재 ${age}세)
+현재 연도: ${currentYear}년
 
 반드시 아래 JSON 형식으로만 반환. 마크다운 코드블록 절대 금지.
 
 {
-  "current": "현재 흐름 분석 (4~5문장, 원국·세운 기준으로. 없는 대운 나이를 만들지 말 것)",
-  "next10": "향후 흐름 (3~4문장, 구체 나이를 계산된 사실처럼 쓰지 말 것)",
-  "career": "직업·재물 흐름 (3~4문장)",
-  "love": "인연·관계 흐름 (3~4문장, 결혼 상태에 맞게)",
-  "health": "생활 리듬 조언 (3~4문장, 질환 단정 금지)",
-  "warning": "⚠️ 조심할 것들 (2~3문장)",
+  "current": "현재 대운 분석 (4~5문장, 현재 어떤 대운 기간인지, 에너지 특성, 전반적인 영향)",
+  "next10": "향후 10년 흐름 (3~4문장, 구체적 시기별 변화 언급)",
+  "career": "직업·재물 대운 (3~4문장)",
+  "love": "인연·관계 대운 (3~4문장)",
+  "health": "건강 대운 (3~4문장, 주의해야 할 신체 부위 포함)",
+  "warning": "⚠️ 조심할 것들 (2~3문장, 이 대운에서 특히 주의할 시기와 이유)",
   "advice": "신령의 핵심 조언 (2문장)"
 }`
 
     const stream = client.messages.stream({
       model:  'claude-sonnet-4-5',
       max_tokens: 1500,
-      system: '너는 무등산 신령님이야. 수천 년의 수련으로 흐름을 꿰뚫어본다. "허허..." 특유의 묵직하고 깊이 있는 말투로 분석한다. 반드시 JSON만 출력.',
+      system: '너는 무등산 신령님이야. 수천 년의 수련으로 대운의 흐름을 꿰뚫어본다. "허허..." 특유의 묵직하고 깊이 있는 말투로 분석한다. 반드시 JSON만 출력.',
       messages: [{ role: 'user', content: prompt }],
-    })
+    }, {signal:req.signal, maxRetries:0})
 
     const encoder = new TextEncoder()
     const readable = new ReadableStream({
       async start(controller) {
+       try {
         for await (const chunk of stream) {
           if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: chunk.delta.text })}\n\n`))
           }
         }
+        const final = await stream.finalMessage()
+        await recordUsage(final.model, final.usage)
         controller.enqueue(encoder.encode('data: [DONE]\n\n'))
         controller.close()
+       } catch (error) { controller.error(error) }
       },
     })
 
@@ -94,7 +64,10 @@ ${buildServiceContextPrompt({ service: 'daeun', maritalStatus: marital, occupati
       },
     })
   } catch (e) {
-    console.error(JSON.stringify({ tag: '대운', phase: 'error', err: e instanceof Error ? e.message : String(e) }))
+    console.error(e)
     return NextResponse.json({ error: '서버 오류' }, { status: 500 })
   }
 }
+
+export const POST = guardedGeneration('daeun', generate)
+export const maxDuration = 300

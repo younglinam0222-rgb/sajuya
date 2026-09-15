@@ -2,6 +2,10 @@ import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
 import {PGlite} from '@electric-sql/pglite'
 import {validConversation,readConversation,compactConversation} from '../lib/conversation.ts'
+import {readSavedReading} from '../lib/saved-reading.ts'
+const savedProfile={form:{name:'본인',year:'1986',month:4,day:19},saju:{}}
+assert.deepEqual(readSavedReading(JSON.stringify(savedProfile)),savedProfile)
+for(const bad of [null,{form:{}},{...savedProfile,form:{...savedProfile.form,conversation:{message:42}}},{...savedProfile,form:{...savedProfile.form,chat:{topicId:'business',note:'',answers:[42]}}}])assert.throws(()=>readSavedReading(bad))
 const input={sourceId:'mine',characterId:'baekhalma',message:'매장을 확장해도 될까요?',previousId:null,requestId:'request-1234',maxCoins:0,consent:true}
 assert.ok(validConversation(input))
 for(const change of [{message:''},{message:' '},{message:'a'.repeat(801)},{characterId:'hamster'},{maxCoins:-1},{consent:false},{previousId:{id:'bad'}}])assert.equal(validConversation({...input,...change}),false)

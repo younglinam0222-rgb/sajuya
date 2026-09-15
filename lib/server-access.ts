@@ -3,7 +3,7 @@ import { getToken } from 'next-auth/jwt'
 import { createServerSupabase } from './supabase'
 
 export class AccessError extends Error {
-  constructor(public status: number, message: string) { super(message) }
+  constructor(public status: number, message: string, public code?: 'GENERATION_PENDING') { super(message) }
 }
 export async function requireUser(req: NextRequest) {
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
@@ -17,7 +17,8 @@ export async function requireUser(req: NextRequest) {
   return token.sub
 }
 export function failure(error: unknown) {
-  return NextResponse.json({ error: error instanceof AccessError ? error.message : '처리하지 못했습니다. 잠시 후 다시 시도해주세요.' },
+  return NextResponse.json({ error: error instanceof AccessError ? error.message : '처리하지 못했습니다. 잠시 후 다시 시도해주세요.',
+    ...(error instanceof AccessError && error.code ? { code: error.code } : {}) },
     { status: error instanceof AccessError ? error.status : 503, headers: { 'Cache-Control': 'private, no-store' } })
 }
 export async function rpc(name: string, args: Record<string, unknown>) {

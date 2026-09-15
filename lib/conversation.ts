@@ -9,7 +9,9 @@ export function validConversation(v:unknown):v is ConversationInput{
 }
 export const conversationRoom=(source:string,guide:string)=>source+'--'+guide
 export function readConversation(raw:unknown):ConversationAnswer {
- const p=typeof raw==='string'?JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g,'')):raw as any
+ const value: unknown=typeof raw==='string'?JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g,'')):raw
+ if(!value||typeof value!=='object'||Array.isArray(value))throw Error('대화 답변 형식을 확인하지 못했어요.')
+ const p=value as Record<string,unknown>
  if(!p||typeof p!=='object'||typeof p.memo!=='string'||!p.memo.trim()||p.memo.length>120||!Array.isArray(p.paragraphs)||p.paragraphs.length<2||p.paragraphs.length>8||p.paragraphs.some((s:unknown)=>typeof s!=='string'||!s.trim()||s.length>500)||!Array.isArray(p.suggestions)||p.suggestions.length!==2||p.suggestions.some((s:unknown)=>typeof s!=='string'||!s.trim()||s.length>80)||!(p.recommendation===null||p.recommendation==='saju'))throw Error('대화 답변이 완성되지 않았어요.')
  return {memo:p.memo.trim(),paragraphs:p.paragraphs.map((s:string)=>s.trim()),suggestions:p.suggestions.map((s:string)=>s.trim()),recommendation:p.recommendation}
 }

@@ -33,13 +33,12 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ko">
-      <body style={{ margin: 0, padding: 0, background: '#0a0a0a' }}>
+      <body className="palace-theme">
         <KakaoInAppRedirect />
         <KakaoInit />
         <SessionProviderWrapper>

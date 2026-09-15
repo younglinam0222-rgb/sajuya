@@ -7,14 +7,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:content-notice": "npx --yes tsx scripts/test-content-notice.ts",
-    "test:sipsin": "npx --yes tsx scripts/test-sipsin.ts",
-    "test:charge": "npx --yes tsx scripts/test-charge-packages.ts",
-    "test:reservation": "npx --yes tsx scripts/test-reservation.ts",
-    "test:share": "npx --yes tsx scripts/test-reading-share.ts",
-    "test:daily-quota": "npx --yes tsx scripts/test-daily-quota.ts",
-    "test:fortune-inputs": "npx --yes tsx scripts/test-fortune-inputs.ts",
-    "test:saju-access": "npx --yes tsx scripts/test-saju-access.ts"
+    "test:security": "node --experimental-strip-types tests/policies.mjs && node tests/launch-security.mjs",
+    "test:refunds": "node tests/refunds.mjs && node --experimental-strip-types tests/refund-engine.mjs && node tests/refund-recovery.mjs",
+    "test:chat": "node --experimental-strip-types tests/chat.mjs",
+    "test:conversation": "node --experimental-strip-types tests/conversation.mjs",
+    "test:manse": "node --experimental-strip-types tests/manse-facts.mjs",
+    "test:reviews": "node --experimental-strip-types tests/reviews.mjs",
+    "typecheck": "tsc --noEmit",
+    "test:http": "node tests/final-http.mjs && node tests/refund-http.mjs && node tests/reviews-http.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",
@@ -24,7 +24,7 @@
     "clsx": "^2.1.1",
     "lucide-react": "^1.14.0",
     "lunar-javascript": "^1.7.7",
-    "next": "16.2.5",
+    "next": "16.2.4",
     "next-auth": "^4.24.14",
     "react": "19.2.4",
     "react-dom": "19.2.4",
@@ -37,8 +37,12 @@
     "@types/react-dom": "^19",
     "@types/uuid": "^10.0.0",
     "eslint": "^9",
-    "eslint-config-next": "16.2.5",
+    "eslint-config-next": "16.2.4",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "@electric-sql/pglite": "^0.5.8"
+  },
+  "engines": {
+    "node": ">=22.18.0"
   }
 }

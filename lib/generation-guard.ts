@@ -6,7 +6,7 @@ import { canonical } from './access-policy'
 import { decodeGeneration, replayWire } from './generation-result'
 import { AccessError, failure, requireUser, rpc } from './server-access'
 import { createServerSupabase } from './supabase'
-import {birthSolarDate} from './manse-facts'
+import {birthSolarDate,koreanDate} from './manse-facts'
 
 const context = new AsyncLocalStorage<{ jobId: string }>()
 export async function recordUsage(model: string, usage: {input_tokens:number;output_tokens:number;cache_read_input_tokens?:number|null;cache_creation_input_tokens?:number|null}) {
@@ -39,7 +39,8 @@ export function guardedGeneration(product: string, generate: (req:NextRequest)=>
     delete input.requestId
     // Only full, server-validated results consume an entitlement. Partial retry flags cannot bypass this.
     delete input.retry
-    const period = product==='daily' ? new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Seoul'}) : String(new Date().getUTCFullYear())
+    const today = koreanDate()
+    const period = product==='daily' ? today.iso : String(today.year)
     let hash=createHash('sha256').update(canonical({version:1,product,period,input})).digest('hex')
     const db=createServerSupabase()
     const {data:link,error:linkError}=await db.from('generation_requests').select('job_id').eq('user_id',userId).eq('request_id',requestId).maybeSingle()
@@ -52,10 +53,10 @@ export function guardedGeneration(product: string, generate: (req:NextRequest)=>
       hash=job.fingerprint
     }
     const reserved=await rpc('reserve_generation',{p_user:userId,p_hash:hash,p_product:product,p_request:requestId,p_input:input})
-    const errors:Record<string,[number,string]>={
+    const errors:Record<string,[number,string,('GENERATION_PENDING')?]>={
       balance:[402,'이 풀이에는 1냥이 필요합니다. 엽전을 충전해주세요.'],
       trial_used:[403,'계정당 최초 1회 무료 운세를 이미 이용하셨습니다. 저장된 결과는 다시 볼 수 있습니다.'],
-      busy:[409,'이미 풀이를 생성 중입니다. 잠시 후 같은 내용으로 다시 확인해주세요.'],
+      busy:[409,'이미 풀이를 생성 중입니다. 잠시 후 같은 내용으로 다시 확인해주세요.','GENERATION_PENDING'],
       rate:[429,'요청이 많습니다. 10분 후 다시 시도해주세요.'],
       conversation_limit:[429,'오늘 대화 한도 10회를 이용했습니다. 저장된 대화는 다시 볼 수 있어요.'],
       conversation_changed:[409,'다른 창에서 대화가 이어졌어요. 최신 대화를 불러온 후 다시 확인해주세요.'],
@@ -64,7 +65,7 @@ export function guardedGeneration(product: string, generate: (req:NextRequest)=>
       refunded:[403,'환불 처리된 결과입니다. 새 상담을 시작해주세요.'],
       account:[401,'로그인을 다시 해주세요.'], conflict:[409,'요청 정보가 변경됐습니다. 새로 시작해주세요.'],
     }
-    if (reserved.error) { const [s,m]=errors[reserved.error]??[503,'잠시 후 다시 시도해주세요.']; throw new AccessError(s,m) }
+    if (reserved.error) { const [s,m,code]=errors[reserved.error]??[503,'잠시 후 다시 시도해주세요.']; throw new AccessError(s,m,code) }
     const headers={'Content-Type':'text/event-stream; charset=utf-8','Cache-Control':'private, no-store'}
     if (reserved.cached) return new NextResponse(replayWire(reserved.response,requestId),{headers})
     reservation=reserved

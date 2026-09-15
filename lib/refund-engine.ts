@@ -1,9 +1,9 @@
 // Dependency-injected so the real cancellation workflow is tested without live money or credentials.
 export interface RefundJob {id:string;order_id:string;user_id:string;status:string;amount:number;coins:number;submitted_at:string|null;attempts:number}
 export interface RefundPayment {paymentKey:string;orderId:string;currency:string;totalAmount:number;balanceAmount:number;status:string;method:string;isPartialCancelable?:boolean;cancels?:{transactionKey:string;cancelAmount:number;cancelReason:string;cancelStatus:string}[]|null}
-export interface RefundOrder {order_id:string;payment_key:string;amount:number;refunded_amount:number;refund_review:boolean}
+export interface RefundOrder {order_id:string;payment_key:string;amount:number;refunded_amount:number;refund_review:boolean;product?:string}
 export interface RefundPorts {
- rpc:(name:string,args:Record<string,unknown>)=>Promise<any>;
+ rpc:(name:string,args:Record<string,unknown>)=>Promise<unknown>;
  order:(id:string)=>Promise<RefundOrder>;
  known:(id:string)=>Promise<{id:string;status:string;transaction_key:string|null}[]>;
  payment:(key:string)=>Promise<RefundPayment>;
@@ -11,10 +11,24 @@ export interface RefundPorts {
  now:()=>number;
 }
 const marker=(id:string)=>'sajugung:'+id
+function isRefundJob(value:unknown):value is RefundJob{
+ if(!value||typeof value!=='object')return false
+ const row=value as Record<string,unknown>
+ return ['id','order_id','user_id','status'].every(key=>typeof row[key]==='string')
+  &&Number.isSafeInteger(row.amount)&&Number.isSafeInteger(row.coins)&&Number.isSafeInteger(row.attempts)
+  &&(row.submitted_at===null||typeof row.submitted_at==='string')
+}
 export async function inspectRefundPayment(p:RefundPorts,order:RefundOrder,payment:RefundPayment,current?:RefundJob):Promise<'clear'|'settled'|'blocked'|'pending'> {
  if(payment.orderId!==order.order_id||payment.paymentKey!==order.payment_key||payment.totalAmount!==order.amount||payment.currency!=='KRW')throw Error('payment mismatch')
  const known=await p.known(order.order_id)
  const cancels=payment.cancels??[]
+ if(!Array.isArray(cancels)||cancels.some(c=>!Number.isSafeInteger(c.cancelAmount)||c.cancelAmount<=0||typeof c.transactionKey!=='string'||!c.transactionKey))throw Error('invalid cancellation evidence')
+ const done=cancels.filter(c=>c.cancelStatus==='DONE').reduce((sum,c)=>sum+c.cancelAmount,0)
+ if(!Number.isSafeInteger(payment.balanceAmount)||payment.balanceAmount<0||payment.balanceAmount!==order.amount-done)throw Error('provider balance mismatch')
+ if(order.product==='unlock'&&payment.status==='CANCELED'&&done===order.amount&&cancels.every(c=>c.cancelStatus==='DONE')){
+  await p.rpc('settle_canceled_unlock',{p_order:order.order_id,p_key:order.payment_key,p_amount:order.amount,p_transactions:cancels})
+  return 'settled'
+ }
  // Only an exact, provider-confirmed transaction can complete an existing request.
  let settled=false
  for(const c of cancels){
@@ -27,8 +41,6 @@ export async function inspectRefundPayment(p:RefundPorts,order:RefundOrder,payme
    return 'blocked'
   }
  }
- const done=cancels.filter(c=>c.cancelStatus==='DONE').reduce((sum,c)=>sum+c.cancelAmount,0)
- if(!Number.isSafeInteger(payment.balanceAmount)||payment.balanceAmount<0||payment.balanceAmount!==order.amount-done)throw Error('provider balance mismatch')
  if(settled)return 'settled'
  if(cancels.some(c=>c.cancelStatus!=='DONE'))return 'pending'
  const latest=await p.order(order.order_id)
@@ -40,8 +52,9 @@ export async function inspectRefundPayment(p:RefundPorts,order:RefundOrder,payme
  return 'clear'
 }
 export async function processRefund(p:RefundPorts,id:string) {
- const job:RefundJob|null=await p.rpc('claim_refund',{p_id:id})
+ const job=await p.rpc('claim_refund',{p_id:id})
  if(!job)return
+ if(!isRefundJob(job))throw Error('invalid refund reservation')
  const mark=(state:string,note:string)=>p.rpc('mark_refund',{p_id:id,p_state:state,p_note:note})
  try {
   const order=await p.order(job.order_id)

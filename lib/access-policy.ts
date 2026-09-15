@@ -26,7 +26,7 @@ export function lockedResult(raw?: unknown) {
   try {
     const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { titles: [], _meta: meta }
-    const value = parsed as Record<string, any>
+    const value = parsed as Record<string, unknown>
     const first = Array.isArray(value.titles) ? value.titles[0]
       : Array.isArray(value.sections) ? value.sections[0]
       : { title: '총평', content: value.overall ?? value.yearOverall ?? value.current ?? value.intro }

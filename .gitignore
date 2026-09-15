@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# 배포 설정 예제에는 비밀값을 넣지 않습니다.
+!.env.example
