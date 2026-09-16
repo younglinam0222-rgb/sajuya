@@ -1,10 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   CONTENT_NOTICE_BODY,
   CONTENT_NOTICE_CHECKBOX_LABEL,
+  CONTENT_NOTICE_SAVE_UNAVAILABLE,
+  contentNoticeSaveErrorMessage,
 } from '@/lib/contentNotice'
 
 type Props = {
@@ -16,9 +18,11 @@ export default function ContentNoticeForm({ onConfirmed, submitLabel = '확인�
   const [checked, setChecked] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const inFlight = useRef(false)
 
   const handleSubmit = async () => {
-    if (!checked || saving) return
+    if (!checked || saving || inFlight.current) return
+    inFlight.current = true
     setSaving(true)
     setError(null)
     try {
@@ -29,17 +33,20 @@ export default function ContentNoticeForm({ onConfirmed, submitLabel = '확인�
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setError(
-          data.code === 'content_notice_unavailable' || data.code === 'unavailable'
-            ? '확인 기록을 저장할 수 없습니다. 잠시 후 다시 시도해 주세요.'
-            : '확인을 저장하지 못했습니다. 다시 시도해 주세요.'
-        )
+        setError(contentNoticeSaveErrorMessage(data.code))
+        return
+      }
+      const check = await fetch('/api/content-notice')
+      const checkData = await check.json().catch(() => ({}))
+      if (check.status === 401 || checkData.acknowledged !== true) {
+        setError(CONTENT_NOTICE_SAVE_UNAVAILABLE)
         return
       }
       await onConfirmed()
     } catch {
-      setError('확인을 저장하지 못했습니다. 다시 시도해 주세요.')
+      setError(contentNoticeSaveErrorMessage('write_failed'))
     } finally {
+      inFlight.current = false
       setSaving(false)
     }
   }

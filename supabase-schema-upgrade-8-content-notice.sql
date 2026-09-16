@@ -1,5 +1,6 @@
 -- 콘텐츠 안내 1회 확인 기록
--- Preview/테스트 DB에만 적용. Production DB에는 적용하지 말 것.
+-- 멱등 적용. DROP TABLE 하지 않으며 기존 users·readings·잔액 행은 변경하지 않는다.
+-- 과거 확인 기록을 소급 생성하지 않는다.
 
 CREATE TABLE IF NOT EXISTS content_notice_acks (
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -20,5 +21,7 @@ CREATE POLICY "content_notice_acks_deny_all"
   USING (false)
   WITH CHECK (false);
 
--- 접근은 서버의 SUPABASE_SERVICE_ROLE_KEY 만 사용한다.
--- 과거 동의 기록을 소급 생성하지 않는다.
+REVOKE ALL ON TABLE content_notice_acks FROM PUBLIC, anon, authenticated;
+GRANT ALL ON TABLE content_notice_acks TO service_role;
+
+NOTIFY pgrst, 'reload schema';

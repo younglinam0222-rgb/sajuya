@@ -10,3 +10,15 @@ export const CONTENT_NOTICE_SHORT_HINT =
   'AI가 생성하는 참고용 운세입니다. 중요한 결정의 유일한 근거로 사용하지 마세요.'
 
 export const PERSONAL_QUESTION_HINT = '맞춤법에 맞게 정확히 입력해주세요'
+
+export const CONTENT_NOTICE_SAVE_UNAVAILABLE =
+  '확인 기록을 저장할 수 없습니다. 잠시 후 다시 시도해 주세요.'
+export const CONTENT_NOTICE_SAVE_FAILED =
+  '확인을 저장하지 못했습니다. 다시 시도해 주세요.'
+
+export function contentNoticeSaveErrorMessage(code: unknown): string {
+  if (code === 'content_notice_unavailable' || code === 'unavailable') {
+    return CONTENT_NOTICE_SAVE_UNAVAILABLE
+  }
+  return CONTENT_NOTICE_SAVE_FAILED
+}

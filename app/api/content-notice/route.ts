@@ -18,6 +18,7 @@ export async function GET() {
 
   const ack = await loadContentNoticeAck(userId)
   if (ack.status === 'unavailable') {
+    logContentNoticeEvent('ack_lookup_unavailable', { code: ack.code, kind: ack.kind })
     return NextResponse.json({
       acknowledged: false,
       version: CONTENT_NOTICE_VERSION,
@@ -64,9 +65,23 @@ export async function POST(req: NextRequest) {
 
   const saved = await saveContentNoticeAck(userId)
   if (!saved.ok) {
+    logContentNoticeEvent('ack_save_failed', { code: saved.code, kind: saved.kind })
     return NextResponse.json(
       { error: '확인 기록을 저장할 수 없습니다.', code: saved.code },
       { status: saved.code === 'unavailable' ? 503 : 500 }
+    )
+  }
+
+  const verified = await loadContentNoticeAck(userId)
+  if (verified.status !== 'acked') {
+    logContentNoticeEvent('ack_verify_failed', {
+      status: verified.status,
+      code: verified.status === 'unavailable' ? verified.code : null,
+      kind: verified.status === 'unavailable' ? verified.kind : 'missing',
+    })
+    return NextResponse.json(
+      { error: '확인 기록을 저장할 수 없습니다.', code: verified.status === 'unavailable' ? 'unavailable' : 'write_failed' },
+      { status: verified.status === 'unavailable' ? 503 : 500 }
     )
   }
 
@@ -75,6 +90,6 @@ export async function POST(req: NextRequest) {
     ok: true,
     duplicate: saved.duplicate,
     version: CONTENT_NOTICE_VERSION,
-    acknowledgedAt: saved.acknowledgedAt,
+    acknowledgedAt: verified.acknowledgedAt,
   })
 }
