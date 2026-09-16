@@ -22,6 +22,13 @@ export const PAID_CATEGORY_GROUPS = [
   ['결혼운'],
 ] as const
 
+export const PAID_TITLE_SLOTS = PAID_ID_GROUPS.flatMap((ids, groupIndex) =>
+  ids.map((id, index) => ({
+    id: String(id),
+    category: PAID_CATEGORY_GROUPS[groupIndex][index],
+  })),
+)
+
 export function isFreeCategory(category: unknown) {
   return typeof category === 'string' && (FREE_CATEGORIES as readonly string[]).includes(category)
 }

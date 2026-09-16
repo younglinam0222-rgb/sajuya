@@ -5,7 +5,8 @@ import {
   redactAiResult,
   viewerAccess,
 } from '../lib/sajuAccess'
-import { assessSampleCompletion, PEAK_GUIDE_LABEL } from '../lib/sajuContract'
+import { PEAK_GUIDE_LABEL } from '../lib/sajuContract'
+import { assessFreeStage } from '../lib/sajuScope'
 import { isPaymentsEnabled } from '../lib/paymentFlags'
 import { SAJU_UNLOCK_NYANG } from '../lib/pricing'
 import { sajuFullViewButtonLabel, sajuFullViewHint } from '../lib/priceDisplay'
@@ -73,14 +74,14 @@ ok('unpaid save strips paid titles', mergedTitles.every(t => ['1', '2', '3'].inc
 ok('unpaid save strips strategy', mergedUnpaid.strategy == null)
 ok('unpaid save strips personal answer body', (mergedUnpaid.personalAnswer as { answer: string }).answer === '')
 
-const sampleReport = assessSampleCompletion({
+const sampleReport = assessFreeStage({
   titles: paidBody.titles.slice(0, 3),
   receivedGroupIndexes: [0, 1],
   gotDone: true,
 })
 ok('sample complete with 3 titles', sampleReport.complete === true)
 
-const incompleteSample = assessSampleCompletion({
+const incompleteSample = assessFreeStage({
   titles: paidBody.titles.slice(0, 2),
   receivedGroupIndexes: [0],
   gotDone: true,

@@ -1,5 +1,6 @@
-import { FREE_TITLE_COUNT } from '@/lib/pricing'
-import { PAID_TITLE_IDS, FREE_TITLE_IDS, PAID_TITLE_SLOTS, readingPersonalView } from '@/lib/sajuContract'
+import { FREE_TITLE_COUNT } from './pricing'
+import { readingPersonalView } from './sajuContract'
+import { FREE_TITLE_IDS, PAID_TITLE_IDS, PAID_TITLE_SLOTS } from './sajuScope'
 
 export type AccessLevel = 'public' | 'owner_free' | 'owner_paid'
 
