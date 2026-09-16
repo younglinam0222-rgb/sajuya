@@ -20,6 +20,13 @@ export function logContentNoticeEvent(event: string, extra?: Record<string, unkn
 }
 
 export async function probeContentNoticeSchema() {
+  const rawUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+  let supabaseHost = ''
+  try {
+    supabaseHost = new URL(rawUrl).host
+  } catch {
+    supabaseHost = ''
+  }
   const supabase = createServerSupabase()
   const users = await supabase.from('users').select('id').limit(1)
   const acks = await supabase
@@ -30,6 +37,7 @@ export async function probeContentNoticeSchema() {
   const acksClass = classifyContentNoticeError(acks.error)
   const columns = !acks.error && acks.data?.[0] ? Object.keys(acks.data[0]).sort() : []
   return {
+    supabaseHost,
     users: { status: users.error ? 'error' : 'ok', ...usersClass },
     acksSelect: {
       status: acks.error ? 'error' : 'ok',
