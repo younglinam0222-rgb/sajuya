@@ -36,6 +36,17 @@ export async function probeContentNoticeSchema() {
   const usersClass = classifyContentNoticeError(users.error)
   const acksClass = classifyContentNoticeError(acks.error)
   const columns = !acks.error && acks.data?.[0] ? Object.keys(acks.data[0]).sort() : []
+  const insertProbe = await supabase.from('content_notice_acks').insert({
+    user_id: '__schema_probe_do_not_keep__',
+    notice_version: '__probe__',
+  })
+  if (!insertProbe.error) {
+    await supabase
+      .from('content_notice_acks')
+      .delete()
+      .eq('user_id', '__schema_probe_do_not_keep__')
+      .eq('notice_version', '__probe__')
+  }
   return {
     supabaseHost,
     users: { status: users.error ? 'error' : 'ok', ...usersClass },
@@ -44,6 +55,10 @@ export async function probeContentNoticeSchema() {
       ...acksClass,
       columns,
       rowReturned: Array.isArray(acks.data),
+    },
+    acksInsert: {
+      status: insertProbe.error ? 'error' : 'ok',
+      ...classifyContentNoticeError(insertProbe.error),
     },
   }
 }
