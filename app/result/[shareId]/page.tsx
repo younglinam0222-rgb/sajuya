@@ -89,7 +89,7 @@ function ResultPageContent() {
           const s = clean.indexOf('{'), e = clean.lastIndexOf('}')
           if (s !== -1 && e !== -1) clean = clean.slice(s, e + 1)
           const parsed = JSON.parse(clean)
-          if (parsed.titles) { setTitles(data.is_paid ? parsed.titles : parsed.titles.slice(0, 1)); setStrategy(data.is_paid ? parsed.strategy ?? null : null) }
+          if (parsed.titles) { setTitles(data.is_paid ? parsed.titles : parsed.titles.slice(0, data.product === 'saju' ? 3 : 1)); setStrategy(data.is_paid ? parsed.strategy ?? null : null) }
           const view = readingPersonalView(parsed, sajuParsed)
           if (view.requested) setPersonalAnswer({ question: view.question, answer: view.answer })
           else setPersonalAnswer(null)
@@ -138,7 +138,7 @@ function ResultPageContent() {
         <div className="text-xl font-black mb-2">로그인하고 결과 확인하기</div>
         <div className="text-sm text-gray-500 mb-8 leading-relaxed">
           사주 풀이 결과는 로그인 후 볼 수 있어요<br />
-          <span className="text-yellow-400 font-bold">계정당 첫 일일운세 1회 무료</span>
+          <span className="text-yellow-400 font-bold">사주 성격·재물운·애정운 3개 무료</span>
         </div>
         <div className="w-full max-w-xs space-y-3">
           <button onClick={() => signIn('kakao', { callbackUrl: resultLogin })}
@@ -185,7 +185,7 @@ function ResultPageContent() {
   )
 
   // Locked sections have already been omitted by the API. Never reconstruct them in the browser.
-  const allowedTitles = isPaid ? titles : titles.slice(0, 1)
+  const allowedTitles = isPaid ? titles : titles.slice(0, product === 'saju' ? 3 : 1)
   const allowedSections = isPaid ? sections : sections.slice(0, 1)
   const question = isPaid ? personalAnswer?.question || formInfo?.personalQuestion || '' : ''
   const readingSections: ReadingSection[] = sajuReadingSections({
@@ -209,7 +209,7 @@ function ResultPageContent() {
     manse={sajuData}
     sections={readingSections}
     expectedCoreCount={isPaid && titles.length > 0 ? 12 : undefined}
-    statusLabel={isPaid ? '보관함 · 나의 해석' : '무료 샘플 1개'}
+    statusLabel={isPaid ? '보관함 · 나의 해석' : product === 'saju' ? '무료 풀이 3개' : '무료 샘플 1개'}
     onReload={reloadReading}
     share={canShare ? <ReadingShareActions
       shareId={shareId}
@@ -218,7 +218,7 @@ function ResultPageContent() {
       imagePath={charImg}
     /> : undefined}
     notice={<>
-      {locked && <section className="rr-status"><h2>전체 해석이 잠겨 있습니다</h2><p>무료 샘플은 첫 항목 1개만 제공됩니다. 나머지 해석·조언·선택 질문 답변은 구매 확인 후 열립니다.</p><p>이미 결제하셨다면 추가 결제 전에 결제 내역 확인을 요청해주세요. 기존 결과의 별도 구매는 점검 중입니다.</p><Link href="/payments">기존 결제 내역 확인하기 →</Link></section>}
+      {locked && <section className="rr-status"><h2>무료 풀이 {product === 'saju' ? '3개' : '1개'}</h2><p>{product === 'saju' ? '성격·재물운·애정운을 무료로 볼 수 있어요. 나머지 판결문 9개와 인생 전략은 전체보기 이용 후 열립니다.' : '나머지 해석은 구매 확인 후 열립니다.'}</p>{product === 'saju' && formInfo?.personalQuestion && <p>족집게 질문: {formInfo.personalQuestion}<br />전체보기를 구매하면 답변을 확인할 수 있어요.</p>}<p>기존 결과의 별도 구매는 점검 중입니다. 이미 결제하셨다면 결제 내역을 확인해주세요.</p><Link href="/payments">결제 내역 확인하기 →</Link></section>}
       {!isCompleteResult && <aside className="rr-status" role="status">이 풀이는 미완료 상태로 저장된 임시본입니다. 완성본이 아닙니다.</aside>}
     </>}
   >

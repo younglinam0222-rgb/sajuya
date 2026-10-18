@@ -23,7 +23,7 @@ const fake=createServer((req,res)=>{
  const id=url.searchParams.get('share_id')
  if(url.pathname==='/rest/v1/readings' && owner==='eq.buyer' && ['eq.paid','eq.locked'].includes(id)) {
   res.end(JSON.stringify({share_id:id.slice(3),user_id:'buyer',character_id:'doRyeong',saju_data:{form:{name:'owner'}},
-   ai_result:JSON.stringify({titles:[{title:'SAMPLE_TITLE',content:'SAMPLE_BODY'},{title:'SECRET',content:'PAID_BODY'}]}),is_paid:true,access_verified:id==='eq.paid',product:'saju'}));return
+   ai_result:JSON.stringify({titles:[{id:'1',category:'성격',title:'FREE_1',content:'SAMPLE_BODY_1'},{id:'2',category:'재물운',title:'FREE_2',content:'SAMPLE_BODY_2'},{id:'3',category:'애정운',title:'FREE_3',content:'SAMPLE_BODY_3'},{id:'4',category:'직업운',title:'SECRET',content:'PAID_BODY'}]}),is_paid:true,access_verified:id==='eq.paid',product:'saju'}));return
  }
  res.end('null')
 })
@@ -34,7 +34,7 @@ try{
  const paid=await fetch(origin+'/api/readings/paid',{headers:buyer});assert.equal(paid.status,200)
  assert.ok((await paid.text()).includes('PAID_BODY'))
  const locked=await fetch(origin+'/api/readings/locked',{headers:buyer});assert.equal(locked.status,200)
- const lockedBody=await locked.text();assert.ok(lockedBody.includes('SAMPLE_BODY'));assert.equal(JSON.parse(JSON.parse(lockedBody).ai_result).titles.length,1);assert.ok(!lockedBody.includes('PAID_BODY'));assert.ok(!lockedBody.includes('SECRET'))
+ const lockedBody=await locked.text();assert.ok(lockedBody.includes('SAMPLE_BODY_3'));assert.equal(JSON.parse(JSON.parse(lockedBody).ai_result).titles.length,3);assert.ok(!lockedBody.includes('PAID_BODY'));assert.ok(!lockedBody.includes('SECRET'))
  assert.equal((await fetch(origin+'/api/readings/paid',{headers:other})).status,404)
  assert.equal((await fetch(origin+'/api/result/paid',{headers:other})).status,404)
  const save=await fetch(origin+'/api/readings/save',{method:'POST',headers:{...buyer,'Content-Type':'application/json'},body:JSON.stringify({requestId:'forged',isPaid:true,aiResult:'forged'})})

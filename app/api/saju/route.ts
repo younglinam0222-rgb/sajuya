@@ -5,7 +5,6 @@ import { randomUUID } from 'crypto'
 import { CHARACTERS } from '@/lib/characters'
 import { correctToTrueSolarTime } from '@/lib/solarTime'
 import {stemRelationship,branchRelationship,birthSolarDate,koreanDate} from '@/lib/manse-facts'
-import { GROUP_IDS, LAST_GROUP_INDEX } from '@/lib/sajuContract'
 import { sanitizeJudgmentTitles, sanitizeStrategy, sanitizeText } from '@/lib/sajuSanitize'
 import { requireContentNotice } from '@/lib/contentNoticeGuard'
 import LunarJS from 'lunar-javascript'
@@ -280,12 +279,13 @@ async function generate(req: NextRequest) {
     const {
       name, year, month, day, hour, gender, characterId, occupation,
       maritalStatus, questionIntent, partnerInfo, longitude, personalQuestion,
-      requestId: clientRequestId, retry,
+      requestId: clientRequestId, generationScope,
     } = body
     const requestId = typeof clientRequestId === 'string' && clientRequestId.length > 0 && clientRequestId.length < 80
       ? clientRequestId
       : randomUUID()
     setupRequestId = requestId
+    if (generationScope !== 'free') return sseFailure('무료 풀이 요청 범위가 올바르지 않습니다.', requestId)
 
     const character = CHARACTERS[characterId] ?? CHARACTERS['doRyeong']
     if (!character) {
@@ -421,15 +421,8 @@ ${lifecycleRows}
 `
 
     const FREE_IDS = [1, 2, 3]
-    const idGroups = GROUP_IDS.map(g => [...g])
-    const categoryGroups = [
-      ['성격', '재물운'],
-      ['애정운', '직업운'],
-      ['건강운', '인간관계'],
-      ['대운', '인생흐름'],
-      ['어울리는 지역', '올해 총운'],
-      ['위기관리', '결혼운'],
-    ]
+    const idGroups = [[1, 2, 3]]
+    const categoryGroups = [['성격', '재물운', '애정운']]
     const toolPool = [
       '오행 균형(목·화·토·금·수 과다·부족)',
       '십성 구조(비겁·식상·재성·관성·인성의 조합과 힘)',
@@ -449,8 +442,8 @@ ${lifecycleRows}
         properties: {
           titles: {
             type: 'array' as const,
-            minItems: 2,
-            maxItems: 2,
+            minItems: 3,
+            maxItems: 3,
             items: {
               type: 'object' as const,
               properties: {
@@ -529,12 +522,10 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
       hasPersonalQuestion: trimmedPersonalQ.length > 0,
       personalQuestionChars: trimmedPersonalQ.length,
     }))
-    const retryAll = !retry || typeof retry !== 'object'
-    const retryGroups: number[] = retryAll
-      ? GROUP_IDS.map((_, i) => i)
-      : (Array.isArray(retry.groups) ? retry.groups.filter((g: unknown) => typeof g === 'number' && g >= 0 && g <= LAST_GROUP_INDEX) : [])
-    const retryStrategy = retryAll || retry.strategy === true
-    const retryPersonal = (retryAll ? !!trimmedPersonalQ : retry.personal === true) && !!trimmedPersonalQ
+    const retryAll = true
+    const retryGroups = [0]
+    const retryStrategy = false
+    const retryPersonal = false
 
     type ErrorKind = 'fatal' | 'transient' | 'validation' | 'truncation'
 
@@ -716,6 +707,10 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
                     if (typeof t?.title !== 'string' || !t.title.trim() || typeof t.content !== 'string' || t.content.trim().length < 50) {
                       throw new Error(`판결문 내용 부족 id=${t?.id}`)
                     }
+                  }
+                  for (const title of titles) {
+                    const expectedCategory = categoryGroups[gi][ids.indexOf(Number(title.id))]
+                    if (title.category !== expectedCategory) throw new Error(`판결문 카테고리 불일치 id=${title.id}`)
                   }
                 })
                 send({ type: 'group', groupIndex: gi, titles: sanitizeJudgmentTitles(result.titles) })

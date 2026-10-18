@@ -10,7 +10,8 @@ import TimeNumberInput from '@/app/components/TimeNumberInput'
 import { KOREA_REGIONS } from '@/lib/solarTime'
 import { contentNoticeHref } from '@/lib/safeNextPath'
 import { appendSseChunk, parseSseFrame } from '@/lib/sajuSse'
-import { assessCompletion, GROUP_IDS, LAST_GROUP_INDEX, normalizePersonalAnswer, sortTitlesById } from '@/lib/sajuContract'
+import { LAST_GROUP_INDEX, normalizePersonalAnswer, sortTitlesById } from '@/lib/sajuContract'
+import { assessFreeStage, FREE_TITLE_IDS } from '@/lib/sajuScope'
 
 interface SajuTitle {
   id: string; category?: string; title: string; teaser: string; is_free: boolean; content: string
@@ -58,7 +59,7 @@ const FINAL_WORD_LABEL: Record<string, { icon: string; label: string }> = {
 const LOADING_TIPS = [
   '사주팔자 계산하는 중...',
   '오행 분석하는 중...',
-  '판결문 12개 작성하는 중...',
+  '무료 판결문 3개 작성하는 중...',
   '인생 흐름 계산하는 중...',
   '전성기 전략 수립하는 중...',
 ]
@@ -145,7 +146,6 @@ function SajuForm({ initialQuery }: { initialQuery: string }) {
   const receivedGroupsRef = useRef<Set<number>>(new Set())
   const titlesByIdRef = useRef<Map<string, SajuTitle>>(new Map())
   const gotDoneRef = useRef(false)
-  const requestedPersonalRef = useRef(false)
   const savedShareIdRef = useRef<string | null>(null)
   const saveFingerprintRef = useRef<string | null>(null)
   const timingRef = useRef<{ submitAt: number; firstManse?: number; firstJudgment?: number; allRequired?: number; saveDone?: number }>({ submitAt: 0 })
@@ -166,22 +166,17 @@ function SajuForm({ initialQuery }: { initialQuery: string }) {
 
   const mergeTitleList = (): SajuTitle[] => sortTitlesById([...titlesByIdRef.current.values()])
 
-  const currentAssessment = () => assessCompletion({
+  const currentAssessment = () => assessFreeStage({
     titles: mergeTitleList(),
-    strategy: finalResultRef.current.strategy,
-    personal: finalResultRef.current.personalAnswer,
-    requestedPersonal: requestedPersonalRef.current,
     receivedGroupIndexes: receivedGroupsRef.current,
     gotDone: gotDoneRef.current,
   })
 
-  const hintFromReport = (report: ReturnType<typeof assessCompletion>) => {
+  const hintFromReport = (report: ReturnType<typeof assessFreeStage>) => {
     const hints: string[] = []
     if (!report.gotDone) hints.push('서버 완료 신호([DONE]) 없음')
     if (report.missingGroups.length) hints.push(`그룹 ${report.missingGroups.map(g => g + 1).join(', ')}`)
     if (report.missingIds.length) hints.push(`판결문 ${report.missingIds.join(', ')}번`)
-    if (!report.strategyOk) hints.push('인생 전략')
-    if (!report.personalOk) hints.push('족집게 질문')
     return hints
   }
 
@@ -288,7 +283,6 @@ function SajuForm({ initialQuery }: { initialQuery: string }) {
     abortRef.current = ac
     const requestId = mode === 'retry' && requestIdRef.current ? requestIdRef.current : crypto.randomUUID()
     requestIdRef.current = requestId
-    requestedPersonalRef.current = form.personalQuestion.trim().length > 0
     gotDoneRef.current = false
     timingRef.current = { submitAt: performance.now() }
 
@@ -546,7 +540,7 @@ function SajuForm({ initialQuery }: { initialQuery: string }) {
         <div className="text-xl font-black mb-2">로그인하고 사주 풀이 받기</div>
         <div className="text-sm text-gray-500 mb-8 leading-relaxed">
           사주 풀이는 로그인 후 이용할 수 있어요<br />
-          <span className="text-yellow-400 font-bold">계정당 첫 일일운세 1회 무료</span>
+          <span className="text-yellow-400 font-bold">사주 성격·재물운·애정운 3개 무료</span>
         </div>
         <div className="w-full max-w-xs space-y-3">
           <button onClick={() => signIn('kakao', { callbackUrl: contentNoticeHref(`/saju?character=${encodeURIComponent(selectedChar.id)}`) })}
@@ -576,11 +570,7 @@ function SajuForm({ initialQuery }: { initialQuery: string }) {
     const titleMap = new Map((result.titles ?? []).map(item => [String(item.id), item]))
     const generating = genStatus === 'generating'
     const readingSections = sajuReadingSections({
-      titles: GROUP_IDS.flat().map(id => titleMap.get(String(id)) ?? { id: String(id), title: `${id}번째 해석`, content: '' }),
-      strategy: result.strategy,
-      personal: form.personalQuestion.trim() ? { question: form.personalQuestion, answer: result.personalAnswer?.answer || '' } : null,
-      pendingPersonal: <div className="rr-prose"><p>{generating ? '질문에 대한 답변을 작성하는 중이에요.' : '질문의 답변을 아직 받지 못했어요.'}</p>
-        {!generating && <button type="button" onClick={() => handleSubmit('retry')}>같은 요청 다시 확인</button>}</div>,
+      titles: FREE_TITLE_IDS.map(id => titleMap.get(id) ?? { id, title: `${id}번째 해석`, content: '' }),
       finalWordLabel: FINAL_WORD_LABEL[selectedChar.id]?.label,
     })
     return <ReadingResult
@@ -590,13 +580,14 @@ function SajuForm({ initialQuery }: { initialQuery: string }) {
       characterName={selectedChar.name}
       manse={manse}
       sections={readingSections}
-      expectedCoreCount={12}
+      expectedCoreCount={3}
       pending={generating}
-      statusLabel={generating ? '해석 작성 중' : genStatus === 'complete' ? '나의 해석' : '도착한 해석'}
+      statusLabel={generating ? '무료 풀이 작성 중' : '무료 풀이 3개'}
       disclaimer={result.disclaimer}
       onBack={leaveToInput}
       actionLabel="입력 화면으로"
       notice={<>
+        <aside className="rr-status"><strong>성격·재물운·애정운 3개 무료 풀이</strong><p>나머지 판결문 9개와 인생 전략은 전체보기에서 확인할 수 있어요.</p>{form.personalQuestion.trim() && <p>족집게 질문: {form.personalQuestion.trim()}<br />전체보기를 구매하면 답변을 확인할 수 있어요.</p>}</aside>
         {generating && <aside className="rr-status" role="status">해석을 생성하는 중입니다. 먼저 도착한 결과부터 보여드려요.</aside>}
         {genStatus === 'partial' && <aside className="rr-status" role="status"><strong>일부 해석만 완성됐어요.</strong>{missingHint.length > 0 && <p>누락: {missingHint.join(' · ')}</p>}</aside>}
         {genStatus === 'complete' && saveStatus === 'failed' && <aside className="rr-status" role="status">해석은 완료됐지만 저장에 실패했어요.</aside>}
@@ -621,7 +612,7 @@ function SajuForm({ initialQuery }: { initialQuery: string }) {
           <Link href="/" className="text-gray-400 text-xl">←</Link>
           <div>
             <h1 className="text-xl font-bold">사주 풀이</h1>
-            <p className="text-gray-500 text-xs mt-0.5">새 풀이 1회 한냥 · 로그인 필요</p>
+            <p className="text-gray-500 text-xs mt-0.5">성격·재물운·애정운 3개 무료 · 전체보기 한냥</p>
           </div>
         </div>
 
@@ -867,7 +858,7 @@ function SajuForm({ initialQuery }: { initialQuery: string }) {
           style={{ background: `linear-gradient(135deg, ${selectedChar.color}, ${selectedChar.color}bb)` }}>
           {selectedChar.name}에게 물어보기 →
         </button>
-        <p className="text-center text-gray-600 text-xs mt-3">새 풀이 1회 한냥 · 로그인 필요</p>
+        <p className="text-center text-gray-600 text-xs mt-3">무료 풀이 3개 · 전체보기 한냥</p>
       </div>
     </div>
   )

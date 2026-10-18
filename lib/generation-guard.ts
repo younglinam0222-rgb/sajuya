@@ -41,7 +41,8 @@ export function guardedGeneration(product: string, generate: (req:NextRequest)=>
     delete input.retry
     const today = koreanDate()
     const period = product==='daily' ? today.iso : String(today.year)
-    let hash=createHash('sha256').update(canonical({version:1,product,period,input})).digest('hex')
+    const freeSaju = product === 'saju'
+    let hash=createHash('sha256').update(canonical({version:freeSaju?2:1,product,period,input})).digest('hex')
     const db=createServerSupabase()
     const {data:link,error:linkError}=await db.from('generation_requests').select('job_id').eq('user_id',userId).eq('request_id',requestId).maybeSingle()
     if(linkError)throw linkError
@@ -52,7 +53,9 @@ export function guardedGeneration(product: string, generate: (req:NextRequest)=>
       // Recover the same request across midnight/year boundaries with its server-owned fingerprint.
       hash=job.fingerprint
     }
-    const reserved=await rpc('reserve_generation',{p_user:userId,p_hash:hash,p_product:product,p_request:requestId,p_input:input})
+    const reserved=freeSaju
+      ? await rpc('reserve_saju_free',{p_user:userId,p_hash:hash,p_request:requestId,p_input:input})
+      : await rpc('reserve_generation',{p_user:userId,p_hash:hash,p_product:product,p_request:requestId,p_input:input})
     const errors:Record<string,[number,string,('GENERATION_PENDING')?]>={
       balance:[402,'이 풀이에는 한냥이 필요합니다. 엽전을 충전해주세요.'],
       trial_used:[403,'계정당 최초 1회 무료 운세를 이미 이용하셨습니다. 저장된 결과는 다시 볼 수 있습니다.'],
@@ -70,13 +73,13 @@ export function guardedGeneration(product: string, generate: (req:NextRequest)=>
     if (reserved.cached) return new NextResponse(replayWire(reserved.response,requestId),{headers})
     reservation=reserved
     // Complete and persist on the server before delivering the result; a browser disconnect cannot forge/save partial content.
-    const internal=new NextRequest(req.url,{method:'POST',headers:req.headers,body:JSON.stringify({...input,requestId}),signal:AbortSignal.timeout(290000)})
+    const internal=new NextRequest(req.url,{method:'POST',headers:req.headers,body:JSON.stringify({...input,requestId,...(freeSaju?{generationScope:'free'}:{})}),signal:AbortSignal.timeout(290000)})
     const wire=await context.run({jobId:reserved.id},async()=>{
       const response=await generate(internal)
       if(!response.ok) throw new Error('Generation failed')
       return await response.text()
     })
-    const decoded=decodeGeneration(product,wire,!!input.personalQuestion)
+    const decoded=decodeGeneration(product,wire,!freeSaju && !!input.personalQuestion,freeSaju?'free':'full')
     const finished=await rpc('finish_generation',{p_job:reserved.id,p_attempt:reserved.attempt,p_success:true,p_response:wire,p_result:decoded.result,p_manse:decoded.manse})
     if(finished.error) throw new Error('Reservation expired')
     reservation=undefined

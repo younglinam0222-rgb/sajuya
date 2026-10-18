@@ -1,4 +1,4 @@
-export function decodeGeneration(product: string, wire: string, needsQuestion: boolean) {
+export function decodeGeneration(product: string, wire: string, needsQuestion: boolean, scope: 'free' | 'full' = 'full') {
   let text = '', done = false
   const titles: Record<string, unknown>[] = []
   let manse: unknown = null, strategy: unknown = null, personal: unknown = null
@@ -16,6 +16,13 @@ export function decodeGeneration(product: string, wire: string, needsQuestion: b
   }
   if (!done) throw new Error('Stream interrupted')
   if (product === 'saju') {
+    if (scope === 'free') {
+      const ids = titles.map(t => String(t.id)).sort()
+      if (!manse || titles.length !== 3 || ids.join(',') !== '1,2,3' || strategy || personal) {
+        throw new Error('Incomplete or over-scoped free saju')
+      }
+      return { manse, result: { titles: titles.sort((a,b) => Number(a.id)-Number(b.id)), _meta: { isComplete: true, freeTitleCount: 3 } } }
+    }
     if (titles.length !== 12 || new Set(titles.map(t => t.id)).size !== 12 || !strategy || !manse || (needsQuestion && !personal)) throw new Error('Incomplete saju')
     return { manse, result: { titles: titles.sort((a,b) => Number(a.id)-Number(b.id)), strategy, personalAnswer: personal, _meta: { isComplete: true } } }
   }

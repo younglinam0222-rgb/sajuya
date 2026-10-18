@@ -19,14 +19,24 @@ export function canonical(value: unknown): string {
     .map(([k,v]) => JSON.stringify(k) + ':' + canonical(v)).join(',') + '}'
   return JSON.stringify(value) ?? 'null'
 }
-// Owner-only unpaid preview: exactly one authored section, never the rest of the record.
-// Do not spread AI output: it can contain private answers and internal metadata.
-export function lockedResult(raw?: unknown) {
-  const meta = { isComplete: true, locked: true, sampleLimit: 1 }
+// Never spread AI output: it can contain paid answers and private metadata.
+export function lockedResult(raw?: unknown, product = 'saju') {
+  const limit = product === 'saju' ? 3 : 1
+  const meta = { isComplete: true, locked: true, sampleLimit: limit }
   try {
     const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { titles: [], _meta: meta }
     const value = parsed as Record<string, unknown>
+    if (product === 'saju') {
+      const categories: Record<string, string> = { '1': '성격', '2': '재물운', '3': '애정운' }
+      const titles = Array.isArray(value.titles) ? value.titles : []
+      return { titles: ['1','2','3'].flatMap(id => {
+        const item = titles.find((t: unknown) => t && typeof t === 'object' && String((t as Record<string, unknown>).id) === id) as Record<string, unknown> | undefined
+        if (!item || item.category !== categories[id] || typeof item.content !== 'string' || !item.content.trim()) return []
+        return [{ id, category: categories[id], title: typeof item.title === 'string' ? item.title : categories[id],
+          teaser: typeof item.teaser === 'string' ? item.teaser : '', content: item.content, is_free: true }]
+      }), _meta: meta }
+    }
     const first = Array.isArray(value.titles) ? value.titles[0]
       : Array.isArray(value.sections) ? value.sections[0]
       : { title: '총평', content: value.overall ?? value.yearOverall ?? value.current ?? value.intro }

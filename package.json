@@ -12,6 +12,7 @@
     "test:chat": "node --experimental-strip-types tests/chat.mjs",
     "test:conversation": "node --experimental-strip-types tests/conversation.mjs",
     "test:manse": "node --experimental-strip-types tests/manse-facts.mjs",
+    "test:free-three": "node --experimental-strip-types tests/free-three.mjs && node tests/free-three-http.mjs",
     "test:reviews": "node --experimental-strip-types tests/reviews.mjs",
     "typecheck": "tsc --noEmit",
     "test:http": "node tests/final-http.mjs && node tests/refund-http.mjs && node tests/reviews-http.mjs"

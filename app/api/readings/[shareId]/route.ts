@@ -12,7 +12,7 @@ export async function GET(req:NextRequest,{params}:{params:Promise<{shareId:stri
   if(!data) throw new AccessError(404,'풀이를 찾을 수 없습니다.')
   const allowed=data.access_verified && (data.is_paid || ['daily','conversation'].includes(data.product))
   return NextResponse.json({share_id:data.share_id,character_id:data.character_id,saju_data:data.saju_data,
-   ai_result:allowed?data.ai_result:JSON.stringify(lockedResult(data.ai_result)),is_paid:allowed,locked:!allowed,product:data.product},
+   ai_result:allowed?data.ai_result:JSON.stringify(lockedResult(data.ai_result,data.product)),is_paid:allowed,locked:!allowed,product:data.product},
    {headers:{'Cache-Control':'private, no-store'}})
  }catch(e){return failure(e)}
 }

@@ -9,15 +9,18 @@ const payment={orderId:'order',totalAmount:1900,currency:'KRW',status:'DONE',pay
 assert.ok(paymentMatches(order,payment,'key'))
 for(const change of [{orderId:'other'},{totalAmount:1},{currency:'USD'},{status:'CANCELED'},{paymentKey:'other'}]) assert.equal(paymentMatches(order,{...payment,...change},'key'),false)
 assert.equal(canonical({b:2,a:1}),canonical({a:1,b:2}))
-const secretResult={titles:Array.from({length:12},(_,i)=>({id:i,title:`제목${i}`,content:i===0?'샘플본문':`비공개본문${i}`,is_free:true,secret:'내부정보'})),strategy:{warning:'비공개조언'},personalAnswer:{answer:'개인답변'},_meta:{token:'내부토큰'}}
+const categories=['성격','재물운','애정운']
+const secretResult={titles:Array.from({length:12},(_,i)=>({id:String(i+1),category:categories[i]??'직업운',title:`제목${i+1}`,content:i<3?`무료본문${i+1}`:`비공개본문${i+1}`,is_free:true,secret:'내부정보'})),strategy:{warning:'비공개조언'},personalAnswer:{answer:'개인답변'},_meta:{token:'내부토큰'}}
 const sample=lockedResult(JSON.stringify(secretResult))
-assert.equal(sample.titles.length,1)
-assert.equal(sample.titles[0].content,'샘플본문')
+assert.equal(sample.titles.length,3)
+assert.deepEqual(sample.titles.map(t=>t.id),['1','2','3'])
+assert.deepEqual(sample.titles.map(t=>t.category),categories)
 for(const secret of ['비공개본문','비공개조언','개인답변','내부정보','내부토큰']) assert.ok(!JSON.stringify(sample).includes(secret))
 assert.equal(secretResult.titles.length,12)
 for(const raw of [undefined,null,'broken','[]','{"titles":[{}]}'])assert.equal(lockedResult(raw).titles.length,0)
-assert.equal(lockedResult({overall:'총평',money:'숨긴재물'}).titles.length,1)
+assert.equal(lockedResult({overall:'총평',money:'숨긴재물'}).titles.length,0)
 assert.ok(!JSON.stringify(lockedResult({overall:'총평',money:'숨긴재물'})).includes('숨긴재물'))
+assert.equal(lockedResult({overall:'총평',money:'숨긴재물'},'daily').titles.length,1)
 const shared=publicReading(JSON.stringify({titles:[{title:'제목',content:'본문',secret:'hidden'}],personalAnswer:{question:'private'},user_id:'private',saju_data:{name:'private',year:1990,month:1,day:1}}))
 assert.deepEqual(shared,{titles:[{title:'제목',content:'본문'}]})
 assert.equal(JSON.stringify(shared).includes('private'), false)
@@ -30,5 +33,9 @@ assert.throws(()=>decodeGeneration('daily',wire([{text:'{}'}]),false))
 const events=[{type:'manse',data:{test:true}},{type:'group',titles:Array.from({length:12},(_,i)=>({id:i+1,title:'제목',content:'본문'}))},{type:'strategy',data:{final_word:'조언'}},'[DONE]']
 assert.equal(decodeGeneration('saju',wire(events),false).result.titles.length,12)
 assert.throws(()=>decodeGeneration('saju',wire(events),true))
+const freeEvents=[{type:'manse',data:{test:true}},{type:'group',groupIndex:0,titles:categories.map((category,i)=>({id:String(i+1),category,title:`제목${i+1}`,content:`무료본문${i+1}`}))},'[DONE]']
+assert.deepEqual(decodeGeneration('saju',wire(freeEvents),false,'free').result.titles.map(t=>t.id),['1','2','3'])
+assert.throws(()=>decodeGeneration('saju',wire([...freeEvents.slice(0,-1),{type:'personal',data:{answer:'비공개'}},'[DONE]']),false,'free'))
+assert.throws(()=>decodeGeneration('saju',wire(events),false,'free'))
 assert.ok(replayWire(wire(events),'new-request').includes('new-request'))
 console.log('PASS: product allowlist; provider payment verification; cache keys; share redaction; incomplete/error stream rejection; full 12-section result; request replay')
