@@ -285,7 +285,7 @@ async function generate(req: NextRequest) {
       ? clientRequestId
       : randomUUID()
     setupRequestId = requestId
-    if (generationScope !== 'free') return sseFailure('무료 풀이 요청 범위가 올바르지 않습니다.', requestId)
+    if (generationScope !== 'free_full') return sseFailure('무료 풀이 요청 범위가 올바르지 않습니다.', requestId)
 
     const character = CHARACTERS[characterId] ?? CHARACTERS['doRyeong']
     if (!character) {
@@ -420,9 +420,12 @@ ${getInterpretationRules('오행 균형과 십성 구조를 종합한 전체 흐
 ${lifecycleRows}
 `
 
-    const FREE_IDS = [1, 2, 3]
-    const idGroups = [[1, 2, 3]]
-    const categoryGroups = [['성격', '재물운', '애정운']]
+    const FREE_IDS = Array.from({ length: 12 }, (_, index) => index + 1)
+    const idGroups = [[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11, 12]]
+    const categoryGroups = [
+      ['성격', '재물운'], ['애정운', '직업운'], ['건강운', '인간관계'],
+      ['대운', '인생흐름'], ['어울리는 지역', '올해 총운'], ['위기관리', '결혼운'],
+    ]
     const toolPool = [
       '오행 균형(목·화·토·금·수 과다·부족)',
       '십성 구조(비겁·식상·재성·관성·인성의 조합과 힘)',
@@ -442,8 +445,8 @@ ${lifecycleRows}
         properties: {
           titles: {
             type: 'array' as const,
-            minItems: 3,
-            maxItems: 3,
+            minItems: 2,
+            maxItems: 2,
             items: {
               type: 'object' as const,
               properties: {
@@ -523,9 +526,9 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
       personalQuestionChars: trimmedPersonalQ.length,
     }))
     const retryAll = true
-    const retryGroups = [0]
-    const retryStrategy = false
-    const retryPersonal = false
+    const retryGroups = idGroups.map((_, index) => index)
+    const retryStrategy = true
+    const retryPersonal = !!trimmedPersonalQ
 
     type ErrorKind = 'fatal' | 'transient' | 'validation' | 'truncation'
 

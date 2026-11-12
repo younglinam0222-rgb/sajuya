@@ -23,13 +23,13 @@ export function formatNyangWon(nyang: number): string {
 
 export function servicePriceBadge(service: PricedService): string {
   if (service === 'daily') return '하루 1회 무료'
-  if (service === 'saju') return '무료 풀이 3개'
+  if (service === 'saju') return '전체 무료'
   return formatNyang(SERVICE_PRICE_NYANG[service])
 }
 
 export function servicePriceLine(service: PricedService): string {
   if (service === 'daily') return `하루 1회 무료 · 추가 ${formatNyangWon(SERVICE_PRICE_NYANG.daily)}`
-  if (service === 'saju') return `무료 풀이 3개 · 전체보기 ${formatNyangWon(SERVICE_PRICE_NYANG.saju)}`
+  if (service === 'saju') return '판결문 12개 · 인생 전략 무료'
   return formatNyangWon(SERVICE_PRICE_NYANG[service])
 }
 

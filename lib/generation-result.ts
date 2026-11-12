@@ -1,4 +1,4 @@
-export function decodeGeneration(product: string, wire: string, needsQuestion: boolean, scope: 'free' | 'full' = 'full') {
+export function decodeGeneration(product: string, wire: string, needsQuestion: boolean, scope: 'free' | 'free_full' | 'full' = 'full') {
   let text = '', done = false
   const titles: Record<string, unknown>[] = []
   let manse: unknown = null, strategy: unknown = null, personal: unknown = null
@@ -24,7 +24,8 @@ export function decodeGeneration(product: string, wire: string, needsQuestion: b
       return { manse, result: { titles: titles.sort((a,b) => Number(a.id)-Number(b.id)), _meta: { isComplete: true, freeTitleCount: 3 } } }
     }
     if (titles.length !== 12 || new Set(titles.map(t => t.id)).size !== 12 || !strategy || !manse || (needsQuestion && !personal)) throw new Error('Incomplete saju')
-    return { manse, result: { titles: titles.sort((a,b) => Number(a.id)-Number(b.id)), strategy, personalAnswer: personal, _meta: { isComplete: true } } }
+    return { manse, result: { titles: titles.sort((a,b) => Number(a.id)-Number(b.id)), strategy, personalAnswer: personal,
+      _meta: { isComplete: true, ...(scope === 'free_full' ? { accessScope: 'free_full_v1' } : {}) } } }
   }
   const clean = text.replace(/```json|```/g,'').trim()
   const result = JSON.parse(clean.slice(clean.indexOf('{'), clean.lastIndexOf('}')+1))

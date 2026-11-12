@@ -71,7 +71,7 @@ interface MenuItem {
 }
 
 export const MENUS: MenuItem[] = [
-  { href: '/saju',    label: '사주 풀이',   desc: '생년월일시로 보는 종합 사주',  emoji: '🔮', icon: '/icons/saju.png', badge: '3개 무료',   badgeColor: '#F59E0B', paid: true },
+  { href: '/saju',    label: '사주 풀이',   desc: '생년월일시로 보는 종합 사주',  emoji: '🔮', icon: '/icons/saju.png', badge: '전체 무료',   badgeColor: '#F59E0B', paid: false },
   { href: '/gunghap', label: '궁합 해설',   desc: '두 사람의 사주 궁합 분석',     emoji: '💞', badge: '준비 중',   badgeColor: '#F59E0B', paid: true },
   { href: '/daeun',   label: '대운 해설',   desc: '10년 주기 큰 흐름',           emoji: '🌊', badge: '준비 중', badgeColor: '#8BAB98', paid: false },
   { href: '/taekil',  label: '택 · 일',    desc: '좋은 날짜 골라줌',            emoji: '📅', badge: '준비 중', badgeColor: '#8BAB98', paid: false },
