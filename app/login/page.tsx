@@ -1,9 +1,19 @@
 'use client'
+import { Suspense } from 'react'
 import { signIn } from 'next-auth/react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { contentNoticeHref, safeNextPath } from '@/lib/safeNextPath'
 
 export default function LoginPage() {
+  return <Suspense fallback={<div className="min-h-screen bg-[#0c1119]" />}><LoginPageContent /></Suspense>
+}
+
+function LoginPageContent() {
+  const code = useSearchParams().get('error')
+  const authError = !code ? '' : code === 'AccessDenied'
+    ? '계정 연결을 완료하지 못했어요. 잠시 후 다시 시도하거나 고객센터에 알려주세요.'
+    : '소셜 로그인에 실패했어요. 제공업체 설정과 연결 상태를 확인한 뒤 다시 시도해주세요.'
   function login(provider: 'kakao' | 'google' | 'naver') {
     const value = new URLSearchParams(window.location.search).get('callbackUrl')
     const next = safeNextPath(value, '/')
@@ -25,6 +35,7 @@ export default function LoginPage() {
         </div>
 
         <div className="w-full space-y-3">
+          {authError && <p role="alert" className="rounded-lg border border-red-400/60 p-3 text-sm text-red-200">{authError}</p>}
           <button onClick={() => login('kakao')}
             className="w-full py-4 rounded-lg font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-98"
             style={{background:'#fee500',color:'#3c1e1e'}}>
