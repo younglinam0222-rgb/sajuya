@@ -1,6 +1,7 @@
 import type { NextAuthOptions } from 'next-auth'
 import KakaoProvider from 'next-auth/providers/kakao'
 import GoogleProvider from 'next-auth/providers/google'
+import NaverProvider from 'next-auth/providers/naver'
 import { createServerSupabase } from './supabase'
 import { loadContentNoticeAck } from './contentNoticeDb'
 
@@ -16,36 +17,24 @@ export const authOptions: NextAuthOptions = {
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
-    {
-      id: 'naver',
-      name: '네이버',
-      type: 'oauth' as const,
-      authorization: {
-        url: 'https://nid.naver.com/oauth2.0/authorize',
-        params: { response_type: 'code', scope: '' },
-      },
-      token: 'https://nid.naver.com/oauth2.0/token',
-      userinfo: 'https://openapi.naver.com/v1/nid/me',
-      profile(profile: {response: {id: string; name: string; email: string; profile_image: string}}) {
-        return {
-          id: profile.response.id,
-          name: profile.response.name,
-          email: profile.response.email,
-          image: profile.response.profile_image,
-        }
-      },
-      clientId: process.env.NAVER_CLIENT_ID,
-      clientSecret: process.env.NAVER_CLIENT_SECRET,
-    },
+    NaverProvider({
+      clientId: process.env.NAVER_CLIENT_ID!,
+      clientSecret: process.env.NAVER_CLIENT_SECRET!,
+    }),
   ],
   callbacks: {
-    async signIn({ user }) {
+    async signIn({ user, account }) {
       try {
-        const { data: existing } = await supabaseAdmin
+        const { data: existing, error: lookupError } = await supabaseAdmin
           .from('users')
           .select('id')
           .eq('id', user.id)
-          .single()
+          .maybeSingle()
+
+        if (lookupError) {
+          console.error('[auth] account lookup failed', { provider: account?.provider, code: lookupError.code })
+          return false
+        }
 
         if (!existing) {
           // 무료 일일운세 권한은 별도 서버 원장으로 관리
@@ -58,10 +47,13 @@ export const authOptions: NextAuthOptions = {
             streak_days: 0,
             last_visit: null,
           })
-          if(insertError && insertError.code!=='23505') return false
+          if(insertError && insertError.code!=='23505') {
+            console.error('[auth] account insert failed', { provider: account?.provider, code: insertError.code })
+            return false
+          }
         }
       } catch {
-        console.error('signIn DB error')
+        console.error('[auth] account sync failed', { provider: account?.provider })
         return false
       }
       return true
