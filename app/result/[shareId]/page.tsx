@@ -1,12 +1,11 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import { useSession, signIn } from 'next-auth/react'
+import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import ReadingResult, { sajuReadingSections, type ReadingSection } from '@/app/components/reading/ReadingResult'
 import ReadingShareActions from '@/app/components/reading/ReadingShareActions'
 import { readingPersonalView } from '@/lib/sajuContract'
-import { contentNoticeHref } from '@/lib/safeNextPath'
 
 interface Section { id: string; emoji: string; title: string; body: string }
 interface ViewPillar { stem?:string; branch?:string; stemElement?:string; branchElement?:string; stemKr?:string; branchKr?:string; sipsinStem?:string; sipsinBranch?:string }
@@ -57,7 +56,7 @@ function ResultPageContent() {
   const [isCompleteResult, setIsCompleteResult] = useState(true)
   const fetchReading = useCallback((signal: AbortSignal) => {
     return fetch(`/api/readings/${shareId}`, { signal, cache: 'no-store' })
-      .then(async res => { if (!res.ok) throw new Error('not found'); return res.json() })
+      .then(async res => { if (!res.ok) throw new Error(res.status === 401 ? 'login_required' : 'not found'); return res.json() })
       .then(data => {
         if (signal.aborted) return
       setCharacterId(data.character_id ?? 'baekhalma')
@@ -109,57 +108,26 @@ function ResultPageContent() {
         if (view.requested) setPersonalAnswer({ question: view.question, answer: view.answer })
       }
       })
-      .catch(() => { if (!signal.aborted) setError('저장된 풀이를 찾을 수 없습니다.') })
+      .catch(e => { if (!signal.aborted) setError(e instanceof Error && e.message === 'login_required'
+        ? '이 브라우저의 비로그인 풀이가 아니거나, 기존 회원 결과입니다. 기존 회원 결과는 해당 계정으로 로그인해주세요.'
+        : '저장된 풀이를 찾을 수 없습니다.') })
       .finally(() => { if (!signal.aborted) { setLoading(false); setLoadedFor(shareId) } })
   }, [shareId])
 
   useEffect(() => {
     const controller = new AbortController()
-    if (authStatus === 'authenticated') void fetchReading(controller.signal)
+    if (authStatus !== 'loading') void fetchReading(controller.signal)
     return () => controller.abort()
   }, [fetchReading, authStatus])
 
   const charImg   = CHARACTER_IMG[characterId]   ?? '/characters/baekhalma.png'
   const charName  = CHARACTER_NAMES[characterId] ?? characterId
-  const resultLogin = contentNoticeHref(`/result/${shareId}`)
 
-  // Authentication and server-verified result ownership are required before reading.
-  // 데이터 로딩/에러 체크보다 먼저 와야 함 (비로그인 상태에선 fetchReading 자체를 안 돌림)
+  // Server-verified account or protected guest cookie ownership is required before reading.
   if (authStatus === 'loading') {
     return (
       <div className="bg-[#0a0a0a] min-h-screen flex items-center justify-center text-gray-500 text-sm">
         불러오는 중...
-      </div>
-    )
-  }
-
-  if (authStatus === 'unauthenticated') {
-    return (
-      <div className="bg-[#0a0a0a] min-h-screen flex flex-col items-center justify-center text-white px-6 text-center max-w-[430px] mx-auto">
-        <div className="text-5xl mb-5">🔒</div>
-        <div className="text-xl font-black mb-2">로그인하고 결과 확인하기</div>
-        <div className="text-sm text-gray-500 mb-8 leading-relaxed">
-          사주 풀이 결과는 로그인 후 볼 수 있어요<br />
-          <span className="text-yellow-400 font-bold">새 사주풀이 전체 무료</span>
-        </div>
-        <div className="w-full max-w-xs space-y-3">
-          <button onClick={() => signIn('kakao', { callbackUrl: resultLogin })}
-            className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
-            style={{ background: '#fee500', color: '#3c1e1e' }}>
-            <span className="text-xl">💬</span> 카카오로 시작하기
-          </button>
-          <button onClick={() => signIn('google', { callbackUrl: resultLogin })}
-            className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
-            style={{ background: '#fff', color: '#333', border: '1px solid #e5e7eb' }}>
-            <span style={{ fontSize: '18px', fontWeight: 900, color: '#4285F4' }}>G</span> 구글로 시작하기
-          </button>
-          <button onClick={() => signIn('naver', { callbackUrl: resultLogin })}
-            className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
-            style={{ background: '#03c75a', color: '#fff' }}>
-            <span className="text-xl font-black">N</span> 네이버로 시작하기
-          </button>
-        </div>
-        <Link href="/" className="mt-6 text-xs text-gray-600">← 홈으로 돌아가기</Link>
       </div>
     )
   }
@@ -181,6 +149,7 @@ function ResultPageContent() {
         <div className="text-5xl mb-4">😶</div>
         <div className="text-lg font-black mb-2">풀이를 찾을 수 없어요</div>
         <div className="text-sm text-[#9aa6b8] mb-6">{error}</div>
+        <Link href={`/login?callbackUrl=${encodeURIComponent(`/result/${shareId}`)}`} className="block mb-4 text-sm underline">기존 회원 결과라면 로그인하기</Link>
         <Link href="/saju" className="px-6 py-3 rounded-2xl font-bold text-sm" style={{ background: '#7c3aed', color: '#fff' }}>새로 풀이받기</Link>
       </div>
     </div>

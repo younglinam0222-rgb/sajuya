@@ -1,4 +1,5 @@
 import { guardedGeneration, recordUsage } from '@/lib/generation-guard'
+import { getToken } from 'next-auth/jwt'
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { randomUUID } from 'crypto'
@@ -849,7 +850,10 @@ ${partnerInfo ? '위 [이 사람 사주 정보]에 상대방 정보도 함께 �
 
 const guardedSaju = guardedGeneration('saju', generate)
 export async function POST(req: NextRequest) {
-  const notice = await requireContentNotice(req)
-  if (!notice.ok) return notice.response
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
+  if (token?.sub) {
+    const notice = await requireContentNotice(req)
+    if (!notice.ok) return notice.response
+  }
   return guardedSaju(req)
 }

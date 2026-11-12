@@ -1,14 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireUser, failure, AccessError } from '@/lib/server-access'
+import { failure, AccessError } from '@/lib/server-access'
 import { createServerSupabase } from '@/lib/supabase'
 import { lockedResult } from '@/lib/access-policy'
+import { existingGuestOwner, sajuOwner } from '@/lib/guest-access'
 export async function GET(req:NextRequest,{params}:{params:Promise<{shareId:string}>}) {
  try {
-  const user=await requireUser(req), {shareId}=await params
-  const {data,error}=await createServerSupabase().from('readings')
+  const owner=await sajuOwner(req), {shareId}=await params
+  const db=createServerSupabase()
+  const {data:ownerData,error}=await db.from('readings')
    .select('share_id,user_id,character_id,saju_data,ai_result,is_paid,access_verified,product')
-   .eq('share_id',shareId).eq('user_id',user).maybeSingle()
+   .eq('share_id',shareId).eq('user_id',owner.userId).maybeSingle()
   if(error) throw error
+  let data=ownerData
+  if (!data && !owner.guestId) {
+   const guest=existingGuestOwner(req)
+   if (guest) {
+    const fallback=await db.from('readings')
+     .select('share_id,user_id,character_id,saju_data,ai_result,is_paid,access_verified,product')
+     .eq('share_id',shareId).eq('user_id',guest.userId).maybeSingle()
+    if (fallback.error) throw fallback.error
+    data=fallback.data
+   }
+  }
   if(!data) throw new AccessError(404,'풀이를 찾을 수 없습니다.')
   let freeFull = false
   if (data.product === 'saju' && data.access_verified) {

@@ -2,6 +2,97 @@
 -- Temporarily grants complete Saju results without debit; existing purchases remain unchanged.
 BEGIN;
 
+CREATE TABLE IF NOT EXISTS public.guest_generation_quota (
+  ip_hash text NOT NULL,
+  window_start timestamptz NOT NULL,
+  attempts integer NOT NULL CHECK (attempts BETWEEN 1 AND 3),
+  PRIMARY KEY (ip_hash, window_start)
+);
+CREATE INDEX IF NOT EXISTS guest_generation_quota_window_idx ON public.guest_generation_quota(window_start);
+ALTER TABLE public.guest_generation_quota ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.guest_generation_quota FROM PUBLIC, anon, authenticated;
+
+CREATE OR REPLACE FUNCTION public.reserve_guest_generation(p_ip_hash text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE n integer; window_at timestamptz;
+BEGIN
+  IF p_ip_hash !~ '^[0-9a-f]{64}$' THEN RETURN jsonb_build_object('error','rate'); END IF;
+  DELETE FROM guest_generation_quota WHERE window_start < now() - interval '1 day';
+  window_at = to_timestamp(floor(extract(epoch FROM now()) / 600) * 600);
+  INSERT INTO guest_generation_quota(ip_hash, window_start, attempts)
+    VALUES(p_ip_hash, window_at, 1)
+    ON CONFLICT(ip_hash,window_start) DO UPDATE
+      SET attempts = guest_generation_quota.attempts + 1
+      WHERE guest_generation_quota.attempts < 3
+    RETURNING attempts INTO n;
+  IF n IS NULL THEN RETURN jsonb_build_object('error','rate'); END IF;
+  RETURN jsonb_build_object('attempts',n);
+END $$;
+REVOKE ALL ON FUNCTION public.reserve_guest_generation(text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.reserve_guest_generation(text) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.reserve_saju_free(
+  p_user text, p_hash text, p_request text, p_input jsonb
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE j generation_jobs; a uuid; linked uuid;
+BEGIN
+  IF p_user ~ '^guest-[0-9a-f]{32}$' THEN
+    INSERT INTO users(id,yeobjeun_balance) VALUES(p_user,0) ON CONFLICT(id) DO NOTHING;
+  END IF;
+  -- Serialize all generation reservations for this account with the existing wallet RPC.
+  PERFORM 1 FROM users WHERE id = p_user FOR UPDATE;
+  IF NOT FOUND THEN RETURN jsonb_build_object('error', 'account'); END IF;
+
+  SELECT job_id INTO linked FROM generation_requests
+  WHERE user_id = p_user AND request_id = p_request;
+  SELECT * INTO j FROM generation_jobs
+  WHERE user_id = p_user AND fingerprint = p_hash FOR UPDATE;
+  IF linked IS NOT NULL AND (j.id IS NULL OR linked <> j.id) THEN
+    RETURN jsonb_build_object('error', 'conflict');
+  END IF;
+  IF j.id IS NOT NULL THEN
+    IF NOT j.trial OR j.product <> 'saju' THEN RETURN jsonb_build_object('error', 'conflict'); END IF;
+    INSERT INTO generation_requests(user_id, request_id, job_id)
+      VALUES(p_user, p_request, j.id) ON CONFLICT DO NOTHING;
+    IF j.status = 'done' THEN
+      RETURN jsonb_build_object('cached', true, 'response', j.response, 'id', j.id);
+    END IF;
+    IF j.status = 'running' AND j.updated_at >= now() - interval '20 minutes' THEN
+      RETURN jsonb_build_object('error', 'busy');
+    END IF;
+    IF j.status = 'refunded' THEN RETURN jsonb_build_object('error', 'refunded'); END IF;
+  END IF;
+
+  -- A dead free job may be retried. A paid job remains under its existing recovery path.
+  IF EXISTS(SELECT 1 FROM generation_jobs WHERE user_id = p_user AND status = 'running'
+    AND (trial = false OR updated_at >= now() - interval '20 minutes')) THEN
+    RETURN jsonb_build_object('error', 'busy');
+  END IF;
+  UPDATE generation_jobs SET status = 'failed', updated_at = now()
+  WHERE user_id = p_user AND status = 'running' AND trial = true
+    AND updated_at < now() - interval '20 minutes';
+  IF (SELECT count(*) FROM generation_attempts
+      WHERE user_id = p_user AND created_at > now() - interval '10 minutes') >= 6 THEN
+    RETURN jsonb_build_object('error', 'rate');
+  END IF;
+
+  a = gen_random_uuid();
+  IF j.id IS NULL THEN
+    INSERT INTO generation_jobs(user_id, fingerprint, product, attempt, trial, input)
+      VALUES(p_user, p_hash, 'saju', a, true, p_input) RETURNING * INTO j;
+  ELSE
+    UPDATE generation_jobs SET status = 'running', attempt = a, updated_at = now()
+      WHERE id = j.id RETURNING * INTO j;
+  END IF;
+  INSERT INTO generation_attempts(id, user_id) VALUES(a, p_user);
+  INSERT INTO generation_requests(user_id, request_id, job_id)
+    VALUES(p_user, p_request, j.id) ON CONFLICT DO NOTHING;
+  RETURN jsonb_build_object('id', j.id, 'attempt', a);
+END $$;
+
+REVOKE ALL ON FUNCTION public.reserve_saju_free(text,text,text,jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.reserve_saju_free(text,text,text,jsonb) TO service_role;
+
 -- Keep daily and conversation trial accounting separate from free Saju previews.
 CREATE OR REPLACE FUNCTION public.finish_generation(
   p_job uuid, p_attempt uuid, p_success boolean,

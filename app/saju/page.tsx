@@ -5,10 +5,8 @@ import ReadingResult, { sajuReadingSections } from '@/app/components/reading/Rea
 import { Suspense, useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { useSession, signIn } from 'next-auth/react'
 import TimeNumberInput from '@/app/components/TimeNumberInput'
 import { KOREA_REGIONS } from '@/lib/solarTime'
-import { contentNoticeHref } from '@/lib/safeNextPath'
 import { appendSseChunk, parseSseFrame } from '@/lib/sajuSse'
 import { assessCompletion, GROUP_IDS, LAST_GROUP_INDEX, normalizePersonalAnswer, sortTitlesById } from '@/lib/sajuContract'
 
@@ -110,7 +108,6 @@ function SajuRoute() {
 function SajuForm({ initialQuery }: { initialQuery: string }) {
   const initialParams = new URLSearchParams(initialQuery)
   const router = useRouter()
-  const { status } = useSession()
   const [stage, setStage] = useState<Stage>('input')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [result, setResult] = useState<Partial<SajuResult>>({})
@@ -275,10 +272,6 @@ function SajuForm({ initialQuery }: { initialQuery: string }) {
   const handleSubmit = async (mode: 'full' | 'retry' = 'full') => {
     if (mode !== 'full' && mode !== 'retry') mode = 'full'
     if (!form.name.trim()) return
-    if (status !== 'authenticated') {
-      setErrorMsg('로그인 후 이용할 수 있어요.')
-      return
-    }
 
     if (submittingRef.current) return
     submittingRef.current = true
@@ -322,6 +315,8 @@ function SajuForm({ initialQuery }: { initialQuery: string }) {
 
     let fatalMessage = ''
     try {
+      const guestSession = await fetch('/api/saju/guest', { signal: ac.signal, cache: 'no-store' })
+      if (!guestSession.ok) throw new Error('비로그인 이용 준비에 실패했어요. 다시 시도해주세요.')
       const selectedRegion = KOREA_REGIONS.find(r => r.name === form.birthPlace)
       if(mode==='full'||!requestBodyRef.current)requestBodyRef.current=JSON.stringify({
         ...form,personalQuestion:form.personalQuestion,occupation:form.occupation||'일반인',calType,
@@ -530,46 +525,6 @@ function SajuForm({ initialQuery }: { initialQuery: string }) {
     }
   }
 
-  if (status === 'loading') {
-    return (
-      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center text-gray-500 text-sm">
-        불러오는 중...
-      </div>
-    )
-  }
-
-  // ✅ 추가: 로그인 안 하면 사주 풀이 기능 자체를 못 쓰게 막음
-  if (status === 'unauthenticated') {
-    return (
-      <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center text-white px-6 text-center">
-        <div className="text-5xl mb-5">🔮</div>
-        <div className="text-xl font-black mb-2">로그인하고 사주 풀이 받기</div>
-        <div className="text-sm text-gray-500 mb-8 leading-relaxed">
-          사주 풀이는 로그인 후 이용할 수 있어요<br />
-          <span className="text-yellow-400 font-bold">판결문 12개와 인생 전략 무료</span>
-        </div>
-        <div className="w-full max-w-xs space-y-3">
-          <button onClick={() => signIn('kakao', { callbackUrl: contentNoticeHref(`/saju?character=${encodeURIComponent(selectedChar.id)}`) })}
-            className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
-            style={{ background: '#fee500', color: '#3c1e1e' }}>
-            <span className="text-xl">💬</span> 카카오로 시작하기
-          </button>
-          <button onClick={() => signIn('google', { callbackUrl: contentNoticeHref(`/saju?character=${encodeURIComponent(selectedChar.id)}`) })}
-            className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
-            style={{ background: '#fff', color: '#333', border: '1px solid #e5e7eb' }}>
-            <span style={{ fontSize: '18px', fontWeight: 900, color: '#4285F4' }}>G</span> 구글로 시작하기
-          </button>
-          <button onClick={() => signIn('naver', { callbackUrl: contentNoticeHref(`/saju?character=${encodeURIComponent(selectedChar.id)}`) })}
-            className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all active:scale-95"
-            style={{ background: '#03c75a', color: '#fff' }}>
-            <span className="text-xl font-black">N</span> 네이버로 시작하기
-          </button>
-        </div>
-        <Link href="/" className="mt-6 text-xs text-gray-600">← 홈으로 돌아가기</Link>
-      </div>
-    )
-  }
-
   if (stage === 'loading') return <LoadingScreen name={form.name} character={selectedChar} />
 
   if (stage === 'result' && (result.titles?.length || manse || result.strategy || result.personalAnswer || genStatus === 'generating')) {
@@ -620,7 +575,7 @@ function SajuForm({ initialQuery }: { initialQuery: string }) {
           <Link href="/" className="text-gray-400 text-xl">←</Link>
           <div>
             <h1 className="text-xl font-bold">사주 풀이</h1>
-            <p className="text-gray-500 text-xs mt-0.5">사주풀이 전체 무료 · 로그인 필요</p>
+            <p className="text-gray-500 text-xs mt-0.5">사주풀이 전체 무료 · 로그인 없이 가능</p>
           </div>
         </div>
 
@@ -866,7 +821,7 @@ function SajuForm({ initialQuery }: { initialQuery: string }) {
           style={{ background: `linear-gradient(135deg, ${selectedChar.color}, ${selectedChar.color}bb)` }}>
           {selectedChar.name}에게 물어보기 →
         </button>
-        <p className="text-center text-gray-600 text-xs mt-3">사주풀이 전체 무료 · 로그인 필요</p>
+        <p className="text-center text-gray-600 text-xs mt-3">사주풀이 전체 무료 · 로그인 없이 가능</p>
       </div>
     </div>
   )

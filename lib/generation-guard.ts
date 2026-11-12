@@ -7,6 +7,7 @@ import { decodeGeneration, replayWire } from './generation-result'
 import { AccessError, failure, requireUser, rpc } from './server-access'
 import { createServerSupabase } from './supabase'
 import {birthSolarDate,koreanDate} from './manse-facts'
+import { guestIpHash, sajuOwner, withGuestCookie, type GuestOwner } from './guest-access'
 
 const context = new AsyncLocalStorage<{ jobId: string }>()
 export async function recordUsage(model: string, usage: {input_tokens:number;output_tokens:number;cache_read_input_tokens?:number|null;cache_creation_input_tokens?:number|null}) {
@@ -21,8 +22,11 @@ export async function recordUsage(model: string, usage: {input_tokens:number;out
 export function guardedGeneration(product: string, generate: (req:NextRequest)=>Promise<Response>) {
  return async (req: NextRequest) => {
   let reservation: {id:string;attempt:string}|undefined
+  let guestOwner: GuestOwner | undefined
   try {
-    const userId = await requireUser(req)
+    const freeSaju = product === 'saju'
+    if (freeSaju) guestOwner = await sajuOwner(req, true)
+    const userId = guestOwner?.userId ?? await requireUser(req)
     if(['gunghap','daeun','yearly','taekil'].includes(product))throw new AccessError(503,'이 상품은 명리 계산 기준을 검증 중입니다. 현재 이용할 수 없으며 엽전은 사용되지 않았어요.')
     const raw = await req.text()
     if (raw.length>20000) throw new AccessError(413,'입력 내용이 너무 깁니다.')
@@ -41,7 +45,6 @@ export function guardedGeneration(product: string, generate: (req:NextRequest)=>
     delete input.retry
     const today = koreanDate()
     const period = product==='daily' ? today.iso : String(today.year)
-    const freeSaju = product === 'saju'
     let hash=createHash('sha256').update(canonical({version:freeSaju?3:1,product,period,input})).digest('hex')
     const db=createServerSupabase()
     const {data:link,error:linkError}=await db.from('generation_requests').select('job_id').eq('user_id',userId).eq('request_id',requestId).maybeSingle()
@@ -52,6 +55,10 @@ export function guardedGeneration(product: string, generate: (req:NextRequest)=>
       if(!job||job.product!==product||canonical(job.input)!==canonical(input))throw new AccessError(409,'요청 정보가 변경됐습니다. 새로 시작해주세요.')
       // Recover the same request across midnight/year boundaries with its server-owned fingerprint.
       hash=job.fingerprint
+    }
+    if (guestOwner?.guestId && !link) {
+      const quota = await rpc('reserve_guest_generation', { p_ip_hash: guestIpHash(req) })
+      if (quota.error) throw new AccessError(429, '비로그인 풀이 요청이 많습니다. 10분 후 다시 시도해주세요.')
     }
     const reserved=freeSaju
       ? await rpc('reserve_saju_free',{p_user:userId,p_hash:hash,p_request:requestId,p_input:input})
@@ -70,7 +77,7 @@ export function guardedGeneration(product: string, generate: (req:NextRequest)=>
     }
     if (reserved.error) { const [s,m,code]=errors[reserved.error]??[503,'잠시 후 다시 시도해주세요.']; throw new AccessError(s,m,code) }
     const headers={'Content-Type':'text/event-stream; charset=utf-8','Cache-Control':'private, no-store'}
-    if (reserved.cached) return new NextResponse(replayWire(reserved.response,requestId),{headers})
+    if (reserved.cached) return withGuestCookie(new NextResponse(replayWire(reserved.response,requestId),{headers}),req,guestOwner)
     reservation=reserved
     // Complete and persist on the server before delivering the result; a browser disconnect cannot forge/save partial content.
     const internal=new NextRequest(req.url,{method:'POST',headers:req.headers,body:JSON.stringify({...input,requestId,...(freeSaju?{generationScope:'free_full'}:{})}),signal:AbortSignal.timeout(290000)})
@@ -83,13 +90,13 @@ export function guardedGeneration(product: string, generate: (req:NextRequest)=>
     const finished=await rpc('finish_generation',{p_job:reserved.id,p_attempt:reserved.attempt,p_success:true,p_response:wire,p_result:decoded.result,p_manse:decoded.manse})
     if(finished.error) throw new Error('Reservation expired')
     reservation=undefined
-    return new NextResponse(replayWire(wire,requestId),{headers})
+    return withGuestCookie(new NextResponse(replayWire(wire,requestId),{headers}),req,guestOwner)
   } catch(error) {
     if(reservation) {
       try { await rpc('finish_generation',{p_job:reservation.id,p_attempt:reservation.attempt,p_success:false}) }
       catch { console.error('[generation] reservation requires recovery',{jobId:reservation.id}) }
     }
-    return failure(error)
+    return withGuestCookie(failure(error),req,guestOwner)
   }
  }
 }

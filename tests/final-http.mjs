@@ -26,7 +26,7 @@ try{
  let ready=false;for(let i=0;i<60;i++){try{if((await fetch(origin)).status===200){ready=true;break}}catch{}if(server.exitCode!==null)throw Error('isolated Next server exited: '+logs);await new Promise(r=>setTimeout(r,200))}assert.ok(ready,'isolated Next server startup: '+logs)
  const auth={Cookie:'next-auth.session-token='+await encode({token:{sub:'buyer'},secret:'build-placeholder'}),'Content-Type':'application/json',Origin:origin}
  const post=(route,body,headers=auth)=>fetch(origin+'/api/'+route,{method:'POST',headers,body:JSON.stringify(body)})
- for(const route of ['saju','daily','gunghap','daeun','yearly','taekil','chat','conversation','attendance','readings/save','pay/ready','pay/confirm','refunds','readings/known/share'])assert.equal((await post(route,{},{})).status,401,route)
+ for(const route of ['saju','daily','gunghap','daeun','yearly','taekil','chat','conversation','attendance','readings/save','pay/ready','pay/confirm','refunds','readings/known/share'])assert.equal((await post(route,{},{})).status,['saju','readings/save'].includes(route)?403:401,route)
  for(const route of ['readings/known','result/known','storage','pay/order/known','refunds'])assert.equal((await fetch(origin+'/api/'+route)).status,401,route)
  await expectStatus(post('saju',{...base,requestId:'same-request-2026'}),200,'cached saju replay through runtime SUPABASE_URL')
  assert.equal(calls.find(c=>c.path==='/rest/v1/rpc/reserve_saju_free').body.p_hash,'server-owned-previous-year')
@@ -51,5 +51,5 @@ try{
  const pending=await post('conversation',{...retry,maxCoins:1,requestId:'pending-request'});assert.equal(pending.status,409);assert.equal((await pending.json()).code,'GENERATION_PENDING')
  assert.equal(calls.filter(c=>c.path==='/rest/v1/rpc/reserve_generation').length,pendingBefore,'pending conversation must not reserve again')
  const busy=await post('saju',{...base,requestId:'busy-request'});assert.equal(busy.status,409);assert.equal((await busy.json()).code,'GENERATION_PENDING')
- console.log('PASS: pending request machine code; price conflict distinction; real local Next HTTP; 19 auth gates; three free saju titles only; cross-origin denial; stored fingerprint replay; changed input denial; invalid date/time and legacy retry no writes; paused products and pending unlock checkout blocked')
+ console.log('PASS: pending request machine code; price conflict distinction; real local Next HTTP; guest same-origin gate and 17 auth gates; legacy unpaid result remains three titles only; cross-origin denial; stored fingerprint replay; changed input denial; invalid date/time and legacy retry no writes; paused products and pending unlock checkout blocked')
 }finally{server.kill('SIGTERM');if(server.exitCode===null)await new Promise(r=>server.once('exit',r));await new Promise(r=>fake.close(r))}

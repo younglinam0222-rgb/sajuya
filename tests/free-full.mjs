@@ -32,11 +32,23 @@ try {
   const rows = await db.query("SELECT ai_result FROM readings WHERE user_id='free'")
   assert.equal(JSON.parse(rows.rows[0].ai_result).titles.length,12)
 
+  const guestId = `guest-${'a'.repeat(32)}`
+  const guest = await reserve(guestId,'guest-full-1')
+  assert.ok(guest.id)
+  assert.equal(await value('SELECT yeobjeun_balance value FROM users WHERE id=$1',[guestId]),0)
+  assert.equal((await complete(guest,{...result,personalAnswer:undefined})).shareId?.length,32)
+  const ipHash = 'b'.repeat(64)
+  for (let i=1;i<=3;i++) assert.equal((await value('SELECT reserve_guest_generation($1) value',[ipHash])).attempts,i)
+  assert.equal((await value('SELECT reserve_guest_generation($1) value',[ipHash])).error,'rate')
+  await db.exec('SET ROLE anon')
+  await assert.rejects(()=>db.query('SELECT reserve_guest_generation($1)',[ipHash]))
+  await db.exec('RESET ROLE')
+
   const paid = await value('SELECT reserve_generation($1,$2,$3,$4,$5) value',
     ['buyer','paid-generation','saju','paid-generation',{name:'가상 사용자'}])
   assert.ok(paid.id)
   assert.equal(await value("SELECT yeobjeun_balance value FROM users WHERE id='buyer'"),1)
   await value('SELECT finish_generation($1,$2,false) value',[paid.id,paid.attempt])
   assert.equal(await value("SELECT yeobjeun_balance value FROM users WHERE id='buyer'"),2)
-  console.log('PASS: full free saju has 12 titles and no debit; incomplete result rejected; paid reservation unchanged')
+  console.log('PASS: full free saju and guest identity have no debit; incomplete result denied; DB guest IP quota is atomic; paid reservation unchanged')
 } finally { await db.close() }
