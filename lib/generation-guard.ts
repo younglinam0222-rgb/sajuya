@@ -103,8 +103,14 @@ export function guardedGeneration(product: string, generate: (req:NextRequest)=>
     const rawCode = error instanceof DatabaseRpcError ? error.dbCode
       : error && typeof error === 'object' && 'code' in error ? String(error.code) : null
     const code = rawCode && /^[A-Z0-9]{3,12}$/.test(rawCode) ? rawCode : null
+    const cause = error instanceof Error ? error.cause : null
+    const causeCode = cause && typeof cause === 'object' && 'code' in cause &&
+      typeof cause.code === 'string' && /^[A-Z][A-Z0-9_]{1,30}$/.test(cause.code) ? cause.code : null
+    const errorName = error instanceof Error && /^[A-Za-z]{3,30}$/.test(error.name) ? error.name : null
+    const causeName = cause instanceof Error && /^[A-Za-z]{3,30}$/.test(cause.name) ? cause.name : null
     console.error('[generation] failed', {product,step,operation:error instanceof DatabaseRpcError ? error.operation : null,code,
-      kind:error instanceof AccessError ? 'access' : error instanceof DatabaseRpcError ? 'rpc' : 'other'})
+      kind:error instanceof AccessError ? 'access' : error instanceof DatabaseRpcError ? 'rpc' : 'other',
+      errorName,causeName,causeCode})
     if(reservation) {
       try { await rpc('finish_generation',{p_job:reservation.id,p_attempt:reservation.attempt,p_success:false}) }
       catch { console.error('[generation] reservation requires recovery',{jobId:reservation.id}) }
