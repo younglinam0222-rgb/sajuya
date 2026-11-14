@@ -13,6 +13,7 @@ const dbCalls = []
 let savedResult = null
 let savedManse = null
 let savedOwner = null
+let failGuestQuota = false
 
 const readJson = async req => {
   let raw = ''
@@ -29,9 +30,12 @@ const database = createServer(async (req, res) => {
   const body = req.method === 'GET' ? {} : await readJson(req)
   dbCalls.push({ path: url.pathname, body })
   if (url.pathname === '/rest/v1/content_notice_acks') return json(res, { acknowledged_at: '2026-10-18T00:00:00Z', notice_version: 'content-notice-v1-20260908' })
-  if (url.pathname === '/rest/v1/generation_requests') return json(res, savedResult ? { job_id: jobId } : null)
+  if (url.pathname === '/rest/v1/generation_requests') return json(res,
+    savedResult && url.searchParams.get('user_id') === `eq.${savedOwner}` ? { job_id: jobId } : null)
   if (url.pathname === '/rest/v1/generation_jobs') return json(res, { reading_id: '33333333-3333-4333-8333-333333333333', status: 'done' })
-  if (url.pathname === '/rest/v1/rpc/reserve_guest_generation') return json(res, { attempts: 1 })
+  if (url.pathname === '/rest/v1/rpc/reserve_guest_generation') return failGuestQuota
+    ? json(res, {code:'PGRST202',message:'Function is not in the schema cache'}, 404)
+    : json(res, { attempts: 1 })
   if (url.pathname === '/rest/v1/rpc/reserve_saju_free') { savedOwner = body.p_user; return json(res, { id: jobId, attempt: attemptId }) }
   if (url.pathname === '/rest/v1/rpc/finish_generation') {
     if (body.p_success) { savedResult = body.p_result; savedManse = body.p_manse }
@@ -138,6 +142,13 @@ try {
   assert.ok(otherCookie && otherCookie !== cookie)
   assert.equal((await fetch(origin + '/api/readings/' + shareId, {headers:{Cookie:otherCookie}})).status, 404)
   assert.equal(JSON.stringify(resultBody).includes('toolu_test'), false)
+  failGuestQuota = true
+  const missingRpc = await fetch(origin + '/api/saju', {method:'POST',headers:{...headers,Cookie:otherCookie},
+    body:JSON.stringify({...input,requestId:'guest-missing-rpc-2026'})})
+  assert.equal(missingRpc.status,503)
+  assert.equal((await missingRpc.json()).error,'처리하지 못했습니다. 잠시 후 다시 시도해주세요.')
+  assert.match(logs,/guest_quota/)
+  assert.match(logs,/PGRST202/)
   console.log('PASS: anonymous Next HTTP generation saves twelve titles without debit; signed browser cookie permits private reread; missing/tampered/other visitor cookie denied')
 } finally {
   server.kill('SIGTERM')

@@ -5,6 +5,11 @@ import { createServerSupabase } from './supabase'
 export class AccessError extends Error {
   constructor(public status: number, message: string, public code?: 'GENERATION_PENDING') { super(message) }
 }
+export class DatabaseRpcError extends Error {
+  constructor(public operation: string, public dbCode: string | null) {
+    super(`Database operation failed: ${operation}`)
+  }
+}
 export async function requireUser(req: NextRequest) {
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
   if (!token?.sub) throw new AccessError(401, '로그인이 필요합니다.')
@@ -23,6 +28,6 @@ export function failure(error: unknown) {
 }
 export async function rpc(name: string, args: Record<string, unknown>) {
   const { data, error } = await createServerSupabase().rpc(name, args)
-  if (error) throw new Error(`Database operation failed: ${name}`)
+  if (error) throw new DatabaseRpcError(name, error.code ?? null)
   return data
 }
