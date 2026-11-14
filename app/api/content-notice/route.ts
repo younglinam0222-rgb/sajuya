@@ -16,7 +16,7 @@ export async function GET() {
     return NextResponse.json({ error: '로그인이 필요합니다.', code: 'login_required' }, { status: 401 })
   }
 
-  const ack = await loadContentNoticeAck(userId)
+  const ack = await loadContentNoticeAck(userId, undefined, AbortSignal.timeout(3_000))
   if (ack.status === 'unavailable') {
     logContentNoticeEvent('ack_lookup_unavailable', { code: ack.code, kind: ack.kind })
     return NextResponse.json({

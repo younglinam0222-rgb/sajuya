@@ -9,13 +9,14 @@ import { syncOAuthAccount, type OAuthProfile } from './auth-account'
 async function provisionAccount(profile: OAuthProfile) {
   return syncOAuthAccount({
     async find(id) {
-      const { data, error } = await createServerSupabase().from('users').select('id').eq('id', id).maybeSingle()
+      const { data, error } = await createServerSupabase().from('users').select('id').eq('id', id)
+        .abortSignal(AbortSignal.timeout(3_000)).maybeSingle()
       return { exists: !!data, error: !!error, code: error?.code ?? null }
     },
     async create(account) {
       const { error } = await createServerSupabase().from('users').insert({
         ...account, yeobjeun_balance: 0, streak_days: 0, last_visit: null,
-      })
+      }).abortSignal(AbortSignal.timeout(3_000))
       return { error: !!error, code: error?.code ?? null }
     },
   }, profile)
@@ -55,6 +56,7 @@ export const authOptions: NextAuthOptions = {
             .from('users')
             .select('yeobjeun_balance')
             .eq('id', token.sub)
+            .abortSignal(AbortSignal.timeout(3_000))
             .single()
           if (data) user.yeobjeun_balance = data.yeobjeun_balance
         } catch {}
@@ -78,7 +80,7 @@ export const authOptions: NextAuthOptions = {
         (token.contentNoticeAcked === undefined && (!token.contentNoticeCheckedAt || now - Number(token.contentNoticeCheckedAt) >= 30_000)))) {
         token.contentNoticeCheckedAt = now
         try {
-          const ack = await loadContentNoticeAck(token.sub)
+          const ack = await loadContentNoticeAck(token.sub, undefined, AbortSignal.timeout(3_000))
           if (ack.status !== 'unavailable') token.contentNoticeAcked = ack.status === 'acked'
         } catch {
           // Retry after the database is reachable again.

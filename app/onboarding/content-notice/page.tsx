@@ -39,6 +39,10 @@ export default function ContentNoticeOnboardingPage() {
         }
         const data = await res.json()
         if (cancelled) return
+        if (!res.ok || data.persisted === false) {
+          setLoadError('로그인은 완료됐지만 확인 기록 서버에 연결할 수 없습니다. 잠시 후 다시 확인해 주세요.')
+          return
+        }
         if (data.acknowledged === true) {
           router.replace(nextPath)
           return
@@ -58,6 +62,7 @@ export default function ContentNoticeOnboardingPage() {
     return (
       <div className="min-h-screen bg-[#0a0a0f] text-gray-400 text-sm flex flex-col items-center justify-center px-6 text-center gap-3">
         <p>{loadError || (sessionStuck ? '로그인 상태를 확인하지 못했습니다.' : '확인 단계를 준비하고 있어요...')}</p>
+        {loadError && <button type="button" onClick={() => window.location.reload()} className="underline text-gray-300">다시 확인</button>}
         {sessionStuck && (
           <Link href={`/login?callbackUrl=${encodeURIComponent(contentNoticeHref(nextPath))}`} className="underline text-gray-300">
             로그인 화면으로 이동

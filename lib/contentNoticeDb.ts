@@ -63,14 +63,15 @@ export async function probeContentNoticeSchema() {
   }
 }
 
-export async function loadContentNoticeAck(userId: string, version = CONTENT_NOTICE_VERSION): Promise<AckLookup> {
+export async function loadContentNoticeAck(userId: string, version = CONTENT_NOTICE_VERSION, signal?: AbortSignal): Promise<AckLookup> {
   const supabase = createServerSupabase()
-  const { data, error } = await supabase
+  let query = supabase
     .from('content_notice_acks')
     .select('acknowledged_at, notice_version')
     .eq('user_id', userId)
     .eq('notice_version', version)
-    .maybeSingle()
+  if (signal) query = query.abortSignal(signal)
+  const { data, error } = await query.maybeSingle()
 
   if (error) {
     const classified = classifyContentNoticeError(error)
