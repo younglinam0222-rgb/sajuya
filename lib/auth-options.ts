@@ -4,8 +4,22 @@ import GoogleProvider from 'next-auth/providers/google'
 import NaverProvider from 'next-auth/providers/naver'
 import { createServerSupabase } from './supabase'
 import { loadContentNoticeAck } from './contentNoticeDb'
+import { syncOAuthAccount, type OAuthProfile } from './auth-account'
 
-const supabaseAdmin = createServerSupabase()
+async function provisionAccount(profile: OAuthProfile) {
+  return syncOAuthAccount({
+    async find(id) {
+      const { data, error } = await createServerSupabase().from('users').select('id').eq('id', id).maybeSingle()
+      return { exists: !!data, error: !!error, code: error?.code ?? null }
+    },
+    async create(account) {
+      const { error } = await createServerSupabase().from('users').insert({
+        ...account, yeobjeun_balance: 0, streak_days: 0, last_visit: null,
+      })
+      return { error: !!error, code: error?.code ?? null }
+    },
+  }, profile)
+}
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -23,50 +37,21 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async signIn({ user, account }) {
-      try {
-        const { data: existing, error: lookupError } = await supabaseAdmin
-          .from('users')
-          .select('id')
-          .eq('id', user.id)
-          .maybeSingle()
-
-        if (lookupError) {
-          console.error('[auth] account lookup failed', { provider: account?.provider, code: lookupError.code })
-          return false
-        }
-
-        if (!existing) {
-          // 무료 일일운세 권한은 별도 서버 원장으로 관리
-          const {error:insertError}=await supabaseAdmin.from('users').insert({
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            image: user.image,
-            yeobjeun_balance: 0,
-            streak_days: 0,
-            last_visit: null,
-          })
-          if(insertError && insertError.code!=='23505') {
-            console.error('[auth] account insert failed', { provider: account?.provider, code: insertError.code })
-            return false
-          }
-        }
-      } catch {
-        console.error('[auth] account sync failed', { provider: account?.provider })
-        return false
-      }
+    async signIn() {
+      // OAuth identity has already been verified. A transient account-store outage
+      // must not turn it into NextAuth's misleading AccessDenied error.
       return true
     },
     async session({ session, token }) {
       if (session.user) {
-        const user = session.user as typeof session.user & {id: string; yeobjeun_balance?: number; contentNoticeAcked?: boolean}
+        const user = session.user as typeof session.user & {id: string; yeobjeun_balance?: number; contentNoticeAcked?: boolean; accountReady?: boolean}
         user.id = token.sub as string
         user.contentNoticeAcked = token.contentNoticeAcked === true
+        user.accountReady = token.accountReady === true
 
         // 세션에 잔액 포함
-        try {
-          const { data } = await supabaseAdmin
+        if (user.accountReady) try {
+          const { data } = await createServerSupabase()
             .from('users')
             .select('yeobjeun_balance')
             .eq('id', token.sub)
@@ -77,12 +62,26 @@ export const authOptions: NextAuthOptions = {
       return session
     },
     async jwt({ token, trigger }) {
-      if (token.sub && (trigger === 'signIn' || trigger === 'update' || token.contentNoticeAcked === undefined)) {
+      if (!token.sub) return token
+      const now = Date.now()
+      let accountBecameReady = false
+      if (token.accountReady !== true && (trigger === 'signIn' || !token.accountSyncCheckedAt || now - Number(token.accountSyncCheckedAt) >= 30_000)) {
+        const result = await provisionAccount({ id: token.sub, name: token.name ?? null,
+          email: token.email ?? null, image: token.picture ?? null })
+        accountBecameReady = result.ready
+        token.accountReady = result.ready
+        token.accountSyncCheckedAt = now
+        if (!result.ready) console.error('[auth] account sync deferred', { stage: result.stage,
+          code: result.code && /^[A-Z0-9]{3,12}$/.test(result.code) ? result.code : null })
+      }
+      if (token.accountReady === true && (accountBecameReady || trigger === 'signIn' || trigger === 'update' ||
+        (token.contentNoticeAcked === undefined && (!token.contentNoticeCheckedAt || now - Number(token.contentNoticeCheckedAt) >= 30_000)))) {
+        token.contentNoticeCheckedAt = now
         try {
           const ack = await loadContentNoticeAck(token.sub)
-          token.contentNoticeAcked = ack.status === 'acked'
+          if (ack.status !== 'unavailable') token.contentNoticeAcked = ack.status === 'acked'
         } catch {
-          token.contentNoticeAcked = false
+          // Retry after the database is reachable again.
         }
       }
       return token
@@ -90,6 +89,7 @@ export const authOptions: NextAuthOptions = {
   },
   pages: {
     signIn: '/login',
+    error: '/login',
   },
   secret: process.env.NEXTAUTH_SECRET,
 }
