@@ -15,7 +15,10 @@ const fake=createServer(async(req,res)=>{
  if(u.pathname==='/rest/v1/rpc/reserve_generation'&&b.p_request==='busy-request')return res.end(JSON.stringify({error:'busy'}))
  if(u.pathname==='/rest/v1/rpc/reserve_generation')return res.end(JSON.stringify({cached:true,response:'data: '+JSON.stringify({text:'saved'})+'\n\ndata: [DONE]\n\n'}))
  if(u.pathname==='/rest/v1/commerce_orders')return res.end(JSON.stringify({order_id:'pending-unlock',product:'unlock',amount:4900,status:'pending'}))
- if(u.pathname==='/rest/v1/readings')return res.end(JSON.stringify({share_id:'locked',user_id:'buyer',is_paid:true,access_verified:false,product:'saju',saju_data:{form:{}},ai_result:JSON.stringify({titles:[{title:'SAMPLE',content:'ONE_ONLY'},{title:'HIDDEN',content:'PAID_SECRET'}],personalAnswer:{answer:'PRIVATE_QUESTION'}})}))
+ if(u.pathname==='/rest/v1/readings'){
+  if(u.searchParams.get('share_id')==='eq.free-complete')return res.end(JSON.stringify({share_id:'free-complete',user_id:'buyer',is_paid:false,access_verified:true,product:'saju',saju_data:{form:{}},ai_result:JSON.stringify({titles:Array.from({length:12},(_,i)=>({id:String(i+1),title:'FREE',content:'FREE_FULL_RESULT'})),strategy:{overview:'FREE_STRATEGY'},personalAnswer:{question:'TEST_QUESTION',answer:'FREE_ANSWER'}})}))
+  return res.end(JSON.stringify({share_id:'locked',user_id:'buyer',is_paid:true,access_verified:false,product:'saju',saju_data:{form:{}},ai_result:JSON.stringify({titles:[{title:'SAMPLE',content:'ONE_ONLY'},{title:'HIDDEN',content:'PAID_SECRET'}],personalAnswer:{answer:'PRIVATE_QUESTION'}})}))
+ }
  res.end('null')
 })
 await new Promise(r=>fake.listen(3110,'127.0.0.1',r))
@@ -41,6 +44,9 @@ try{
  assert.equal((await post('saju',{...base,name:'changed',requestId:'same-request-2026'})).status,409)
  assert.equal((await post('saju',base,{...auth,Origin:'https://elsewhere.example'})).status,403)
  const locked=await fetch(origin+'/api/readings/locked',{headers:auth});assert.equal(locked.status,200);const body=await locked.text();assert.ok(body.includes('ONE_ONLY'));assert.ok(!body.includes('PAID_SECRET'));assert.ok(!body.includes('PRIVATE_QUESTION'))
+ const free=await expectStatus(fetch(origin+'/api/readings/free-complete',{headers:auth}),200,'verified free saju result')
+ const freeBody=await free.json();assert.equal(freeBody.is_paid,false);assert.equal(freeBody.full_access,true);assert.equal(freeBody.can_share,false);assert.ok(freeBody.ai_result.includes('FREE_ANSWER'))
+ assert.equal((await fetch(origin+'/api/readings/free-complete')).status,401)
  assert.equal((await fetch(origin+'/api/pay/order/pending-unlock',{headers:auth})).status,503)
  const retry={sourceId:'source',characterId:'baekhalma',message:'이전 질문',previousId:null,requestId:'consent-request',maxCoins:0,consent:true},before=calls.filter(c=>c.path==='/rest/v1/rpc/reserve_generation').length
  const priceConflict=await post('conversation',retry);assert.equal(priceConflict.status,409);assert.equal((await priceConflict.json()).code,undefined,'price conflict requires renewed consent, not pending retry')

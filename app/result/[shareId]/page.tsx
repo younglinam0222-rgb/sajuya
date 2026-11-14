@@ -49,7 +49,9 @@ function ResultPageContent() {
   const [characterId, setCharacterId] = useState('baekhalma')
   const [formInfo,    setFormInfo]    = useState<ViewForm|null>(null)
   const [sajuData,    setSajuData]    = useState<ViewManse|null>(null)
-  const [isPaid,      setIsPaid]      = useState(false)
+  const [hasFullAccess, setHasFullAccess] = useState(false)
+  const [wasPaid, setWasPaid] = useState(false)
+  const [canShareReading, setCanShareReading] = useState(false)
   const [locked,      setLocked]      = useState(false)
   const [product,     setProduct]     = useState('')
   const [personalAnswer, setPersonalAnswer] = useState<{ question: string; answer: string } | null>(null)
@@ -59,8 +61,11 @@ function ResultPageContent() {
       .then(async res => { if (!res.ok) throw new Error('not found'); return res.json() })
       .then(data => {
         if (signal.aborted) return
+      const fullAccess = Boolean(data.full_access ?? data.is_paid)
       setCharacterId(data.character_id ?? 'baekhalma')
-      setIsPaid(data.is_paid ?? false)
+      setHasFullAccess(fullAccess)
+      setWasPaid(Boolean(data.is_paid))
+      setCanShareReading(Boolean(data.can_share ?? data.is_paid))
       setLocked(!!data.locked)
       setProduct(typeof data.product === 'string' ? data.product : '')
 
@@ -89,12 +94,12 @@ function ResultPageContent() {
           const s = clean.indexOf('{'), e = clean.lastIndexOf('}')
           if (s !== -1 && e !== -1) clean = clean.slice(s, e + 1)
           const parsed = JSON.parse(clean)
-          if (parsed.titles) { setTitles(data.is_paid ? parsed.titles : parsed.titles.slice(0, 1)); setStrategy(data.is_paid ? parsed.strategy ?? null : null) }
+          if (parsed.titles) { setTitles(fullAccess ? parsed.titles : parsed.titles.slice(0, 1)); setStrategy(fullAccess ? parsed.strategy ?? null : null) }
           const view = readingPersonalView(parsed, sajuParsed)
           if (view.requested) setPersonalAnswer({ question: view.question, answer: view.answer })
           else setPersonalAnswer(null)
-          if (parsed.sections) { setSections(data.is_paid ? parsed.sections : parsed.sections.slice(0, 1)) }
-          else if(data.product && data.product!=='saju' && data.is_paid) {
+          if (parsed.sections) { setSections(fullAccess ? parsed.sections : parsed.sections.slice(0, 1)) }
+          else if(data.product && data.product!=='saju' && fullAccess) {
             const labels:Record<string,string>={overall:'총운',yearOverall:'연간 총운',firstHalf:'상반기',secondHalf:'하반기',current:'현재 대운',next10:'향후 10년',career:'직업',money:'재물',love:'관계',health:'건강',warning:'조심할 것',advice:'조언',intro:'총평',lucky:'행운 정보',today_word:'오늘의 한마디',personality:'성격 궁합',longterm:'장기 궁합',best1:'첫 번째 길일',best2:'두 번째 길일',best3:'세 번째 길일',avoid:'피할 날'}
             setSections(Object.entries(labels).filter(([k])=>parsed[k]!=null).map(([id,title])=>({id,title,emoji:'',body:typeof parsed[id]==='string'?parsed[id]:Object.values(parsed[id]).join(' · ')})))
           }
@@ -185,12 +190,12 @@ function ResultPageContent() {
   )
 
   // Locked sections have already been omitted by the API. Never reconstruct them in the browser.
-  const allowedTitles = isPaid ? titles : titles.slice(0, 1)
-  const allowedSections = isPaid ? sections : sections.slice(0, 1)
-  const question = isPaid ? personalAnswer?.question || formInfo?.personalQuestion || '' : ''
+  const allowedTitles = hasFullAccess ? titles : titles.slice(0, 1)
+  const allowedSections = hasFullAccess ? sections : sections.slice(0, 1)
+  const question = hasFullAccess ? personalAnswer?.question || formInfo?.personalQuestion || '' : ''
   const readingSections: ReadingSection[] = sajuReadingSections({
     titles: allowedTitles,
-    strategy: isPaid ? strategy : null,
+    strategy: hasFullAccess ? strategy : null,
     personal: question.trim() ? { question, answer: personalAnswer?.answer || '' } : null,
     pendingPersonal: <div className="rr-prose"><p>답변을 불러오지 못했어요. 이미 이용한 결과의 누락된 답변은 추가 결제 전에 확인을 요청해주세요.</p><Link href="/payments">결제 내역에서 확인하기 →</Link></div>,
   })
@@ -199,7 +204,7 @@ function ResultPageContent() {
   })))
   const reloadReading = () => { void fetchReading(new AbortController().signal) }
 
-  const canShare = !locked && isCompleteResult && product !== 'conversation'
+  const canShare = canShareReading && !locked && isCompleteResult && product !== 'conversation'
 
   return <ReadingResult
     title={formInfo?.name ? `${formInfo.name}님의 사주 해석` : '나의 사주 해석'}
@@ -208,8 +213,8 @@ function ResultPageContent() {
     characterName={charName}
     manse={sajuData}
     sections={readingSections}
-    expectedCoreCount={isPaid && titles.length > 0 ? 12 : undefined}
-    statusLabel={isPaid ? '보관함 · 나의 해석' : '무료 샘플 1개'}
+    expectedCoreCount={hasFullAccess && titles.length > 0 ? 12 : undefined}
+    statusLabel={hasFullAccess ? (wasPaid ? '보관함 · 나의 해석' : '무료 전체 풀이') : '무료 샘플 1개'}
     onReload={reloadReading}
     share={canShare ? <ReadingShareActions
       shareId={shareId}
@@ -222,7 +227,7 @@ function ResultPageContent() {
       {!isCompleteResult && <aside className="rr-status" role="status">이 풀이는 미완료 상태로 저장된 임시본입니다. 완성본이 아닙니다.</aside>}
     </>}
   >
-    {isPaid && product !== 'conversation' && <Link href={`/chat?guide=${characterId.toLowerCase()}&source=${encodeURIComponent(shareId)}`} className="rr-conversation-link">이 사주로 1:1 대화하기 →</Link>}
+    {wasPaid && product !== 'conversation' && <Link href={`/chat?guide=${characterId.toLowerCase()}&source=${encodeURIComponent(shareId)}`} className="rr-conversation-link">이 사주로 1:1 대화하기 →</Link>}
     <Link href="/storage">보관함으로 →</Link>
     <Link href="/saju">새로 풀이받기 →</Link>
   </ReadingResult>
