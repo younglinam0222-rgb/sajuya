@@ -438,19 +438,18 @@ ${lifecycleRows}
     ]
     const toolGroups = idGroups.map((_, gi) => toolPool[gi % toolPool.length])
 
-    // ✅ 신규(핵심 안정화): 텍스트로 "JSON처럼 써줘"라고 부탁하는 대신, Anthropic의
-    // Tool Use로 출력 형식을 API 차원에서 강제함. AI가 형식을 "어길 수 있는" 여지 자체를
-    // 없애는 근본적인 해결책 — 재시도(안전망)는 남겨두되, 이제 진짜 예외 상황(네트워크 등)에만 걸림.
+    // Forced tool choice alone does not validate tool input. Strict tools constrain the
+    // supported JSON shape; semantic checks (two exact IDs and useful text) remain below.
     const judgmentTool = {
       name: 'submit_judgments',
       description: '작성한 사주 판결문들을 제출한다.',
+      strict: true,
       input_schema: {
         type: 'object' as const,
         properties: {
           titles: {
             type: 'array' as const,
-            minItems: 2,
-            maxItems: 2,
+            description: '지정된 두 판결문을 정확히 두 개 담는다.',
             items: {
               type: 'object' as const,
               properties: {
@@ -462,21 +461,24 @@ ${lifecycleRows}
                 content: { type: 'string' as const, description: '500~700자. 800자 금지. 공감+비유+팩폭+행동팁 포함, 문단 사이 빈줄(\\n\\n). 마지막에 "⚠️ 조심할 것들: " 로 시작하는 구체적 2~3가지' },
               },
               required: ['id', 'category', 'title', 'teaser', 'is_free', 'content'],
+              additionalProperties: false,
             },
           },
         },
         required: ['titles'],
+        additionalProperties: false,
       },
     }
 
     const strategyTool = {
       name: 'submit_strategy',
       description: '작성한 인생 전략을 제출한다.',
+      strict: true,
       input_schema: {
         type: 'object' as const,
         properties: {
-          overview: { type: 'string' as const, minLength: 30, description: '이 사람 사주 전체 핵심 3~4문장, 쉬운 말로' },
-          golden_period: { type: 'string' as const, minLength: 80, description: '전성기가 언제고 왜 그 시기인지 3~5문장, 구체적 나이·시기·준비할 것 포함' },
+          overview: { type: 'string' as const, description: '이 사람 사주 전체 핵심 3~4문장, 쉬운 말로. 30자 이상.' },
+          golden_period: { type: 'string' as const, description: '전성기가 언제고 왜 그 시기인지 3~5문장, 구체적 나이·시기·준비할 것 포함. 80자 이상.' },
           lifecycle: {
             type: 'array' as const,
             items: {
@@ -488,13 +490,15 @@ ${lifecycleRows}
                 desc: { type: 'string' as const, description: '이 시기 핵심 한 줄' },
               },
               required: ['age', 'score', 'season', 'desc'],
+              additionalProperties: false,
             },
           },
-          peak_guide: { type: 'string' as const, minLength: 80, description: '전성기 활용법. "첫째, ~ \\n\\n둘째, ~ \\n\\n셋째, ~" 형식으로, 항목마다 빈 줄로 구분하고 각 항목 1~2문장.' },
-          warning: { type: 'string' as const, minLength: 40, description: '가장 조심해야 할 것들. "⚠️ 첫째, ~ \\n\\n⚠️ 둘째, ~" 형식으로, 2~3개 항목을 \\n\\n으로 구분해서 각각 1~2문장씩 써라.' },
-          final_word: { type: 'string' as const, minLength: 30, description: '캐릭터가 마지막으로 건네는 진심 어린 한마디 3~4문장, 감정과 응원 위주, 반말. 절대 비워두거나 생략하지 마라 — 필수 항목이다.' },
+          peak_guide: { type: 'string' as const, description: '전성기 활용법. "첫째, ~ \\n\\n둘째, ~ \\n\\n셋째, ~" 형식으로, 항목마다 빈 줄로 구분하고 각 항목 1~2문장. 80자 이상.' },
+          warning: { type: 'string' as const, description: '가장 조심해야 할 것들. "⚠️ 첫째, ~ \\n\\n⚠️ 둘째, ~" 형식으로, 2~3개 항목을 \\n\\n으로 구분해서 각각 1~2문장씩 써라. 40자 이상.' },
+          final_word: { type: 'string' as const, description: '캐릭터가 마지막으로 건네는 진심 어린 한마디 3~4문장, 감정과 응원 위주, 반말. 절대 비워두거나 생략하지 마라 — 필수 항목이다. 30자 이상.' },
         },
         required: ['overview', 'golden_period', 'lifecycle', 'peak_guide', 'warning', 'final_word'],
+        additionalProperties: false,
       },
     }
 
@@ -503,12 +507,14 @@ ${lifecycleRows}
     const personalAnswerTool = {
       name: 'submit_personal_answer',
       description: '사용자가 직접 남긴 개인 질문에 대한 답변을 제출한다.',
+      strict: true,
       input_schema: {
         type: 'object' as const,
         properties: {
           answer: { type: 'string' as const, description: '500~700자. 이 사람의 질문에 사주 근거를 들어 직접 답해라. 공감+비유+팩폭+행동팁 포함. 확정짓지 말고 확률적으로("~할 가능성이 높아") 답해라.' },
         },
         required: ['answer'],
+        additionalProperties: false,
       },
     }
     const makePersonalPrompt = (q: string) => `
