@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 import { createServerSupabase } from './supabase'
+import { isAllowedMutationOrigin } from './mutation-origin'
 
 export class AccessError extends Error {
   constructor(public status: number, message: string, public code?: 'GENERATION_PENDING') { super(message) }
@@ -9,9 +10,9 @@ export async function requireUser(req: NextRequest) {
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
   if (!token?.sub) throw new AccessError(401, '로그인이 필요합니다.')
   if (req.method !== 'GET') {
-    const origin = req.headers.get('origin')
-    const expected = process.env.NEXTAUTH_URL ? new URL(process.env.NEXTAUTH_URL).origin : req.nextUrl.origin
-    if ((origin && origin !== expected) || req.headers.get('sec-fetch-site') === 'cross-site')
+    // NEXTAUTH_URL controls OAuth callbacks, while NextRequest can normalize
+    // the URL host. Compare the browser origin with the received Host header.
+    if (!isAllowedMutationOrigin(req))
       throw new AccessError(403, '허용되지 않은 요청입니다.')
   }
   return token.sub
