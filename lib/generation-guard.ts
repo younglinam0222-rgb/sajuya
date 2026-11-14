@@ -108,9 +108,19 @@ export function guardedGeneration(product: string, generate: (req:NextRequest)=>
       typeof cause.code === 'string' && /^[A-Z][A-Z0-9_]{1,30}$/.test(cause.code) ? cause.code : null
     const errorName = error instanceof Error && /^[A-Za-z]{3,30}$/.test(error.name) ? error.name : null
     const causeName = cause instanceof Error && /^[A-Za-z]{3,30}$/.test(cause.name) ? cause.name : null
+    // PostgREST returns plain error objects. Classify their text without logging
+    // the text itself: it may contain a URL, query, or other request details.
+    const details = error && typeof error === 'object' ? error as Record<string, unknown> : null
+    const diagnostic = [details?.message, details?.details].filter((part): part is string => typeof part === 'string').join(' ').toLowerCase()
+    const dbFailure = /fetch failed|failed to fetch|networkerror/.test(diagnostic) ? 'network'
+      : /invalid api key|jwt|unauthorized/.test(diagnostic) ? 'credential'
+      : /schema cache|could not find the function/.test(diagnostic) ? 'schema_cache'
+      : /does not exist|undefined table|relation/.test(diagnostic) ? 'missing_schema'
+      : /permission denied|row.level security/.test(diagnostic) ? 'permission'
+      : diagnostic ? 'other_db' : null
     console.error('[generation] failed', {product,step,operation:error instanceof DatabaseRpcError ? error.operation : null,code,
       kind:error instanceof AccessError ? 'access' : error instanceof DatabaseRpcError ? 'rpc' : 'other',
-      errorName,causeName,causeCode})
+      errorName,causeName,causeCode,dbFailure})
     if(reservation) {
       try { await rpc('finish_generation',{p_job:reservation.id,p_attempt:reservation.attempt,p_success:false}) }
       catch { console.error('[generation] reservation requires recovery',{jobId:reservation.id}) }
