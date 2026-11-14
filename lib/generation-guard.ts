@@ -118,9 +118,10 @@ export function guardedGeneration(product: string, generate: (req:NextRequest)=>
       : /does not exist|undefined table|relation/.test(diagnostic) ? 'missing_schema'
       : /permission denied|row.level security/.test(diagnostic) ? 'permission'
       : diagnostic ? 'other_db' : null
+    const transportCode = diagnostic.match(/\b(enotfound|eai_again|etimedout|econnrefused|econnreset|und_err_connect_timeout|cert_has_expired|unable_to_verify_leaf_signature)\b/i)?.[1]?.toUpperCase() ?? null
     console.error('[generation] failed', {product,step,operation:error instanceof DatabaseRpcError ? error.operation : null,code,
       kind:error instanceof AccessError ? 'access' : error instanceof DatabaseRpcError ? 'rpc' : 'other',
-      errorName,causeName,causeCode,dbFailure})
+      errorName,causeName,causeCode,dbFailure,transportCode,dbUrlSource:process.env.SUPABASE_URL ? 'server' : 'public_fallback'})
     if(reservation) {
       try { await rpc('finish_generation',{p_job:reservation.id,p_attempt:reservation.attempt,p_success:false}) }
       catch { console.error('[generation] reservation requires recovery',{jobId:reservation.id}) }
